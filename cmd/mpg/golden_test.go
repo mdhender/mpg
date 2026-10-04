@@ -36,10 +36,10 @@ func TestGoldenNoisePreview(t *testing.T) {
 		aspect string
 		want   string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "a3341fc051d366e14cca7b2c62591431adf612ee07f40147cf100c6c36b548e5"},
-		{"seed42-square", 42, "square", "4abfe674237b439488ba0d70f9d68a603d8198b5baf91cc053483b94dc395166"},
-		{"seed7-cinematic", 7, "cinematic", "6cafb1598873aa23dac290722a6664956f5628aa751d3f9afeee3ed19b894f5f"},
-		{"seed7-square", 7, "square", "fa4c0a11f9c321d7036fc3c618a1df59201ad4d2acb10c7dc11c877cb13aef5d"},
+		{"seed42-cinematic", 42, "cinematic", "89e17a7b5c2b72c3858cd41465ce32106d86db31954096ed80573f4155484dc5"},
+		{"seed42-square", 42, "square", "6174ad77d2aa1c1b8badfefe5066d82e6a37437817c0bb1357ac71c3b745cf06"},
+		{"seed7-cinematic", 7, "cinematic", "826646aa58738c848d2f2c6b54dd5aba52b47afe5bd5089886b8d9877f77f88d"},
+		{"seed7-square", 7, "square", "b22191587541709a34dafebe124e29e12f61180174f8766ba6b427881c35db9e"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

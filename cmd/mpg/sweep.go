@@ -24,6 +24,7 @@ import (
 const (
 	maxSweepSeeds   = 256
 	maxSweepAspects = 8
+	maxSweepPresets = 8
 	minSweepTile    = 16
 	maxSweepTile    = 4096
 	defaultTile     = 320
@@ -31,8 +32,8 @@ const (
 	maxLabelChars   = 26
 )
 
-// runSweep builds a contact sheet: one row per aspect and seed (aspects
-// outer), one column per requested stage, each tile a stage render shrunk to
+// runSweep builds a contact sheet: one row per aspect, preset, and seed
+// (aspects outermost, seeds innermost), one column per requested stage, each tile a stage render shrunk to
 // --tile pixels wide. Rows run one after another, so the sheet does not
 // depend on scheduling. Exit codes: 0 on success, 1 on a config error, an
 // unimplemented stage, or a run error, 2 on a usage error.
@@ -41,6 +42,7 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 	seedsFlag := fs.String("seeds", "", "world `seeds`: decimal uint64 values and ranges, as in 1-16 or 1,5,9-12 (required)")
 	stagesFlag := fs.String("stage", "", "comma-separated `stages`, one column each in order: pipeline stage names or numbers, optionally stage:variant, or the noise preview (required)")
 	aspectsFlag := fs.String("aspect", "", "comma-separated playable `aspects`, one block of rows each (overrides --config)")
+	presetsFlag := fs.String("preset", "", "comma-separated layout `presets`, one block of rows each within an aspect (overrides --config)")
 	cf := addConfigFlags(fs)
 	output := fs.String("output", "", "write the contact sheet PNG to `file` (required)")
 	tile := fs.Int("tile", defaultTile, "tile width in `pixels`; the height follows the world's shape")
@@ -75,10 +77,15 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return usageErr("--stage: %v", err)
 	}
-	var aspects []string
+	var aspects, presets []string
 	if isSet(fs, "aspect") {
 		if aspects, err = parseList(*aspectsFlag, maxSweepAspects); err != nil {
 			return usageErr("--aspect: %v", err)
+		}
+	}
+	if isSet(fs, "preset") {
+		if presets, err = parseList(*presetsFlag, maxSweepPresets); err != nil {
+			return usageErr("--preset: %v", err)
 		}
 	}
 
@@ -106,26 +113,32 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 	if aspects == nil {
 		aspects = []string{base.World.Aspect}
 	}
+	if presets == nil {
+		presets = []string{base.Layout.Preset}
+	}
 	type sweepRow struct {
 		cfg  config.Config
 		hash string
 	}
 	var rows []sweepRow
 	for _, aspect := range aspects {
-		for _, seed := range seeds {
-			cfg := base
-			cfg.Seed = config.Seed(seed)
-			if isSet(fs, "aspect") {
-				setAspect(&cfg, aspect)
+		for _, preset := range presets {
+			for _, seed := range seeds {
+				cfg := base
+				cfg.Seed = config.Seed(seed)
+				if isSet(fs, "aspect") {
+					setAspect(&cfg, aspect)
+				}
+				cfg.Layout.Preset = preset
+				if err := cfg.Resolve(); err != nil {
+					return fail("aspect %s, preset %s: %v", aspect, preset, err)
+				}
+				hash, err := cfg.Hash()
+				if err != nil {
+					return fail("%v", err)
+				}
+				rows = append(rows, sweepRow{cfg, hash})
 			}
-			if err := cfg.Resolve(); err != nil {
-				return fail("aspect %s: %v", aspect, err)
-			}
-			hash, err := cfg.Hash()
-			if err != nil {
-				return fail("%v", err)
-			}
-			rows = append(rows, sweepRow{cfg, hash})
 		}
 	}
 
@@ -194,12 +207,12 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 				tiles[k].Caption[1] += fmt.Sprintf(", %dx%d px", size[k].X, size[k].Y)
 			}
 		}
-		label := []string{fmt.Sprintf("seed %d", uint64(row.cfg.Seed)), w.Aspect, fmt.Sprintf("%d land", w.LandCells)}
+		label := []string{fmt.Sprintf("seed %d", uint64(row.cfg.Seed)), w.Aspect, row.cfg.Layout.Preset, fmt.Sprintf("%d land", w.LandCells)}
 		for _, l := range label {
 			sheet.LabelChars = min(max(sheet.LabelChars, len(l)), maxLabelChars)
 		}
 		sheet.Rows = append(sheet.Rows, render.SheetRow{Label: label, TileHeight: tileH, Tiles: tiles})
-		fmt.Fprintf(stderr, "sweep: [%d/%d] seed %d %s: %.1fs\n", n+1, len(rows), uint64(row.cfg.Seed), w.Aspect, time.Since(t0).Seconds())
+		fmt.Fprintf(stderr, "sweep: [%d/%d] seed %d %s %s: %.1fs\n", n+1, len(rows), uint64(row.cfg.Seed), w.Aspect, row.cfg.Layout.Preset, time.Since(t0).Seconds())
 	}
 
 	img := sheet.Image()
@@ -209,7 +222,7 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 	}
 	var rowText []string
 	for _, row := range rows {
-		rowText = append(rowText, fmt.Sprintf("%d %s %s", uint64(row.cfg.Seed), row.cfg.World.Aspect, row.hash))
+		rowText = append(rowText, fmt.Sprintf("%d %s %s %s", uint64(row.cfg.Seed), row.cfg.World.Aspect, row.cfg.Layout.Preset, row.hash))
 	}
 	meta := render.Meta{
 		Stage:      "sweep",
@@ -218,6 +231,7 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 			{Key: "mpg:seeds", Value: strings.Join(seedText, ",")},
 			{Key: "mpg:stages", Value: strings.Join(sheet.Columns, ",")},
 			{Key: "mpg:aspects", Value: strings.Join(aspects, ",")},
+			{Key: "mpg:presets", Value: strings.Join(presets, ",")},
 			{Key: "mpg:tile-width", Value: strconv.Itoa(*tile)},
 			{Key: "mpg:rows", Value: strings.Join(rowText, "\n")},
 		},
@@ -235,6 +249,7 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "seeds   %d: %s\n", len(seeds), *seedsFlag)
 	fmt.Fprintf(stdout, "stages  %s\n", strings.Join(sheet.Columns, ", "))
 	fmt.Fprintf(stdout, "aspects %s\n", strings.Join(aspects, ", "))
+	fmt.Fprintf(stdout, "presets %s\n", strings.Join(presets, ", "))
 	fmt.Fprintf(stdout, "pixels  %s\n", render.PixelHash(img))
 	fmt.Fprintf(stderr, "sweep: %d rows x %d stages in %.1fs\n", len(rows), len(cols), time.Since(start).Seconds())
 	return 0

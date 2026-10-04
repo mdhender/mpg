@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -97,7 +98,7 @@ func TestDefaultIsExample(t *testing.T) {
 	if err := c.Resolve(); err != nil {
 		t.Fatal(err)
 	}
-	if c != example(t) {
+	if !reflect.DeepEqual(c, example(t)) {
 		t.Errorf("Default() resolved = %+v, want the design example", c)
 	}
 }
@@ -137,7 +138,7 @@ func TestRoundTripFixedPoint(t *testing.T) {
 	if !bytes.Equal(first, second) {
 		t.Errorf("round trip changed the file:\n%s\n---\n%s", first, second)
 	}
-	if c != example(t) {
+	if !reflect.DeepEqual(c, example(t)) {
 		t.Errorf("round trip changed the config")
 	}
 }
@@ -147,7 +148,7 @@ func TestPartialFileGetsDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c != example(t) {
+	if !reflect.DeepEqual(c, example(t)) {
 		t.Errorf("partial file resolved to %+v", c)
 	}
 }
@@ -158,7 +159,7 @@ func TestHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = "96bbe0771a1f68f3c18a88d9d53d5c31b02c5b15e43fb0f17e016e06c9db220d"
+	const want = "1384bf35ba3b71d0672312f66351d63817bcc5ef85a011c1b99d877fae78fc0b"
 	if h != want {
 		t.Errorf("Hash = %s, want %s", h, want)
 	}
@@ -199,6 +200,8 @@ func TestDecodeErrors(t *testing.T) {
 		{"wrong type", `{"schema":1,"world":{"land_cells":"x"}}`, `cannot unmarshal string`},
 		{"inconsistent", `{"schema":1,"world":{"land_cells":20000,"width_km":2536.3057312095275}}`, `world.width_km is 2536.3057312095275 but the inputs give`},
 		{"invalid input", `{"schema":1,"world":{"land_fraction":1}}`, `world.land_fraction 1 must be greater than 0 and less than 1`},
+		{"misspelled layout", `{"schema":1,"layout":{"islands":{"lobes_mx":2}}}`, `unknown field "layout.islands.lobes_mx"; did you mean "layout.islands.lobes_max"?`},
+		{"unknown custom field", `{"schema":1,"layout":{"custom":{"attractors":[{"x_km":1,"radius_kn":5}]}}}`, `unknown field "layout.custom.attractors[0].radius_kn"; did you mean "layout.custom.attractors[0].radius_km"?`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -295,6 +298,28 @@ func TestValidate(t *testing.T) {
 		{"inland sea 1", func(c *Config) { c.Basin.InlandSeaMinCells = 1 }, "basin.inland_sea_min_cells"},
 		{"river zero", func(c *Config) { c.River.ThresholdKm2 = 0 }, "river.threshold_km2"},
 		{"schema", func(c *Config) { c.Schema = 2 }, "schema 2 is not supported"},
+		{"preset", func(c *Config) { c.Layout.Preset = "isles" }, "layout.preset"},
+		{"pole margin", func(c *Config) { c.Layout.PoleMargin = -1 }, "layout.pole_margin"},
+		{"masses reversed", func(c *Config) { c.Layout.Continents.MassesMax = 2 }, "layout.continents.masses_min 3 and masses_max 2"},
+		{"lobes zero", func(c *Config) { c.Layout.Islands.LobesMin = 0 }, "layout.islands.lobes_min"},
+		{"coverage", func(c *Config) { c.Layout.Pangaea.Coverage = 0 }, "layout.pangaea.coverage"},
+		{"size ratio", func(c *Config) { c.Layout.Archipelago.SizeRatio = 0.5 }, "layout.archipelago.size_ratio"},
+		{"weights", func(c *Config) { c.Layout.Continents.WeightMax = 1.5 }, "layout.continents.weight_min"},
+		{"wobble", func(c *Config) { c.Layout.Islands.Rivals.Wobble = 1 }, "layout.islands.rivals.wobble"},
+		{"repulsor radius", func(c *Config) { c.Layout.Custom.Rivals.RepulsorRadius = 0 }, "layout.custom.rivals.repulsor_radius"},
+		{"custom empty", func(c *Config) { c.Layout.Preset = PresetCustom }, "layout.custom.attractors is empty"},
+		{"custom weight", func(c *Config) {
+			c.Layout.Custom.Attractors = []CustomAttractor{{XKm: 100, YKm: 500, RadiusKm: 50, Weight: 0}}
+		}, "layout.custom.attractors[0].weight"},
+		{"custom x", func(c *Config) {
+			c.Layout.Custom.Attractors = []CustomAttractor{{XKm: 1e6, YKm: 500, RadiusKm: 50, Weight: 1}}
+		}, "layout.custom.attractors[0].x_km"},
+		{"custom in falloff", func(c *Config) {
+			c.Layout.Custom.Attractors = []CustomAttractor{{XKm: 100, YKm: 100, RadiusKm: 50, Weight: 1}}
+		}, "layout.custom.attractors[0].y_km"},
+		{"custom repulsor in rim", func(c *Config) {
+			c.Layout.Custom.Repulsors = []CustomRepulsor{{XKm: 100, YKm: 1, RadiusKm: 50, Weight: 1}}
+		}, "layout.custom.repulsors[0].y_km"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -317,6 +342,35 @@ func TestValidate(t *testing.T) {
 	err := c.Validate()
 	if err == nil || !strings.Contains(err.Error(), "world.land_cells") || !strings.Contains(err.Error(), "raster.spacing_km") {
 		t.Errorf("Validate = %v, want both errors", err)
+	}
+}
+
+func TestCustomLayoutRoundTrip(t *testing.T) {
+	c := example(t)
+	c.Layout.Preset = PresetCustom
+	c.Layout.Custom.Attractors = []CustomAttractor{
+		{XKm: 100, YKm: 500, RadiusKm: 150, Weight: 0.9, Mass: 1},
+		{XKm: 2500, YKm: 600, RadiusKm: 80, Weight: 0.5, Mass: 2},
+	}
+	c.Layout.Custom.Repulsors = []CustomRepulsor{{XKm: 1200, YKm: 560, RadiusKm: 60, Weight: 0.4}}
+	if err := c.Resolve(); err != nil {
+		t.Fatal(err)
+	}
+	first := encode(t, c)
+	d, err := Decode(bytes.NewReader(first))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(c, d) || !bytes.Equal(first, encode(t, d)) {
+		t.Errorf("custom layout round trip changed the config:\n%s", first)
+	}
+	// Absent lists decode as empty ones.
+	e, err := Decode(strings.NewReader(`{"schema":1,"seed":"42","layout":{"custom":{"attractors":null}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(e, example(t)) {
+		t.Errorf("null attractors resolved to %+v", e.Layout.Custom)
 	}
 }
 

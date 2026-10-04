@@ -33,6 +33,7 @@ type Config struct {
 	World    World    `json:"world"`
 	Rim      Rim      `json:"rim"`
 	Raster   Raster   `json:"raster"`
+	Layout   Layout   `json:"layout"`
 	Volcanic Volcanic `json:"volcanic"`
 	Basin    Basin    `json:"basin"`
 	River    River    `json:"river"`
@@ -128,6 +129,7 @@ func Default() Config {
 		},
 		Rim:      Rim{Cells: 4, FalloffCells: 12},
 		Raster:   Raster{SpacingKm: 2},
+		Layout:   DefaultLayout(),
 		Volcanic: Volcanic{HotspotsPerMkm2: 2},
 		Basin:    Basin{MinDepthM: 50, InlandSeaMinCells: 20},
 		River:    River{ThresholdKm2: 500},
@@ -178,6 +180,7 @@ func (c *Config) Validate() error {
 	if v := c.Raster.SpacingKm; !positive(v) {
 		bad("raster.spacing_km %v must be positive and finite", v)
 	}
+	c.Layout.validate(bad)
 	if v := c.Volcanic.HotspotsPerMkm2; !nonNegative(v) {
 		bad("volcanic.hotspots_per_mkm2 %v must be non-negative and finite", v)
 	}
@@ -275,8 +278,12 @@ func (c *Config) derive() (Config, error) {
 	if !(2*falloffKm < playableHeight) {
 		return Config{}, fmt.Errorf("config: the falloff bands (2 × %d cells = %v km) do not fit in the playable height %v km; request more land cells or fewer falloff cells", c.Rim.FalloffCells, 2*falloffKm, playableHeight)
 	}
-	if _, err := topo.New(d.World.WidthKm, d.World.HeightKm, rimKm, falloffKm); err != nil {
+	cyl, err := topo.New(d.World.WidthKm, d.World.HeightKm, rimKm, falloffKm)
+	if err != nil {
 		return Config{}, fmt.Errorf("config: resolved sizes: %w", err)
+	}
+	if err := d.Layout.derive(cyl); err != nil {
+		return Config{}, err
 	}
 	return d, nil
 }

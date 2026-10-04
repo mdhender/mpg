@@ -31,7 +31,7 @@ func (s Stage) String() string { return fmt.Sprintf("%d %s", s.Number, s.Name) }
 func Stages() []Stage {
 	return []Stage{
 		{Number: 1, Name: "config", Run: runConfig},
-		{Number: 2, Name: "layout"},
+		{Number: 2, Name: "layout", Run: runLayout},
 		{Number: 3, Name: "elevation"},
 		{Number: 4, Name: "mesh"},
 		{Number: 5, Name: "cells"},

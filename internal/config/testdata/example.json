@@ -24,6 +24,92 @@
   "raster": {
     "spacing_km": 2
   },
+  "layout": {
+    "preset": "continents",
+    "pole_margin": 1,
+    "pangaea": {
+      "masses_min": 1,
+      "masses_max": 1,
+      "lobes_min": 12,
+      "lobes_max": 16,
+      "coverage": 1.15,
+      "size_ratio": 1,
+      "lobe_step": 1.1,
+      "spacing": 1,
+      "weight_min": 0.7,
+      "weight_max": 1,
+      "rivals": {
+        "wobble": 0.3,
+        "repulsor_weight": 0.8,
+        "repulsor_reach": 1.6,
+        "repulsor_radius": 0.7
+      }
+    },
+    "continents": {
+      "masses_min": 3,
+      "masses_max": 5,
+      "lobes_min": 2,
+      "lobes_max": 4,
+      "coverage": 1.05,
+      "size_ratio": 2,
+      "lobe_step": 0.9,
+      "spacing": 1.25,
+      "weight_min": 0.7,
+      "weight_max": 1,
+      "rivals": {
+        "wobble": 0.3,
+        "repulsor_weight": 0.8,
+        "repulsor_reach": 1.6,
+        "repulsor_radius": 0.7
+      }
+    },
+    "archipelago": {
+      "masses_min": 9,
+      "masses_max": 14,
+      "lobes_min": 1,
+      "lobes_max": 3,
+      "coverage": 1.05,
+      "size_ratio": 2,
+      "lobe_step": 0.9,
+      "spacing": 1.2,
+      "weight_min": 0.6,
+      "weight_max": 1,
+      "rivals": {
+        "wobble": 0.3,
+        "repulsor_weight": 0.8,
+        "repulsor_reach": 1.6,
+        "repulsor_radius": 0.7
+      }
+    },
+    "islands": {
+      "masses_min": 24,
+      "masses_max": 36,
+      "lobes_min": 1,
+      "lobes_max": 2,
+      "coverage": 1.05,
+      "size_ratio": 3,
+      "lobe_step": 0.8,
+      "spacing": 1.15,
+      "weight_min": 0.5,
+      "weight_max": 1,
+      "rivals": {
+        "wobble": 0.3,
+        "repulsor_weight": 0.8,
+        "repulsor_reach": 1.6,
+        "repulsor_radius": 0.7
+      }
+    },
+    "custom": {
+      "attractors": [],
+      "repulsors": [],
+      "rivals": {
+        "wobble": 0.3,
+        "repulsor_weight": 0.8,
+        "repulsor_reach": 1.6,
+        "repulsor_radius": 0.7
+      }
+    }
+  },
   "volcanic": {
     "hotspots_per_mkm2": 2
   },

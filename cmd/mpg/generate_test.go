@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -49,12 +51,12 @@ func TestGenerateSeed42(t *testing.T) {
 	if !bytes.Equal(got, want) {
 		t.Errorf("config.json differs from testdata/example.json:\n%s", got)
 	}
-	if !strings.Contains(stderr, "stopped: stage 2 layout not implemented yet") {
+	if !strings.Contains(stderr, "stopped: stage 3 elevation not implemented yet") {
 		t.Errorf("stderr = %q, want a not-implemented stop", stderr)
 	}
 	cfg, _ := readConfig(t, out)
 	hash, _ := cfg.Hash()
-	for _, s := range []string{hash, "stages  config\n", "33333 playable"} {
+	for _, s := range []string{hash, "stages  config, layout\n", "33333 playable"} {
 		if !strings.Contains(stdout, s) {
 			t.Errorf("stdout = %q, want it to contain %q", stdout, s)
 		}
@@ -106,7 +108,7 @@ func TestGenerateOverrides(t *testing.T) {
 		t.Errorf("seed = %d", cfg.Seed)
 	}
 	cfg.Seed = base.Seed
-	if cfg != base {
+	if !reflect.DeepEqual(cfg, base) {
 		t.Errorf("seed override changed other fields: %+v", cfg)
 	}
 
@@ -133,6 +135,18 @@ func TestGenerateOverrides(t *testing.T) {
 	}
 	if cfg, _ = readConfig(t, out); cfg.World.AspectRatio != 1 || cfg.Seed != 0 {
 		t.Errorf("world = %+v, seed %d", cfg.World, cfg.Seed)
+	}
+
+	// --preset picks the layout preset.
+	out = t.TempDir()
+	if code, _, stderr := generate(t, "--preset", "islands", "--stop-after", "config", "--output", out); code != 0 {
+		t.Fatalf("preset override: exit %d; stderr %q", code, stderr)
+	}
+	if cfg, _ = readConfig(t, out); cfg.Layout.Preset != "islands" {
+		t.Errorf("preset = %q, want islands", cfg.Layout.Preset)
+	}
+	if code, _, stderr := generate(t, "--preset", "isles", "--output", t.TempDir()); code != 1 || !strings.Contains(stderr, "layout.preset") {
+		t.Errorf("bad preset: exit %d, stderr %q", code, stderr)
 	}
 }
 
@@ -178,7 +192,7 @@ func TestGenerateStopAfter(t *testing.T) {
 
 	// Stopping after a later stage still stops at the first unimplemented one.
 	code, _, stderr := generate(t, "--stop-after", "mesh", "--output", t.TempDir())
-	if code != 0 || !strings.Contains(stderr, "stage 2 layout not implemented yet") {
+	if code != 0 || !strings.Contains(stderr, "stage 3 elevation not implemented yet") {
 		t.Errorf("--stop-after mesh: exit %d, stderr %q", code, stderr)
 	}
 }
@@ -215,7 +229,11 @@ func TestGenerateRendersDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 0 {
-		t.Errorf("stage 1 wrote %d renders, want none", len(entries))
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	if !slices.Equal(names, []string{"02-layout.png"}) {
+		t.Errorf("renders = %q, want the layout render only", names)
 	}
 }

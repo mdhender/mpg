@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/mdhender/mpg/internal/config"
+	"github.com/mdhender/mpg/internal/layout"
 	"github.com/mdhender/mpg/internal/render"
 	"github.com/mdhender/mpg/internal/seed"
 )
@@ -206,8 +207,8 @@ func TestConfigStage(t *testing.T) {
 
 	// The full registry stops at the first unimplemented stage.
 	res, err = Run(newTestContext(t, false), Stages(), -1)
-	if err != nil || res.NotImplemented == nil || res.NotImplemented.Name != "layout" {
-		t.Errorf("full run = %+v, %v; want a stop at layout", res, err)
+	if err != nil || res.NotImplemented == nil || res.NotImplemented.Name != "elevation" {
+		t.Errorf("full run = %+v, %v; want a stop at elevation", res, err)
 	}
 }
 
@@ -275,5 +276,45 @@ func TestRenderSink(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(c.RendersDir, "04-mesh.png")); !os.IsNotExist(err) {
 		t.Errorf("render written after a sink error: %v", err)
+	}
+}
+
+func TestLayoutStage(t *testing.T) {
+	c := newTestContext(t, true)
+	var variants []string
+	c.Sink = func(st Stage, variant string, img image.Image) error {
+		variants = append(variants, st.String()+"/"+variant)
+		return nil
+	}
+	res, err := Run(c, Stages(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(names(res.Ran), []string{"config", "layout"}) {
+		t.Errorf("ran %q", names(res.Ran))
+	}
+	l, bias := c.Products.Layout, c.Products.Bias
+	if l == nil || bias == nil {
+		t.Fatal("layout stage left its products empty")
+	}
+	if l.Preset != "continents" || l.Masses < 3 || l.Masses > 5 {
+		t.Errorf("layout = %s with %d masses", l.Preset, l.Masses)
+	}
+	want, err := layout.New(c.Config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := want.Bias(c.Config.Raster.SpacingKm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(f.Values(), bias.Values()) || !slices.Equal(want.Attractors, l.Attractors) {
+		t.Error("stage products differ from layout.New")
+	}
+	if !slices.Equal(variants, []string{"2 layout/"}) {
+		t.Errorf("renders %q, want the layout render", variants)
+	}
+	if _, err := os.Stat(filepath.Join(c.RendersDir, "02-layout.png")); err != nil {
+		t.Error(err)
 	}
 }

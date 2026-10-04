@@ -28,6 +28,7 @@ func runGenerate(args []string, stdout, stderr io.Writer) int {
 	})
 	cf := addConfigFlags(fs)
 	aspect := fs.String("aspect", "", "playable `aspect`: a name or W:H (overrides --config)")
+	preset := fs.String("preset", "", "layout `preset`: pangaea, continents, archipelago, islands, or custom (overrides --config)")
 	output := fs.String("output", "", "write config.json and later outputs to `dir` (required; created if missing; files are overwritten)")
 	renders := fs.String("renders", "", "write stage renders to `dir`")
 	stopAfter := fs.String("stop-after", "", "stop after `stage` (a name or number)")
@@ -63,6 +64,9 @@ func runGenerate(args []string, stdout, stderr io.Writer) int {
 	}
 	if isSet(fs, "aspect") {
 		setAspect(&cfg, *aspect)
+	}
+	if isSet(fs, "preset") {
+		cfg.Layout.Preset = *preset
 	}
 
 	ctx, err := pipeline.NewContext(cfg, *output, *renders, stderr)

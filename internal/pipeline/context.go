@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"github.com/mdhender/mpg/internal/config"
+	"github.com/mdhender/mpg/internal/field"
+	"github.com/mdhender/mpg/internal/layout"
 	"github.com/mdhender/mpg/internal/render"
 	"github.com/mdhender/mpg/internal/seed"
 )
@@ -46,7 +48,12 @@ type Context struct {
 
 // Products holds the stage products. Each stage adds the fields it fills as
 // it is implemented; a field is zero until its stage has run.
-type Products struct{}
+type Products struct {
+	// Layout is the layout stage's attractors and repulsors.
+	Layout *layout.Layout
+	// Bias is the layout stage's continental bias field, in [−1, 1].
+	Bias *field.Field
+}
 
 // NewContext resolves cfg and returns a context for a run writing to
 // outputDir, with renders in rendersDir ("" for none) and log lines to log

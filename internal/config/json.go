@@ -63,7 +63,7 @@ func (c *Config) Bytes() ([]byte, error) {
 	if err := r.Resolve(); err != nil {
 		return nil, err
 	}
-	if r != *c {
+	if !reflect.DeepEqual(r, *c) {
 		return nil, errors.New("config: not resolved; call Resolve before encoding")
 	}
 	b, err := json.MarshalIndent(c, "", "  ")
@@ -118,7 +118,8 @@ func checkFields(data []byte) error {
 }
 
 // walk consumes one JSON value from dec. When t is a struct and the value an
-// object, it checks the object's keys against t's JSON fields, recursively.
+// object, it checks the object's keys against t's JSON fields, recursively;
+// when t is a slice and the value an array, it walks each element.
 // Type mismatches are left to the decoder.
 func walk(dec *json.Decoder, t reflect.Type, path string) error {
 	tok, err := dec.Token()
@@ -128,6 +129,16 @@ func walk(dec *json.Decoder, t reflect.Type, path string) error {
 	delim, ok := tok.(json.Delim)
 	if !ok {
 		return nil // a scalar
+	}
+	if delim == '[' && t.Kind() == reflect.Slice {
+		elem := strings.TrimSuffix(path, ".")
+		for k := 0; dec.More(); k++ {
+			if err := walk(dec, t.Elem(), fmt.Sprintf("%s[%d].", elem, k)); err != nil {
+				return err
+			}
+		}
+		_, err = dec.Token() // ']'
+		return decodeError(err)
 	}
 	if delim != '{' || t.Kind() != reflect.Struct {
 		return skip(dec)

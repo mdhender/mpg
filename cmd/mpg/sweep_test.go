@@ -84,13 +84,13 @@ func TestParseSweepStages(t *testing.T) {
 		t.Errorf("unknown-stage error %q does not offer noise", err)
 	}
 
-	// Only the noise preview needs no pipeline; config is implemented;
-	// elevation is not, nor is layout before it.
+	// Only the noise preview needs no pipeline; config and layout are
+	// implemented; elevation is not, nor is anything after it.
 	for _, tc := range []struct {
 		in   string
 		last int
 		ok   bool
-	}{{"noise", -1, true}, {"noise,config", 0, true}, {"config,elevation", -1, false}, {"layout", -1, false}} {
+	}{{"noise", -1, true}, {"noise,config", 0, true}, {"config,elevation", -1, false}, {"layout", 1, true}, {"mesh", -1, false}} {
 		cols, err := parseSweepStages(tc.in, registry)
 		if err != nil {
 			t.Fatal(err)
@@ -117,7 +117,7 @@ func TestSweepErrors(t *testing.T) {
 		{[]string{"--seeds", "1", "--stage", "noise", "--tile", "8", "--output", out}, 2, "--tile"},
 		{[]string{"--seeds", "1", "--stage", "noise", "--aspect", "square,", "--output", out}, 2, "--aspect"},
 		{[]string{"--seeds", "1", "--stage", "noise", "--output", out, "extra"}, 2, "unexpected"},
-		{[]string{"--seeds", "1", "--stage", "noise,elevation", "--output", out}, 1, "stage 2 layout is not implemented"},
+		{[]string{"--seeds", "1", "--stage", "noise,elevation", "--output", out}, 1, "stage 3 elevation is not implemented"},
 		{[]string{"--seeds", "1", "--stage", "noise", "--aspect", "squarish", "--output", out}, 1, "world.aspect"},
 		{[]string{"--seeds", "1", "--stage", "noise", "--config", "no-such-file.json", "--output", out}, 1, "no-such-file"},
 	} {
@@ -133,8 +133,8 @@ func TestSweepErrors(t *testing.T) {
 
 // sweepPixelHash pins the small sweep below: seeds 1 and 7, the noise
 // preview and the (render-less) config stage, cinematic and square, 600
-// land cells, 64-pixel tiles.
-const sweepPixelHash = "a6118fc4f5177c9d9be1c40157b25ac2aa7b68d387ee9eb419e0974d03ed0c8e"
+// land cells, 64-pixel tiles. Row labels carry the layout preset.
+const sweepPixelHash = "9bddbbaecbe333a000cf3700030dab4c5250b461c391ed24a53a74df9c12c4d5"
 
 func TestSweepSheet(t *testing.T) {
 	dir := t.TempDir()
@@ -175,7 +175,7 @@ func TestSweepSheet(t *testing.T) {
 			h := int(float64(64)*c.World.HeightKm/c.World.WidthKm + 0.5)
 			tileHs = append(tileHs, h, h)
 		}
-		labelW := len("cinematic") * render.LabelAdvance
+		labelW := len("continents") * render.LabelAdvance // the preset is the longest label line
 		wantW := 8 + labelW + 8 + 2*(64+8)
 		wantH := 8 + render.LabelHeight + 4
 		for _, h := range tileHs {
@@ -203,13 +203,13 @@ func TestSweepSheet(t *testing.T) {
 			extra[e.Key] = e.Value
 		}
 		for k, v := range map[string]string{
-			"mpg:seeds": "1,7", "mpg:stages": "noise,config", "mpg:aspects": "cinematic,square", "mpg:tile-width": "64",
+			"mpg:seeds": "1,7", "mpg:stages": "noise,config", "mpg:aspects": "cinematic,square", "mpg:presets": "continents", "mpg:tile-width": "64",
 		} {
 			if extra[k] != v {
 				t.Errorf("%s = %q, want %q", k, extra[k], v)
 			}
 		}
-		if rows := strings.Split(extra["mpg:rows"], "\n"); len(rows) != 4 || !strings.HasPrefix(rows[0], "1 cinematic ") || !strings.HasPrefix(rows[3], "7 square ") {
+		if rows := strings.Split(extra["mpg:rows"], "\n"); len(rows) != 4 || !strings.HasPrefix(rows[0], "1 cinematic continents ") || !strings.HasPrefix(rows[3], "7 square continents ") {
 			t.Errorf("mpg:rows = %q", extra["mpg:rows"])
 		}
 	}
@@ -218,5 +218,48 @@ func TestSweepSheet(t *testing.T) {
 	}
 	if hashes[0] != sweepPixelHash {
 		t.Errorf("pixel hash = %s, want %s", hashes[0], sweepPixelHash)
+	}
+}
+
+// TestSweepPresets checks that --preset adds a block of rows per preset
+// within each aspect, and that the layout stage renders in a sweep.
+func TestSweepPresets(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "presets.png")
+	code, stdout, stderr := sweep(t, "--seeds", "3,4", "--stage", "layout", "--preset", "pangaea,islands",
+		"--aspect", "square", "--land-cells", "2000", "--tile", "64", "--output", out)
+	if code != 0 {
+		t.Fatalf("exit %d; stderr %q", code, stderr)
+	}
+	if !strings.Contains(stdout, "presets pangaea, islands") {
+		t.Errorf("stdout %q does not list the presets", stdout)
+	}
+	b, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta, err := render.ReadMeta(bytes.NewReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rows []string
+	for _, e := range meta.Extra {
+		if e.Key == "mpg:rows" {
+			rows = strings.Split(e.Value, "\n")
+		}
+	}
+	want := []string{"3 square pangaea ", "4 square pangaea ", "3 square islands ", "4 square islands "}
+	if len(rows) != len(want) {
+		t.Fatalf("rows = %q", rows)
+	}
+	for k, w := range want {
+		if !strings.HasPrefix(rows[k], w) {
+			t.Errorf("row %d = %q, want prefix %q", k, rows[k], w)
+		}
+	}
+	if code, _, stderr := sweep(t, "--seeds", "1", "--stage", "layout", "--preset", "isles", "--output", out); code != 1 || !strings.Contains(stderr, "layout.preset") {
+		t.Errorf("bad preset: exit %d, stderr %q", code, stderr)
+	}
+	if code, _, stderr := sweep(t, "--seeds", "1", "--stage", "layout", "--preset", "islands,islands", "--output", out); code != 2 || !strings.Contains(stderr, "--preset") {
+		t.Errorf("repeated preset: exit %d, stderr %q", code, stderr)
 	}
 }

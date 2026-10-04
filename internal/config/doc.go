@@ -59,6 +59,19 @@
 // Every product that could feed an addition is rounded explicitly (package
 // fmath), so the derived values have the same bits on every architecture.
 //
+// # Layout
+//
+// The layout group selects a preset (pangaea, continents, archipelago,
+// islands, or custom) and writes out the parameters of every preset, so
+// switching layout.preset needs no other edit. The unused presets'
+// parameters do not affect the run, but they are part of the file and so of
+// the config hash. Seeded presets size their landmasses relative to the land
+// target (N × A), so they keep their look at any world size; custom
+// attractors and repulsors are explicit, in world km, and are checked against
+// the resolved world (attractors must lie outside the rim and its falloff).
+// Their lists are written as [] when empty. See package layout for how the
+// parameters are used.
+//
 // # Versioning
 //
 // The file carries "schema": 1. A file without a schema, or with another
