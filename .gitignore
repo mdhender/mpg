@@ -1,0 +1,10 @@
+*~
+*.swp
+
+# IDE and agent files
+.idea/
+NEXT-MILESTONE-PROMPT.md
+
+# build artifacts
+/mpg
+/tmp/
