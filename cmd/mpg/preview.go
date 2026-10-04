@@ -26,6 +26,17 @@ const previewNoise = "noise"
 // field's minimum to its maximum. The real elevation stage (milestone 2)
 // supersedes it.
 func noisePreview(cfg config.Config) (*image.RGBA, error) {
+	f, err := noiseField(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return render.Sequential(f, render.Viridis), nil
+}
+
+// noiseField fills the seed's raster with the noise preview's composite (see
+// noisePreview). The golden test hashes it directly, so the preview's
+// arithmetic is pinned independently of the color ramp.
+func noiseField(cfg config.Config) (*field.Field, error) {
 	f, err := field.FromConfig(cfg)
 	if err != nil {
 		return nil, err
@@ -41,5 +52,5 @@ func noisePreview(cfg config.Config) (*image.RGBA, error) {
 		r := fmath.MulAdd(2, ridged.Sample(ridgedSrc, q), -1)
 		return fmath.MulAdd(0.65, a, fmath.Mul(0.35, r))
 	})
-	return render.Sequential(f, render.Viridis), nil
+	return f, nil
 }

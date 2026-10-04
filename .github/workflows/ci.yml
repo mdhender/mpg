@@ -1,0 +1,67 @@
+# Copyright (c) 2026 Michael D Henderson. All rights reserved.
+#
+# CI runs the whole test suite on linux/amd64 and linux/arm64, and again on
+# amd64 built with GOAMD64=v3, the amd64 build that fuses multiply-adds. The
+# golden hashes (package internal/golden) must match on all three; that is
+# the cross-architecture determinism check (DESIGN.md, "Determinism").
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux/amd64
+            runner: ubuntu-24.04
+            goamd64: v1
+          - name: linux/arm64
+            runner: ubuntu-24.04-arm
+            goamd64: v1 # ignored by arm64 builds
+          - name: linux/amd64 GOAMD64=v3
+            runner: ubuntu-24.04
+            goamd64: v3
+    env:
+      GOAMD64: ${{ matrix.goamd64 }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Environment
+        run: go version && go env GOOS GOARCH GOAMD64
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "gofmt needed on:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test -count=1 ./...
+
+      # Print every golden hash with the architecture that computed it, so a
+      # maintainer can compare architectures before recording a value (see
+      # package internal/golden). Runs even when the tests failed.
+      - name: Golden hashes
+        if: ${{ !cancelled() }}
+        env:
+          MPG_PRINT_GOLDEN: "1"
+        run: go test -count=1 -v -run '^TestGolden' ./...
