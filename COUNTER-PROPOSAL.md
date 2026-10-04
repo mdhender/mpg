@@ -6,7 +6,7 @@ Status: counter-proposal to `DESIGN.md` (2026-10-04). Nothing is implemented.
 
 mpg generates a **playable province map** for our strategic fantasy games. The deliverable is a Voronoi mesh with these properties:
 
-- Every cell is a **province** of about 100 km², matching one 6-mile wilderness hex. These are smaller provinces than T'Nyc's, chosen for playability.
+- Every cell is a **province** with the area (not the shape) of one 6-mile wilderness hex, about 81 km². That lets the game set exploring a province at one day.
 - Every cell is **all land or all water**.
 - Every cell carries geography (landform), biome, and altitude.
 - Every edge carries direction, neighbor, river, coast, and incline.
@@ -59,7 +59,7 @@ Compared with `DESIGN.md`:
 
 ## Units and sizing
 
-- **Province area `A`.** Configured; default 100 km². A 6-mile hex measured flat to flat is about 81 km², so the exact value is an open question.
+- **Province area `A`** is the area of one wilderness hex, so exploring a province takes one game day. Configure the hex instead of the area: `province.hex_flat_to_flat_mi` (default 6). Then `A = (√3/2)·d²` = 31.18 mi² ≈ **80.75 km²**. Save both `d` and the derived `A`. Only area matches the hex; cells are not hex-shaped or hex-sized in any one direction.
 - **Requested land cells `N`.**
 - **Land fraction `f`.** Default 0.30, measured over playable (non-rim) cells.
 
@@ -74,9 +74,9 @@ width_km       = aspect × (height_km − 2 × rim_km)
 
 Aspect names (square, portrait, landscape, widescreen 16:9, cinematic 2.39:1) and explicit ratios work as in `DESIGN.md`. Aspect applies to the playable area. The rim adds height only.
 
-Example: N = 10,000 and f = 0.30 give about 33,000 playable cells and 3.3M km². At cinematic aspect that is about 2,810 × 1,180 km before the rim.
+Example: N = 10,000 and f = 0.30 give about 33,300 playable cells and 2.69M km². At cinematic aspect that is about 2,540 × 1,060 km before the rim.
 
-**Raster spacing** is a generator concern. Default: about 2 km, which gives about 25 samples per province. That is enough for per-cell statistics such as median, percentiles, and relief. The resolved spacing is saved. Raster dimensions do not need to be divisible by anything.
+**Raster spacing** is a generator concern. Default: about 2 km, which gives about 20 samples per province. That is enough for per-cell statistics such as median, percentiles, and relief. The resolved spacing is saved. Raster dimensions do not need to be divisible by anything.
 
 **Land contract:**
 - The final number of land cells must be within **1% of N**. With cells this uniform, the count stands in for area: land area ≈ N × A. Report the measured land area too.
@@ -151,7 +151,7 @@ Layout is a bias, not a mask. Noise still makes the coastlines; the playability 
 - **Sites.** Jittered grid or Poisson-disk sites over the full cylinder, including the rim, seeded from `mesh`. Site count = total area / `A`.
 - **Voronoi on a cylinder.** Compute with ghost copies of the sites shifted ±W. Keep only the original sites' cells. North and south are clipped inside the rim, so clipping never affects playable cells.
 - **Lloyd relaxation.** Default 2–3 passes, using wrapped centroids. Then scale so the mean cell area is exactly `A`.
-- **Short-edge collapse.** Any edge shorter than `min_edge_km` is collapsed: its two corners merge into one 4-way corner. Default `min_edge_km` = 0.3 × √A, about 3 km.
+- **Short-edge collapse.** Any edge shorter than `min_edge_km` is collapsed: its two corners merge into one 4-way corner. Default `min_edge_km` = 0.3 × √A, about 2.7 km.
   - The two cells that shared the collapsed edge now touch only at a point, so they are **not neighbors**.
   - Point contact never connects land to land or water to water, which matches `DESIGN.md`'s four-neighbor water rule.
   - The collapse is deterministic, shortest edge first, with ties broken by edge index.
@@ -202,7 +202,7 @@ Rivers run along Voronoi edges, corner to corner, and never through a cell's int
 - **River selection.**
   - An edge is a river when its drainage is at least `river_threshold_km2`.
   - Classes (stream, river, major river) come from drainage or discharge breaks.
-  - Each cell is about 100 km², so the threshold has to span several cells. Start around 500 km² and tune.
+  - Each cell is about 81 km², so the threshold has to span several cells. Start around 500 km² and tune.
   - For comparison: on Panama, `hmz2riv`'s 50 km² gave about one river edge for every two 10 km hexes, chosen deliberately to slow north–south travel.
 
 This guarantees by construction:
@@ -218,7 +218,7 @@ This guarantees by construction:
 Use the hm* codebooks where they fit, so the engine and converter tools stay familiar.
 
 - **Landform (land), from relief and altitude:**
-  - `flats`, `plains`, `rolling-plains`, `hills`, `mountains`, `plateaus`, using `hmz2ter`'s relief thresholds as starting values. Retune them, because relief within a 100 km² cell of synthetic terrain will not match DEM relief.
+  - `flats`, `plains`, `rolling-plains`, `hills`, `mountains`, `plateaus`, using `hmz2ter`'s relief thresholds as starting values. Retune them, because relief within an 81 km² cell of synthetic terrain will not match DEM relief.
   - `volcanic-highlands` stays in the codebook, but nothing produces it until a volcanism stage exists.
 - **Landform (water):** `salt-water` (ocean, inland sea) and `fresh-water` (lake). Salinity is a flag.
 - **Depth (salt water):** `shallow`, `open`, `deep`, from distance in cell steps to the nearest non-salt-water cell, as in `hmz2ter`. The bands are play rules, so they are retuned in cells.
@@ -370,11 +370,10 @@ No placement of settlements, resources, starting positions, or borders. Those be
 
 ## Open questions
 
-1. **Province area.** A 6-mile hex is about 81 km² measured flat to flat. Should the default be 100 km², 81 km², or something else?
-2. **Exit convention.** Adopt wgvc's dense clockwise numbering with 0 = `HOLD`, or something the engine already uses?
-3. **Incline.** Are m/km plus a class enough, or does the engine want degrees or movement-cost bands?
-4. **River threshold and classes.** How dense should the network be? Does the engine want discharge, or only a class?
-5. **Lakes.** Allow one-cell lakes? What `inland_sea_min_cells` should apply? May a river enter a lake and leave it from a different corner? Proposed: yes, through the spill corner only.
-6. **Renderer geometry.** Is cell and edge geometry with an optional noisy-edge seed enough, or does the player map also want a hillshade raster per segment?
-7. **Volcanism.** Should `volcanic-highlands` get a hotspot stage, or stay unused for now?
-8. **Rim depth and look.** Is 4 cells of impassable rim plus about 12 cells of falloff right? Should the rim render as open polar sea, pack ice, or both?
+1. **Exit convention.** Adopt wgvc's dense clockwise numbering with 0 = `HOLD`, or something the engine already uses?
+2. **Incline.** Are m/km plus a class enough, or does the engine want degrees or movement-cost bands?
+3. **River threshold and classes.** How dense should the network be? Does the engine want discharge, or only a class?
+4. **Lakes.** Allow one-cell lakes? What `inland_sea_min_cells` should apply? May a river enter a lake and leave it from a different corner? Proposed: yes, through the spill corner only.
+5. **Renderer geometry.** Is cell and edge geometry with an optional noisy-edge seed enough, or does the player map also want a hillshade raster per segment?
+6. **Volcanism.** Should `volcanic-highlands` get a hotspot stage, or stay unused for now?
+7. **Rim depth and look.** Is 4 cells of impassable rim plus about 12 cells of falloff right? Should the rim render as open polar sea, pack ice, or both?
