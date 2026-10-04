@@ -120,7 +120,7 @@ The rim solves several problems:
 | 7 | Climate | raster (+ cell mask) | Temperature, precipitation, potential evaporation, runoff, aggregated to cells | Temperature; precipitation; aridity |
 | 8 | Basins and lakes | mesh | Basin hierarchy, wet/dry decision, lake and inland-sea cells, spill corners | Basins colored; lakes |
 | 9 | Land-target check | mesh | Repeats stages 6 and 8 within a budget until the land count is in tolerance | Search trace |
-| 10 | Rivers | mesh corners | Drainage tree on corners; river edges with drainage and discharge | Rivers on edges, width by class |
+| 10 | Rivers | mesh corners | Drainage tree on corners; river edges with a class | Rivers on edges, width by class |
 | 11 | Classification | mesh | Landform, depth band, surface, biome, flags | Landforms; biomes |
 | 12 | Edges | mesh | Bearing, compass direction, neighbor, coast, river, incline, passability | Inclines; passability |
 | 13 | Measures | mesh | Playability report | Landmass and chokepoint map |
@@ -202,7 +202,8 @@ Rivers run along Voronoi edges, corner to corner, and never through a cell's int
   - Each edge on the tree carries the drainage (km²) and discharge (m³/s) of its downstream corner.
 - **River selection.**
   - An edge is a river when its drainage is at least `river_threshold_km2`.
-  - Classes (stream, river, major river) come from drainage or discharge breaks.
+  - Classes (`stream`, `river`, `major-river`) come from configured drainage breaks, with the lowest break at the threshold.
+  - Drainage and discharge are internal: they set the class and appear in the measures and debug dumps, not in `world.json`.
   - Each cell is about 81 km², so the threshold has to span several cells. The default `river_threshold_km2` is **500 km²** (about 6 cells of catchment); tune from there.
   - For comparison: on Panama, `hmz2riv`'s 50 km² gave about one river edge for every two 10 km hexes, chosen deliberately to slow north–south travel.
 
@@ -243,7 +244,7 @@ The game wants per-edge data. Store each undirected edge once, and give each cel
 - Cells list their half-edges in clockwise order, starting from the one nearest `N`.
 - **Neighbor.** The neighbor cell id and the shared edge id.
 - **Coast.** Set when exactly one side is water. The water kind is ocean, lake, or inland sea.
-- **River.** Set when the edge is a river edge. Record its class, drainage, discharge, and flow direction (`from_corner` → `to_corner`). A river edge is always land–land, so it is a border between provinces.
+- **River.** The river class (`stream`, `river`, `major-river`), or none. That is all the game gets. The game turns the class into a travel-time modifier; rules such as major rivers being impassable except across nearly level edges are game rules, not generator rules. A river edge is always land–land, so it is a border between provinces.
 - **Incline.** A signed grade in percent between the two cells' altitudes: (neighbor altitude − this altitude) / site distance × 100. Positive climbs, negative descends. The magnitude is capped at 100% and rounded to one decimal place.
   - There is one gradient per edge, so A → B is exactly the negative of B → A (+15% and −15%). Compute it once per undirected edge and negate it for the reverse half-edge, so rounding can never break the symmetry.
   - The game decides what grades mean for movement; the generator does not classify them.
@@ -257,7 +258,7 @@ The game wants per-edge data. Store each undirected edge once, and give each cel
 - **Corners:** id, `(x, y)` in km, elevation, terminal or mouth flags.
 - **Cells:** site, centroid, a polygon as a clockwise list of corner ids, an unwrapped polygon in km relative to the site (so seam cells draw without special cases), and a bounding box.
 - **Edges:** corner ids at each end, length in km, and a per-edge seed, so the renderer can draw deterministic noisy edges for coasts and rivers if it wants to.
-- **River polylines:** corner chains from source to mouth, with class and discharge, ready for drawing by width.
+- **River polylines:** corner chains from source to mouth, with the class of each segment, ready for drawing by width.
 - **Coastline polylines:** chains of coast edges, closed for islands and lakes.
 - **World metadata:** W, H, rim, wrap flag, province area, units, codebooks.
 
@@ -379,8 +380,7 @@ No placement of settlements, resources, starting positions, or borders. Those be
 
 ## Open questions
 
-1. **River classes.** The threshold starts at 500 km². Does the engine want discharge, or only a class (stream, river, major river)?
-2. **Lakes.** Allow one-cell lakes? What `inland_sea_min_cells` should apply? May a river enter a lake and leave it from a different corner? Proposed: yes, through the spill corner only.
-3. **Renderer geometry.** Is cell and edge geometry with an optional noisy-edge seed enough, or does the player map also want a hillshade raster per segment?
-4. **Volcanism.** Should `volcanic-highlands` get a hotspot stage, or stay unused for now?
-5. **Rim depth and look.** Is 4 cells of impassable rim plus about 12 cells of falloff right? Should the rim render as open polar sea, pack ice, or both?
+1. **Lakes.** Allow one-cell lakes? What `inland_sea_min_cells` should apply? May a river enter a lake and leave it from a different corner? Proposed: yes, through the spill corner only.
+2. **Renderer geometry.** Is cell and edge geometry with an optional noisy-edge seed enough, or does the player map also want a hillshade raster per segment?
+3. **Volcanism.** Should `volcanic-highlands` get a hotspot stage, or stay unused for now?
+4. **Rim depth and look.** Is 4 cells of impassable rim plus about 12 cells of falloff right? Should the rim render as open polar sea, pack ice, or both?
