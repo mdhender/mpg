@@ -47,7 +47,7 @@ Compared with `DESIGN.md`:
 | **Keep** | Geography, climate, biome, and rendering kept separate |
 | **Change** | "Land cell" means one Voronoi land cell (one province). The land target becomes a **count of land cells**, not an area measured in raster samples. |
 | **Change** | The game unit becomes the **Voronoi province**, replacing the 10 km square game cell. The "future export" step becomes the core of the generator. |
-| **Change** | North and south edges become a **polar rim** of impassable deep ocean and pack ice, instead of bare bounded edges. |
+| **Change** | North and south edges become a **polar rim**: a sheet of impassable ice, instead of bare bounded edges. |
 | **Change** | Ocean, lakes, basins, and rivers are decided **on the mesh**, not on the raster. The raster stays as the synthetic DEM and the climate grid. |
 | **Change** | Water balance becomes a discrete per-cell fill, replacing storage curves on raster samples. |
 | **Change** | The schema is exported Go types (as in `hmz2map`); JSON Schema files are optional. |
@@ -99,8 +99,11 @@ Example: N = 10,000 and f = 0.30 give about 33,300 playable cells and 2.69M km²
 ### Rim
 
 - **Band.** The top and bottom bands are rim. Default: 4 cells deep, after `hmz2map -border`'s 4-hex band.
-- **Falloff.** Inside the rim's edge, a falloff band (default about 12 cells) pulls elevation smoothly down to deep ocean. Land therefore never touches the rim, and coasts near the poles look natural rather than cropped.
-- **Rim cells** are salt water, depth `deep`, flagged `rim` and `impassable`. Climate makes them pack ice.
+- **Falloff.** Inside the rim's edge, the falloff band pulls elevation smoothly down to deep ocean. Land therefore never touches the rim, and coasts near the poles look natural rather than cropped.
+- **Rim cells** are flagged `rim` and `impassable`. The flag overrides everything else about the cell: the game treats it as impassable, and the renderer draws it as a sheet of impassable ice whatever its geography and biome say.
+  - Inside the generator, rim cells count as deep salt water, so the ocean beside them is connected to them and climate sees open water at the poles.
+- **Rim width** is how many cells deep the ice band reaches in from the north and south edges. Default: 4 cells.
+- **Falloff width** is how many cells of open ocean, at least, separate the ice from any land. Default: about 12 cells. It keeps coasts from running straight into the ice.
 
 The rim solves several problems:
 
@@ -195,8 +198,8 @@ Volcanoes are possible, not forced: rare, seeded, and sometimes absent.
 - **Surplus at the spill** overflows through **one spill corner**, which became a wgvc rule for good reason, and continues downstream.
 - **No stable level** means the basin stays dry land with surface `playa` and is a **dry sink** for rivers.
 - **Classification:**
-  - lake: 1 to `inland_sea_min_cells` − 1 cells;
-  - inland sea: `inland_sea_min_cells` or more;
+  - lake: 1 to `inland_sea_min_cells` − 1 cells (one-cell lakes are fine);
+  - inland sea: `inland_sea_min_cells` or more (**default 20**);
   - each is marked salt if endorheic and evaporation-dominated (a salinity proxy, not chemistry).
 - A lake is one connected set of cells with one surface level.
 - **Minimum depth.** A depression counts as a basin only if its spill level is at least `basin_min_depth_m` above its lowest cell's altitude. **Default: 50 m.**
@@ -211,7 +214,7 @@ Rivers run along Voronoi edges, corner to corner, and never through a cell's int
 - **Corner height** is the mean altitude of the 3–4 cells that meet at the corner, so rivers follow the low ground between low cells using the same single height.
 - **Corner graph.** The graph has land corners joined by **land–land edges**. A corner that touches any water cell is **terminal**: a mouth on the ocean or a lake. Dry-sink corners from stage 8 are also terminal.
 - **Drainage tree.** A priority flood over the corner graph, seeded from terminal corners, gives every land corner one downstream corner. The result is acyclic by construction. Flats are broken by stable index.
-- **Lake outlets.** An overflowing lake's spill corner starts its own downstream path, carrying the lake's surplus.
+- **Lake outlets.** A river may enter a lake at any shore corner and leaves only through the spill corner. An overflowing lake's spill corner starts its own downstream path, carrying the lake's surplus.
 - **Accumulation.**
   - Each land cell sends its runoff (area × runoff depth) to its lowest corner on the graph.
   - Accumulate down the tree.
@@ -267,9 +270,11 @@ The game wants per-edge data. Store each undirected edge once, and give each cel
   - Centers are about 9 km apart, so even a 2,000 m difference is a grade of about 22%. Most edges will be in single digits, and 100% will be very rare. Watch the grade histogram in the measures.
 - **Passable.** False across the rim. The game may add rules on top. Short edges are already gone, so every remaining edge is a real border.
 
-### Geometry for the game renderer
+### One game data file
 
-`world.json` includes:
+`world.json` is the only game data file. The engine and the player-map renderer both read it; there is no separate export for rendering. For every cell it holds the game data (geography, biome, altitude, flags including `rim`) and the geometry to draw it.
+
+The geometry in `world.json`:
 
 - **Corners:** id, `(x, y)` in km, corner height, terminal or mouth flags.
 - **Cells:** site, centroid, a polygon as a clockwise list of corner ids, an unwrapped polygon in km relative to the site (so seam cells draw without special cases), and a bounding box.
@@ -278,7 +283,7 @@ The game wants per-edge data. Store each undirected edge once, and give each cel
 - **Coastline polylines:** chains of coast edges, closed for islands and lakes.
 - **World metadata:** W, H, rim, wrap flag, province area, units, codebooks.
 
-Rendering a player's map segment means selecting cells whose bounding boxes intersect the window (taken modulo W) and drawing their polygons, rivers, and coasts. No raster is needed.
+Rendering a player's map segment means selecting cells whose bounding boxes intersect the window (taken modulo W) and drawing each polygon by its geography and biome, then rivers and coasts. Rim cells are drawn as impassable ice instead. No raster is needed.
 
 ## Playability measures
 
@@ -397,6 +402,4 @@ No placement of settlements, resources, starting positions, or borders. Those be
 
 ## Open questions
 
-1. **Lakes.** Allow one-cell lakes? What `inland_sea_min_cells` should apply? May a river enter a lake and leave it from a different corner? Proposed: yes, through the spill corner only.
-2. **Renderer geometry.** Is cell and edge geometry with an optional noisy-edge seed enough, or does the player map also want a hillshade raster per segment?
-3. **Rim depth and look.** Is 4 cells of impassable rim plus about 12 cells of falloff right? Should the rim render as open polar sea, pack ice, or both?
+None at present.
