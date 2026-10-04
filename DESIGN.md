@@ -25,6 +25,7 @@ The goal is an interesting, plausible game world rather than a scientific Earth 
 - Provide separate generator and renderer executables.
 - Save resolved configuration and world data as JSON.
 - Support block/window rendering without regenerating the world.
+- Default physical cell size is 10 km per side; export the resolved size so consuming games can derive movement costs.
 
 ## Proposed defaults
 
@@ -66,6 +67,14 @@ sample = (R*cos(theta), R*sin(theta), S*latitude)
 ```
 
 Choose `R` and `S` from the spatial scale so longitudinal and vertical detail have comparable cell-scale wavelengths. Domain warps and all spatial perturbations must themselves be periodic. Merely matching the first and last columns is insufficient: they are adjacent cell centers, not duplicate coordinates.
+
+## Physical scale and movement distances
+
+The default `cell_size_m` is **10000**: each square cell is **10 km × 10 km**, covering **100 km²**. Store this required field in both `config.json` and `map.json`; consuming games must read the saved value rather than assume a scale. It is configurable, with the resolved value authoritative for all area, distance, slope, and hydrology calculations.
+
+Center-to-center movement between cardinal neighbors is 10 km; between diagonal neighbors it is `10 * sqrt(2)` km (approximately 14.142 km). These distances also apply across the east–west seam. A game can combine these base distances with terrain, slope, rivers, ice, transport mode, and speed to derive movement costs. The generator supplies physical scale and geography; the consuming game defines movement rules.
+
+World physical width is `width * cell_size_m`, height is `height * cell_size_m`, and cell area is `cell_size_m²`. Scale is constant at every latitude in this cylindrical model.
 
 ## Inputs and size resolution
 
@@ -220,7 +229,7 @@ Illustrative shape; the numeric tuning values are starting points, not validated
     "dimensions_mode": "automatic",
     "width": 2823,
     "height": 1181,
-    "cell_size_m": 1000
+    "cell_size_m": 10000
   },
   "topology": {"wrap_east_west": true, "wrap_north_south": false},
   "elevation": {
@@ -282,7 +291,7 @@ Manifest contract:
 | schema_version, algorithm_version | Reader and generation compatibility |
 | config_sha256 | Hash of canonical resolved input |
 | width, height, chunk_size | Resolved grid shape |
-| cell_size_m, topology | Spatial interpretation |
+| cell_size_m, topology | Required physical scale (default 10000 m per side) and spatial interpretation |
 | sea_level_m | Calculated ocean surface |
 | counts | Target/actual continental land, dry surface, ocean, inland water, ice |
 | units | Units of every numeric layer |
