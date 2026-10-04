@@ -1,0 +1,364 @@
+// Copyright (c) 2026 Michael D Henderson. All rights reserved.
+
+package main
+
+import (
+	"fmt"
+	"image"
+	"io"
+	"math"
+	"os"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/mdhender/mpg/internal/config"
+	"github.com/mdhender/mpg/internal/pipeline"
+	"github.com/mdhender/mpg/internal/render"
+)
+
+// Sweep limits.
+const (
+	maxSweepSeeds   = 256
+	maxSweepAspects = 8
+	minSweepTile    = 16
+	maxSweepTile    = 4096
+	defaultTile     = 320
+	captionLines    = 2
+	maxLabelChars   = 26
+)
+
+// runSweep builds a contact sheet: one row per aspect and seed (aspects
+// outer), one column per requested stage, each tile a stage render shrunk to
+// --tile pixels wide. Rows run one after another, so the sheet does not
+// depend on scheduling. Exit codes: 0 on success, 1 on a config error, an
+// unimplemented stage, or a run error, 2 on a usage error.
+func runSweep(args []string, stdout, stderr io.Writer) int {
+	fs := newFlagSet("sweep", stderr)
+	seedsFlag := fs.String("seeds", "", "world `seeds`: decimal uint64 values and ranges, as in 1-16 or 1,5,9-12 (required)")
+	stagesFlag := fs.String("stage", "", "comma-separated `stages`, one column each in order: pipeline stage names or numbers, optionally stage:variant, or the noise preview (required)")
+	aspectsFlag := fs.String("aspect", "", "comma-separated playable `aspects`, one block of rows each (overrides --config)")
+	cf := addConfigFlags(fs)
+	output := fs.String("output", "", "write the contact sheet PNG to `file` (required)")
+	tile := fs.Int("tile", defaultTile, "tile width in `pixels`; the height follows the world's shape")
+	if code, stop := parse(fs, args); stop {
+		return code
+	}
+	usageErr := func(format string, args ...any) int {
+		fmt.Fprintf(stderr, "mpg sweep: "+format+"\n", args...)
+		return 2
+	}
+	if fs.NArg() != 0 {
+		return usageErr("unexpected argument %q", fs.Arg(0))
+	}
+	if *output == "" {
+		return usageErr("--output is required")
+	}
+	if *seedsFlag == "" {
+		return usageErr("--seeds is required")
+	}
+	if *stagesFlag == "" {
+		return usageErr("--stage is required")
+	}
+	if *tile < minSweepTile || *tile > maxSweepTile {
+		return usageErr("--tile %d outside [%d, %d]", *tile, minSweepTile, maxSweepTile)
+	}
+	seeds, err := parseSeeds(*seedsFlag)
+	if err != nil {
+		return usageErr("--seeds: %v", err)
+	}
+	registry := pipeline.Stages()
+	cols, err := parseSweepStages(*stagesFlag, registry)
+	if err != nil {
+		return usageErr("--stage: %v", err)
+	}
+	var aspects []string
+	if isSet(fs, "aspect") {
+		if aspects, err = parseList(*aspectsFlag, maxSweepAspects); err != nil {
+			return usageErr("--aspect: %v", err)
+		}
+	}
+
+	fail := func(format string, args ...any) int {
+		fmt.Fprintf(stderr, "mpg sweep: "+format+"\n", args...)
+		return 1
+	}
+	last, err := checkImplemented(cols, registry)
+	if err != nil {
+		return fail("%v", err)
+	}
+
+	// Resolve the base config and every row's config before doing work.
+	base, err := cf.load()
+	if err != nil {
+		return fail("%v", err)
+	}
+	if err := base.Resolve(); err != nil {
+		return fail("%v", err)
+	}
+	baseHash, err := base.Hash()
+	if err != nil {
+		return fail("%v", err)
+	}
+	if aspects == nil {
+		aspects = []string{base.World.Aspect}
+	}
+	type sweepRow struct {
+		cfg  config.Config
+		hash string
+	}
+	var rows []sweepRow
+	for _, aspect := range aspects {
+		for _, seed := range seeds {
+			cfg := base
+			cfg.Seed = config.Seed(seed)
+			if isSet(fs, "aspect") {
+				setAspect(&cfg, aspect)
+			}
+			if err := cfg.Resolve(); err != nil {
+				return fail("aspect %s: %v", aspect, err)
+			}
+			hash, err := cfg.Hash()
+			if err != nil {
+				return fail("%v", err)
+			}
+			rows = append(rows, sweepRow{cfg, hash})
+		}
+	}
+
+	// The pipeline needs an output directory for config.json; sweep keeps
+	// nothing from it.
+	var workDir string
+	if last >= 0 {
+		if workDir, err = os.MkdirTemp("", "mpg-sweep-"); err != nil {
+			return fail("%v", err)
+		}
+		defer os.RemoveAll(workDir)
+	}
+
+	sheet := render.Sheet{TileWidth: *tile, CaptionLines: captionLines}
+	for _, c := range cols {
+		sheet.Columns = append(sheet.Columns, c.name)
+	}
+	start := time.Now()
+	for n, row := range rows {
+		t0 := time.Now()
+		w := row.cfg.World
+		tileH := max(1, int(math.Round(float64(*tile)*w.HeightKm/w.WidthKm)))
+		tiles := make([]render.SheetTile, len(cols))
+		size := make([]image.Point, len(cols)) // source render sizes
+		keep := func(k int, img image.Image) {
+			tiles[k].Image = render.Downscale(img, *tile, tileH)
+			size[k] = img.Bounds().Size()
+		}
+		for k, c := range cols {
+			if c.index >= 0 {
+				continue
+			}
+			img, err := noisePreview(row.cfg)
+			if err != nil {
+				return fail("seed %d: noise: %v", uint64(row.cfg.Seed), err)
+			}
+			keep(k, img)
+		}
+		if last >= 0 {
+			ctx, err := pipeline.NewContext(row.cfg, workDir, "", stderr)
+			if err != nil {
+				return fail("%v", err)
+			}
+			ctx.Sink = func(st pipeline.Stage, variant string, img image.Image) error {
+				for k, c := range cols {
+					if c.index >= 0 && registry[c.index].Name == st.Name && c.variant == variant && tiles[k].Image == nil {
+						keep(k, img)
+					}
+				}
+				return nil
+			}
+			res, err := pipeline.Run(ctx, registry, last)
+			if err != nil {
+				return fail("seed %d: %v", uint64(row.cfg.Seed), err)
+			}
+			if res.NotImplemented != nil {
+				return fail("stage %s is not implemented yet", res.NotImplemented)
+			}
+		}
+		for k, c := range cols {
+			tiles[k].Caption = []string{
+				fmt.Sprintf("seed %d %s", uint64(row.cfg.Seed), c.name),
+				fmt.Sprintf("%.0f x %.0f km", w.WidthKm, w.HeightKm),
+			}
+			if tiles[k].Image != nil {
+				tiles[k].Caption[1] += fmt.Sprintf(", %dx%d px", size[k].X, size[k].Y)
+			}
+		}
+		label := []string{fmt.Sprintf("seed %d", uint64(row.cfg.Seed)), w.Aspect, fmt.Sprintf("%d land", w.LandCells)}
+		for _, l := range label {
+			sheet.LabelChars = min(max(sheet.LabelChars, len(l)), maxLabelChars)
+		}
+		sheet.Rows = append(sheet.Rows, render.SheetRow{Label: label, TileHeight: tileH, Tiles: tiles})
+		fmt.Fprintf(stderr, "sweep: [%d/%d] seed %d %s: %.1fs\n", n+1, len(rows), uint64(row.cfg.Seed), w.Aspect, time.Since(t0).Seconds())
+	}
+
+	img := sheet.Image()
+	seedText := make([]string, len(seeds))
+	for k, s := range seeds {
+		seedText[k] = strconv.FormatUint(s, 10)
+	}
+	var rowText []string
+	for _, row := range rows {
+		rowText = append(rowText, fmt.Sprintf("%d %s %s", uint64(row.cfg.Seed), row.cfg.World.Aspect, row.hash))
+	}
+	meta := render.Meta{
+		Stage:      "sweep",
+		ConfigHash: baseHash,
+		Extra: []render.Text{
+			{Key: "mpg:seeds", Value: strings.Join(seedText, ",")},
+			{Key: "mpg:stages", Value: strings.Join(sheet.Columns, ",")},
+			{Key: "mpg:aspects", Value: strings.Join(aspects, ",")},
+			{Key: "mpg:tile-width", Value: strconv.Itoa(*tile)},
+			{Key: "mpg:rows", Value: strings.Join(rowText, "\n")},
+		},
+	}
+	if dir := filepath.Dir(*output); dir != "" {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fail("%v", err)
+		}
+	}
+	if err := render.WritePNGFile(*output, img, meta); err != nil {
+		return fail("%v", err)
+	}
+	fmt.Fprintf(stdout, "sheet   %s (%d x %d px)\n", *output, img.Rect.Dx(), img.Rect.Dy())
+	fmt.Fprintf(stdout, "config  %s\n", baseHash)
+	fmt.Fprintf(stdout, "seeds   %d: %s\n", len(seeds), *seedsFlag)
+	fmt.Fprintf(stdout, "stages  %s\n", strings.Join(sheet.Columns, ", "))
+	fmt.Fprintf(stdout, "aspects %s\n", strings.Join(aspects, ", "))
+	fmt.Fprintf(stdout, "pixels  %s\n", render.PixelHash(img))
+	fmt.Fprintf(stderr, "sweep: %d rows x %d stages in %.1fs\n", len(rows), len(cols), time.Since(start).Seconds())
+	return 0
+}
+
+// parseSeeds parses a comma-separated list of decimal uint64 seeds and
+// inclusive ranges lo-hi, as in "1-16" or "1,5,9-12", in the order given.
+// Empty items, reversed ranges, repeated seeds, and more than maxSweepSeeds
+// seeds in all are errors.
+func parseSeeds(s string) ([]uint64, error) {
+	var seeds []uint64
+	seen := map[uint64]bool{}
+	for item := range strings.SplitSeq(s, ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			return nil, fmt.Errorf("empty item in %q", s)
+		}
+		los, his, isRange := strings.Cut(item, "-")
+		lo, err := parseSeed(los)
+		if err != nil {
+			return nil, fmt.Errorf("%q: %v", item, err)
+		}
+		hi := lo
+		if isRange {
+			if hi, err = parseSeed(his); err != nil {
+				return nil, fmt.Errorf("%q: %v", item, err)
+			}
+			if hi < lo {
+				return nil, fmt.Errorf("range %q is reversed", item)
+			}
+		}
+		if hi-lo >= uint64(maxSweepSeeds-len(seeds)) {
+			return nil, fmt.Errorf("more than %d seeds", maxSweepSeeds)
+		}
+		for v := lo; ; v++ {
+			if seen[v] {
+				return nil, fmt.Errorf("seed %d repeated", v)
+			}
+			seen[v] = true
+			seeds = append(seeds, v)
+			if v == hi {
+				break
+			}
+		}
+	}
+	return seeds, nil
+}
+
+// parseList splits a comma-separated list, rejecting empty and repeated
+// items and more than limit of them.
+func parseList(s string, limit int) ([]string, error) {
+	var items []string
+	for item := range strings.SplitSeq(s, ",") {
+		item = strings.TrimSpace(item)
+		switch {
+		case item == "":
+			return nil, fmt.Errorf("empty item in %q", s)
+		case len(items) == limit:
+			return nil, fmt.Errorf("more than %d items", limit)
+		case slices.Contains(items, item):
+			return nil, fmt.Errorf("%q repeated", item)
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+// sweepStage is one sheet column.
+type sweepStage struct {
+	name    string // header: "noise", "elevation", or "mesh:area"
+	index   int    // index in the registry, or -1 for the noise preview
+	variant string // render variant of a registry stage, "" for the main one
+}
+
+var kebabRE = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+
+// parseSweepStages parses --stage: registry stage names or numbers, each
+// optionally with ":variant" to pick a render variant, or the noise preview.
+// It does not check that the stages are implemented; see checkImplemented.
+func parseSweepStages(s string, registry []pipeline.Stage) ([]sweepStage, error) {
+	items, err := parseList(s, 32)
+	if err != nil {
+		return nil, err
+	}
+	var cols []sweepStage
+	for _, item := range items {
+		if item == previewNoise {
+			cols = append(cols, sweepStage{name: previewNoise, index: -1})
+			continue
+		}
+		name, variant, hasVariant := strings.Cut(item, ":")
+		if hasVariant && !kebabRE.MatchString(variant) {
+			return nil, fmt.Errorf("variant %q in %q is not lowercase kebab case", variant, item)
+		}
+		i, err := pipeline.Lookup(registry, name)
+		if err != nil {
+			return nil, fmt.Errorf("%v, or %s (the noise preview)", err, previewNoise)
+		}
+		col := sweepStage{name: registry[i].Name, index: i, variant: variant}
+		if hasVariant {
+			col.name += ":" + variant
+		}
+		for _, c := range cols {
+			if c.name == col.name {
+				return nil, fmt.Errorf("stage %s repeated", col.name)
+			}
+		}
+		cols = append(cols, col)
+	}
+	return cols, nil
+}
+
+// checkImplemented returns the registry index of the last pipeline stage the
+// columns need (-1 when only previews are requested), or an error when it or
+// any stage before it is not implemented yet.
+func checkImplemented(cols []sweepStage, registry []pipeline.Stage) (int, error) {
+	last := -1
+	for _, c := range cols {
+		last = max(last, c.index)
+	}
+	for _, st := range registry[:last+1] {
+		if !st.Implemented() {
+			return -1, fmt.Errorf("stage %s is not implemented yet; sweep cannot run through stage %s", st, registry[last])
+		}
+	}
+	return last, nil
+}

@@ -33,6 +33,12 @@ type Context struct {
 	Log io.Writer
 	// Products holds what stages produce for later stages.
 	Products Products
+	// Sink, when not nil, receives every render, before it is written to
+	// RendersDir (if set), with the running stage and the render's variant.
+	// It lets a caller such as sweep collect renders in memory. It must not
+	// modify img or keep it past the call, since a stage may reuse it. An
+	// error from Sink fails the render.
+	Sink func(st Stage, variant string, img image.Image) error
 
 	// stage is the stage running now.
 	stage Stage
@@ -83,13 +89,19 @@ func (c *Context) Rand(stream, version string) *rand.Rand {
 	return seed.Rand(uint64(c.Config.Seed), stream, version)
 }
 
-// Render writes img as the running stage's render, with an optional
-// kebab-case variant, when RendersDir is set; otherwise it does nothing.
+// Render passes img, the running stage's render with an optional kebab-case
+// variant, to Sink when it is set, then writes it to RendersDir when that is
+// set. With neither, it does nothing.
 func (c *Context) Render(variant string, img image.Image) error {
+	name := render.StageFile(c.stage.Number, c.stage.Name, variant)
+	if c.Sink != nil {
+		if err := c.Sink(c.stage, variant, img); err != nil {
+			return err
+		}
+	}
 	if c.RendersDir == "" {
 		return nil
 	}
-	name := render.StageFile(c.stage.Number, c.stage.Name, variant)
 	meta := render.Meta{Stage: strings.TrimSuffix(name, ".png"), ConfigHash: c.ConfigHash}
 	return render.WritePNGFile(filepath.Join(c.RendersDir, name), img, meta)
 }

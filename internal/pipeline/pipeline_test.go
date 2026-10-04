@@ -233,3 +233,47 @@ func TestNewContext(t *testing.T) {
 		t.Error("Rand does not match seed.Rand")
 	}
 }
+
+func TestRenderSink(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 4, 3))
+	draw := func(c *Context) error {
+		if err := c.Render("", img); err != nil {
+			return err
+		}
+		return c.Render("area", img)
+	}
+	stages := []Stage{{Number: 4, Name: "mesh", Run: draw}}
+	for _, renders := range []bool{false, true} {
+		c := newTestContext(t, renders)
+		var got []string
+		c.Sink = func(st Stage, variant string, m image.Image) error {
+			if m != img {
+				t.Error("sink got a different image")
+			}
+			got = append(got, st.String()+"/"+variant)
+			return nil
+		}
+		if _, err := Run(c, stages, -1); err != nil {
+			t.Fatal(err)
+		}
+		if want := []string{"4 mesh/", "4 mesh/area"}; !slices.Equal(got, want) {
+			t.Errorf("renders %v: sink saw %q, want %q", renders, got, want)
+		}
+		if renders {
+			if _, err := os.Stat(filepath.Join(c.RendersDir, "04-mesh-area.png")); err != nil {
+				t.Errorf("sink stopped the file write: %v", err)
+			}
+		}
+	}
+
+	// A sink error fails the stage and skips the write.
+	boom := errors.New("boom")
+	c := newTestContext(t, true)
+	c.Sink = func(Stage, string, image.Image) error { return boom }
+	if _, err := Run(c, stages, -1); !errors.Is(err, boom) {
+		t.Errorf("err = %v, want boom", err)
+	}
+	if _, err := os.Stat(filepath.Join(c.RendersDir, "04-mesh.png")); !os.IsNotExist(err) {
+		t.Errorf("render written after a sink error: %v", err)
+	}
+}

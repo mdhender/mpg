@@ -17,6 +17,8 @@
 //
 // When Context.RendersDir is set, Context.Render writes a stage's PNG there
 // under the name render.StageFile gives, with the stage and config hash in
-// its text chunks. Without it, Render does nothing. Renders never change
-// data or hashes.
+// its text chunks. When Context.Sink is set, Render also hands it each
+// render first, so a caller (sweep) can collect renders without reading
+// files back. With neither, Render does nothing. Renders never change data
+// or hashes.
 package pipeline

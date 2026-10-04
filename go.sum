@@ -1,2 +1,4 @@
 github.com/maloquacious/semver v0.4.1 h1:qwMBcA9VfkD1KsPIMcX7KW9/rnBpBQBbTTcZhlgOIgc=
 github.com/maloquacious/semver v0.4.1/go.mod h1:0VQ90ipG1SLXCDcQo1bgYTBIpvXsEiNOnEF5Bs/HRYY=
+golang.org/x/image v0.46.0 h1:b1+oYj0Jbp6K5MDT4i4/eZpYlk3V8SJhhDKh6LBHAyQ=
+golang.org/x/image v0.46.0/go.mod h1:3B3W05VGVQyuXucLINLjXKrqISASfi4Xj+iCVkLMwew=

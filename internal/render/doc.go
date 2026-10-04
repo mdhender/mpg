@@ -5,7 +5,16 @@
 // Every pipeline stage has a render (DESIGN.md, "Pipeline" and "Tuning:
 // early and often"). This package holds the shared harness: color ramps,
 // field coloring, hillshade, simple drawing primitives, stage file names,
-// and a PNG writer that records the stage and config hash in the file.
+// a PNG writer that records the stage and config hash in the file, and the
+// contact sheet that mpg sweep builds.
+//
+// # Contact sheets
+//
+// Sheet lays tiles out in a grid: a header row of column (stage) names, then
+// one row per seed and aspect, labeled on the left, with caption lines under
+// each tile. Tiles are renders shrunk by Downscale, an integer box filter.
+// Text uses the fixed 7 × 13 bitmap face from golang.org/x/image/font/basicfont
+// (no outline fonts), and Label clips every string to its rectangle.
 //
 // # Images
 //

@@ -22,16 +22,12 @@ func runGenerate(args []string, stdout, stderr io.Writer) int {
 	fs := newFlagSet("generate", stderr)
 	var seed uint64
 	fs.Func("seed", "world `seed`, a decimal uint64 (overrides --config)", func(s string) error {
-		v, err := strconv.ParseUint(s, 10, 64)
-		if err != nil {
-			return errors.New("want a decimal uint64")
-		}
+		v, err := parseSeed(s)
 		seed = v
-		return nil
+		return err
 	})
-	landCells := fs.Int("land-cells", 0, "requested land cell `count` (overrides --config)")
+	cf := addConfigFlags(fs)
 	aspect := fs.String("aspect", "", "playable `aspect`: a name or W:H (overrides --config)")
-	configFile := fs.String("config", "", "read the config from `file` (strict); default: built-in defaults")
 	output := fs.String("output", "", "write config.json and later outputs to `dir` (required; created if missing; files are overwritten)")
 	renders := fs.String("renders", "", "write stage renders to `dir`")
 	stopAfter := fs.String("stop-after", "", "stop after `stage` (a name or number)")
@@ -57,28 +53,16 @@ func runGenerate(args []string, stdout, stderr io.Writer) int {
 		last = i
 	}
 
-	cfg := config.Default()
-	if *configFile != "" {
-		c, err := loadConfig(*configFile)
-		if err != nil {
-			fmt.Fprintf(stderr, "mpg generate: %v\n", err)
-			return 1
-		}
-		cfg = c
+	cfg, err := cf.load()
+	if err != nil {
+		fmt.Fprintf(stderr, "mpg generate: %v\n", err)
+		return 1
 	}
-	set := map[string]bool{}
-	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
-	if set["seed"] {
+	if isSet(fs, "seed") {
 		cfg.Seed = config.Seed(seed)
 	}
-	if set["land-cells"] {
-		cfg.World.LandCells = *landCells
-	}
-	if set["aspect"] {
-		cfg.World.Aspect = *aspect
-	}
-	if set["land-cells"] || set["aspect"] {
-		cfg.ClearDerived()
+	if isSet(fs, "aspect") {
+		setAspect(&cfg, *aspect)
 	}
 
 	ctx, err := pipeline.NewContext(cfg, *output, *renders, stderr)
@@ -109,6 +93,64 @@ func runGenerate(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "mpg generate: stopped after stage %s\n", stages[last])
 	}
 	return 0
+}
+
+// configFlags are the config-source flags shared by generate and sweep:
+// --config and --land-cells.
+type configFlags struct {
+	fs        *flag.FlagSet
+	file      string
+	landCells int
+}
+
+// addConfigFlags registers --config and --land-cells on fs.
+func addConfigFlags(fs *flag.FlagSet) *configFlags {
+	cf := &configFlags{fs: fs}
+	fs.StringVar(&cf.file, "config", "", "read the config from `file` (strict); default: built-in defaults")
+	fs.IntVar(&cf.landCells, "land-cells", 0, "requested land cell `count` (overrides --config)")
+	return cf
+}
+
+// load returns the config file read strictly (or the built-in defaults
+// without --config) with --land-cells applied when it was given. The result
+// is not resolved after an override; NewContext or Resolve does that.
+func (cf *configFlags) load() (config.Config, error) {
+	cfg := config.Default()
+	if cf.file != "" {
+		c, err := loadConfig(cf.file)
+		if err != nil {
+			return config.Config{}, err
+		}
+		cfg = c
+	}
+	if isSet(cf.fs, "land-cells") {
+		cfg.World.LandCells = cf.landCells
+		cfg.ClearDerived()
+	}
+	return cfg, nil
+}
+
+// setAspect overrides the config's aspect and clears the derived sizes,
+// which depend on it.
+func setAspect(cfg *config.Config, aspect string) {
+	cfg.World.Aspect = aspect
+	cfg.ClearDerived()
+}
+
+// isSet reports whether the flag name was given on the command line.
+func isSet(fs *flag.FlagSet, name string) bool {
+	set := false
+	fs.Visit(func(f *flag.Flag) { set = set || f.Name == name })
+	return set
+}
+
+// parseSeed parses a decimal uint64 seed.
+func parseSeed(s string) (uint64, error) {
+	v, err := strconv.ParseUint(s, 10, 64)
+	if err != nil {
+		return 0, errors.New("want a decimal uint64")
+	}
+	return v, nil
 }
 
 // loadConfig reads and resolves a config file strictly.
