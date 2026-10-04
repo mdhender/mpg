@@ -122,7 +122,7 @@ The rim solves several problems:
 | 9 | Land-target check | mesh | Repeats stages 6 and 8 within a budget until the land count is in tolerance | Search trace |
 | 10 | Rivers | mesh corners | Drainage tree on corners; river edges with drainage and discharge | Rivers on edges, width by class |
 | 11 | Classification | mesh | Landform, depth band, surface, biome, flags | Landforms; biomes |
-| 12 | Edges | mesh | Bearing, exit number, neighbor, coast, river, incline, passability | Inclines; passability |
+| 12 | Edges | mesh | Bearing, compass direction, neighbor, coast, river, incline, passability | Inclines; passability |
 | 13 | Measures | mesh | Playability report | Landmass and chokepoint map |
 | 14 | Export | — | `world.json`, `measures.json` | Player-style map |
 
@@ -155,10 +155,11 @@ Layout is a bias, not a mask. Noise still makes the coastlines; the playability 
   - The two cells that shared the collapsed edge now touch only at a point, so they are **not neighbors**.
   - Point contact never connects land to land or water to water, which matches `DESIGN.md`'s four-neighbor water rule.
   - The collapse is deterministic, shortest edge first, with ties broken by edge index.
+- **Degree cap.** Every cell needs a distinct compass direction for each neighbor, so no cell may have more than 8 neighbors. After the short-edge collapse, a cell with 9 or more neighbors has its shortest edge collapsed, repeating until it has 8. Lloyd-relaxed cells have mostly 5–7 neighbors, so this should be rare; report how often it happens.
 - **Mesh checks:**
   - no edge shorter than `min_edge_km`;
   - cell areas within configured bounds (default 0.5A to 1.6A);
-  - neighbor counts within 3–10;
+  - neighbor counts within 3–8;
   - every corner touches 3–4 cells.
 
 ### Cell statistics and sea level
@@ -232,9 +233,14 @@ Use the hm* codebooks where they fit, so the engine and converter tools stay fam
 
 The game wants per-edge data. Store each undirected edge once, and give each cell an ordered list of half-edges.
 
-- **Bearing.** Degrees clockwise from north, from this cell's site to the neighbor's site, using the wrapped delta. The bearing is authoritative.
-- **Exit number.** Exits are numbered densely, clockwise from north, starting at 1; 0 means `HOLD`. This is wgvc's T'Nyc convention, needed because Voronoi cells have 3 to 10 exits.
-- **Compass label.** An 8-point label is decoration only, since duplicates are expected.
+- **Bearing.** Degrees clockwise from north, from this cell's site to the neighbor's site, using the wrapped delta.
+- **Direction.** The game's direction for the edge: one of the 8 compass points `N`, `NE`, `E`, `SE`, `S`, `SW`, `W`, `NW`, ordered clockwise.
+  - **Unique per cell.** No two edges of a cell share a direction, so an order like "move NE" is never ambiguous. A cell with fewer than 8 neighbors leaves some directions unused, and moving in an unused direction is not possible.
+  - **Order-preserving.** Sort the cell's edges by bearing. Directions follow the same clockwise order, so the edges and the rose never cross.
+  - **Closest fit.** Among order-preserving assignments, choose the one with the smallest total angular error between each bearing and its compass point's angle (multiples of 45°). With at most 8 edges this is a small dynamic program per cell. Break ties by the lower maximum error, then by the assignment that starts at the earliest compass point.
+  - **Not symmetric.** If A's edge to B is `NE`, B's edge to A is usually, but not always, `SW`. Both directions are stored, one on each half-edge.
+  - **Error recorded.** Store each edge's angular error from its bearing. wgvc found that nearest-point labels on a Voronoi mesh collide often (193 of 300 provinces had a duplicate), which is why the assignment is solved per cell instead.
+- Cells list their half-edges in clockwise order, starting from the one nearest `N`.
 - **Neighbor.** The neighbor cell id and the shared edge id.
 - **Coast.** Set when exactly one side is water. The water kind is ocean, lake, or inland sea.
 - **River.** Set when the edge is a river edge. Record its class, drainage, discharge, and flow direction (`from_corner` → `to_corner`). A river edge is always land–land, so it is a border between provinces.
@@ -258,7 +264,7 @@ Rendering a player's map segment means selecting cells whose bounding boxes inte
 
 Write `measures.json` and a short text summary on every run. Configured checks fail loudly. Sweeps rank seeds by these measures.
 
-- **Land:** land cell count against N; land area; cell area mean and coefficient of variation; edge length minimum and p5; neighbor-count histogram.
+- **Land:** land cell count against N; land area; cell area mean and coefficient of variation; edge length minimum and p5; neighbor-count histogram; cells that needed the degree cap; direction error (mean, p95, max) and how often a reverse direction is not the opposite point.
 - **Landmasses:** count, size histogram, largest share of land, and count by class (continent, island, islet) using cell-count thresholds.
 - **Water:** ocean, inland sea, and lake counts and sizes; coast edges per land cell.
 - **Chokepoints:**
@@ -351,7 +357,7 @@ Each milestone ends with renders inspected across several seeds and aspects.
 2. **Layout and elevation:** presets, attractors and repulsors, and rim falloff. Tune until continents look intentional across seeds.
 3. **Mesh:** cylinder Voronoi, Lloyd, short-edge collapse, rim cells, and the mesh checks and render.
 4. **First playable export:**
-   - cell statistics, sea-level search on cell counts, landforms, depth, and edges with bearing, exit, coast, and incline;
+   - cell statistics, sea-level search on cell counts, landforms, depth, and edges with bearing, compass direction, coast, and incline;
    - `world.json` v0 and a player-style render;
    - hand it to the game early.
 5. **Climate:** temperature, precipitation with rain shadows, evaporation, runoff, and per-cell aggregation.
@@ -370,10 +376,9 @@ No placement of settlements, resources, starting positions, or borders. Those be
 
 ## Open questions
 
-1. **Exit convention.** Adopt wgvc's dense clockwise numbering with 0 = `HOLD`, or something the engine already uses?
-2. **Incline.** Are m/km plus a class enough, or does the engine want degrees or movement-cost bands?
-3. **River threshold and classes.** How dense should the network be? Does the engine want discharge, or only a class?
-4. **Lakes.** Allow one-cell lakes? What `inland_sea_min_cells` should apply? May a river enter a lake and leave it from a different corner? Proposed: yes, through the spill corner only.
-5. **Renderer geometry.** Is cell and edge geometry with an optional noisy-edge seed enough, or does the player map also want a hillshade raster per segment?
-6. **Volcanism.** Should `volcanic-highlands` get a hotspot stage, or stay unused for now?
-7. **Rim depth and look.** Is 4 cells of impassable rim plus about 12 cells of falloff right? Should the rim render as open polar sea, pack ice, or both?
+1. **Incline.** Are m/km plus a class enough, or does the engine want degrees or movement-cost bands?
+2. **River threshold and classes.** How dense should the network be? Does the engine want discharge, or only a class?
+3. **Lakes.** Allow one-cell lakes? What `inland_sea_min_cells` should apply? May a river enter a lake and leave it from a different corner? Proposed: yes, through the spill corner only.
+4. **Renderer geometry.** Is cell and edge geometry with an optional noisy-edge seed enough, or does the player map also want a hillshade raster per segment?
+5. **Volcanism.** Should `volcanic-highlands` get a hotspot stage, or stay unused for now?
+6. **Rim depth and look.** Is 4 cells of impassable rim plus about 12 cells of falloff right? Should the rim render as open polar sea, pack ice, or both?
