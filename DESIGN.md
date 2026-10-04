@@ -25,7 +25,10 @@ The goal is an interesting, plausible game world rather than a scientific Earth 
 - Provide separate generator and renderer executables.
 - Save resolved configuration and world data as JSON.
 - Support block/window rendering without regenerating the world.
-- Default physical cell size is 10 km per side; export the resolved size so consuming games can derive movement costs.
+- Each requested land cell denotes 100 km² of final dry land area. It does not denote a generation sample.
+- Sampling resolution is configurable, with automatic selection by the generator as the default. Save the resolved sampling choice.
+- Final dry land area must be within 1% of the requested area; explicitly report inability to meet that tolerance.
+- The future game-data export step aggregates samples into 10 km × 10 km game cells; the game does not need sampling metadata.
 
 ## Proposed defaults
 
@@ -33,9 +36,9 @@ These choices complete the design without requiring additional input. They are a
 
 | Choice | Initial default | Reason |
 |---|---|---|
-| Cells | Square, rectangular grid | Simple arrays, image rendering, and neighborhood operations |
+| Generation samples | Square, rectangular grid | Simple arrays, image rendering, and neighborhood operations |
 | Land fraction for sizing | 0.30 | Supplies the missing quantity needed to derive total area |
-| Chunk dimensions | 64 × 64 cells | Practical unit for rectangular rendering |
+| Chunk dimensions | 64 × 64 samples | Practical unit for rectangular rendering |
 | Continental noise | Seeded 3-D gradient noise, layered into fBm | Seamless cylindrical sampling and manageable implementation |
 | Drainage neighbors | Eight, with diagonal distance weighting | Less directional bias than four-neighbor drainage |
 | Water connectivity | Four-neighbor | Corner-touching water does not create a navigable connection |
@@ -51,13 +54,13 @@ Coordinates are `(x, y)`, with origin at the northwest corner. `x` increases eas
 
 Normalize longitude with positive modulo. North/south out-of-range neighbors are absent, not wrapped, clamped duplicates, or automatic ocean outlets. All connectivity, distance, wind, drainage, and renderer-window operations share the same topology helper.
 
-Cell-center latitude proxy:
+Sample-center latitude proxy:
 
 ```text
 latitude = 1 - 2 * (y + 0.5) / height
 ```
 
-This gives northern and southern polar regions without claiming an accurate spherical projection. Cell areas are constant; rows do not shrink toward the poles. Traveling across a polar edge is unsupported.
+This gives northern and southern polar regions without claiming an accurate spherical projection. Sample areas are constant; rows do not shrink toward the poles. Traveling across a polar edge is unsupported.
 
 For periodic noise, sample a cylinder:
 
@@ -68,13 +71,32 @@ sample = (R*cos(theta), R*sin(theta), S*latitude)
 
 Choose `R` and `S` from the spatial scale so longitudinal and vertical detail have comparable cell-scale wavelengths. Domain warps and all spatial perturbations must themselves be periodic. Merely matching the first and last columns is insufficient: they are adjacent cell centers, not duplicate coordinates.
 
-## Physical scale and movement distances
+## Physical scale, samples, and game cells
 
-The default `cell_size_m` is **10000**: each square cell is **10 km × 10 km**, covering **100 km²**. Store this required field in both `config.json` and `map.json`; consuming games must read the saved value rather than assume a scale. It is configurable, with the resolved value authoritative for all area, distance, slope, and hydrology calculations.
+Keep three concepts separate:
 
-Center-to-center movement between cardinal neighbors is 10 km; between diagonal neighbors it is `10 * sqrt(2)` km (approximately 14.142 km). These distances also apply across the east–west seam. A game can combine these base distances with terrain, slope, rivers, ice, transport mode, and speed to derive movement costs. The generator supplies physical scale and geography; the consuming game defines movement rules.
+| Concept | Meaning |
+|---|---|
+| Requested land cell | A fixed area unit of 100 km² |
+| Generation sample | A square of generator-selected physical size |
+| Game cell | A 10 km × 10 km unit produced by a future game-data export step |
 
-World physical width is `width * cell_size_m`, height is `height * cell_size_m`, and cell area is `cell_size_m²`. Scale is constant at every latitude in this cylindrical model.
+A request for 10,000 land cells means **1,000,000 km² of final dry land**, independently of sampling resolution. Changing the number of samples must never change this physical target.
+
+Configure `sampling.mode` as `auto` by default, or `explicit` with `samples_per_game_cell_side`. The automatic policy selects an integer number of samples per 10 km side using algorithm requirements, useful detail, and a documented resource budget. Candidate values can include 1, 2, 5, and 10; no particular value is the default requirement. Sample spacing is `10000 / samples_per_game_cell_side` meters. Persist the selected value, spacing, and policy version. Replaying resolved configuration uses the saved resolution rather than choosing again.
+
+| Samples per 10 km side | Sample spacing | Sample area | Samples equivalent to 1,000,000 km² of land |
+|---|---|---|---:|
+| 1 | 10 km | 100 km² | 10,000 |
+| 2 | 5 km | 25 km² | 40,000 |
+| 5 | 2 km | 4 km² | 250,000 |
+| 10 | 1 km | 1 km² | 1,000,000 |
+
+All generation arrays, topology, chunk dimensions, and coordinate indices refer to **samples**. Distances, slope, area, and hydrology use resolved sample spacing. World width and height in meters are sample dimensions multiplied by sample spacing. Samples have constant area at every latitude.
+
+Altitude-sensitive climate, basin analysis, drainage, and cryosphere operate on sample terrain before any game-cell aggregation. Elevation remains in meters independently of horizontal spacing.
+
+The future game-data render/export stage owns averaging, categorical summaries, and feature connectivity when creating 10 km × 10 km game cells. Its detailed aggregation rules are deliberately not designed here. The game receives physical game-cell dimensions and summarized geography, without needing to know the generation sample size. Image pixels are a separate rendering choice.
 
 ## Inputs and size resolution
 
@@ -99,47 +121,59 @@ Names resolve as follows. Explicit ratios accept positive finite numbers on both
 
 Use **cinematic** for cinematic widescreen, avoiding an ambiguous change to the conventional 16:9 meaning of **widescreen**. Accept `16:9`, `2.39:1`, and other numeric ratios directly.
 
-For target land count `L`, sizing fraction `f`, and ratio `a = width/height`:
+For requested land-cell area units `L`, sizing fraction `f`, aspect `a = width/height`, and sample area `A_s` in km²:
 
 ```text
-N ≈ L/f
-height ≈ sqrt(N/a)
-width ≈ a*height
+target_land_area_km2 = L * 100
+target_world_area_km2 ≈ target_land_area_km2 / f
+target_sample_count ≈ target_world_area_km2 / A_s
+height_samples ≈ sqrt(target_sample_count / a)
+width_samples ≈ a * height_samples
 ```
 
-Search nearby positive integer dimensions and minimize a documented combined area/aspect error, with deterministic tie-breaking. Ensure `width*height >= L`, check multiplication overflow, and reject requests beyond the configured memory budget. Store the requested ratio, resolved dimensions, and actual ratio. Do not pad dimensions to chunk boundaries: edge chunks can be smaller.
+Choose sampling resolution before resolving sample dimensions. Search nearby positive integer dimensions and minimize a documented combined physical-area/aspect error, with deterministic tie-breaking. Use dimensions divisible by the selected samples-per-game-cell-side so future 10 km game cells cover the whole grid without partial cells. Do not require divisibility by chunk size; edge chunks may be smaller. Check overflow and resource limits using total samples, not requested land cells.
 
-Explicit width and height in an edited configuration take precedence over automatic sizing; validate the land target against their product. Make precedence explicit rather than silently recalculating a user's edited dimensions.
+Explicit width and height in an edited configuration are sample counts and take precedence over automatic sizing. Validate their physical area, aspect, divisibility, and ability to contain the requested land area. Store requested and actual aspect ratios.
 
-## What “land cells” means
+## Final land-area contract
 
-There are two different counts:
+`--land-cells` expresses **100 km² per requested unit**. It does not request a number of above-sea-level samples, continental cells, or final game cells classified as land.
 
-1. **Continental land cells:** cells outside the selected primary ocean.
-2. **Dry surface cells:** continental cells excluding inland standing water; river channels remain land cells with a river overlay.
+Count as land:
+- Dry ground, including dry closed basins below ocean sea level.
+- Ground covered by glaciers, snowfields, or ice fields.
 
-Proposed v1 contract: `--land-cells` targets continental land cells exactly. Report the final dry surface count separately. Lakes and inland seas can reduce the dry count. This avoids coupling sea-level selection to repeated climate/hydrology regeneration.
+Exclude from land:
+- Ocean, lakes, and inland seas.
+- Other explicitly modeled standing-water surfaces; seasonal water uses the model's documented representative annual state.
+- Explicitly modeled river water area, if present. Rivers represented only as line overlays do not subtract area.
+- Ice over ocean or standing water; freezing water does not turn it into land.
 
-Sea-level quantiles alone guarantee a count of cells above a threshold, not a count of cells outside the ocean: disconnected low basins may ultimately be dry land. Therefore do not describe quantile selection as an exact final land invariant.
+Calculate final area after basin water balance and inland-water classification. In v1 each sample contributes its full physical area according to its authoritative land/water surface class; report this discretization explicitly. A future fractional-coverage model may refine area estimates without changing the area-request meaning.
 
-Implementation: flood from a deterministic primary ocean seed, activating elevation levels in sorted `(elevation, cell_index)` order. Select the reachable ocean area closest to `N-L`. Basin connections can cause jumps, so an exact continental count is not always physically achievable at one uniform sea level. Record target, actual, and error; retain a uniform water surface and coherent connectivity instead of painting isolated ocean cells to force a count. Quantile selection supplies the starting estimate. This qualification supersedes the earlier conversational claim of an unconditional exact count.
+**Acceptance tolerance: absolute relative error <= 1%.** Report requested area, achieved area, signed area error, and relative error. If resolution or geographic connectivity prevents meeting tolerance, report an unmet target explicitly rather than claiming success. Automatically choose resolution fine enough to make the tolerance feasible for the requested size, subject to resource limits; never silently change the requested area to fit resources.
 
-Require a nonempty primary ocean in v1. All-land and all-water modes are outside the initial contract. Choose the global minimum cell as the ocean seed, ties by cell index. Disconnected depressions are inland basins, even if their floors lie below ocean level; their water levels depend on water balance.
+Sea-level quantile selection is an initial estimate only. It cannot guarantee final dry area because ocean connectivity and inland water matter. Evaluate candidate sea levels by recomputing affected ocean, basin, climate/water-balance, and drainage stages with unchanged stage seeds. Use a bounded, deterministic search, retaining the best measured candidate. Do not assume final dry area varies monotonically: basin connections can cause jumps and water balance can change inland water.
+
+Save the search policy, iteration budget, tolerance, selected sea level, achieved area, and termination reason. Input policy belongs in resolved configuration; calculated outcomes belong in the manifest. Do not move isolated water/land samples merely to force the target.
+
+Require a nonempty primary ocean in v1. Choose a deterministic ocean seed from the global minimum elevation, ties by sample index. Disconnected low depressions are inland basins and may be dry. Generation and area checks retain this distinction.
 
 ## Generation pipeline
 
 | Stage | Produces | Key constraint |
 |---|---|---|
-| Resolve configuration | Dimensions, units, algorithms, defaults | Save every input default |
+| Resolve configuration | Target area, sampling resolution, sample dimensions, units, algorithms, defaults | Save defaults and automatic resolution decisions |
 | Elevation | Bedrock elevation in meters | Periodic east–west; no erosion or tectonics |
-| Ocean selection | Sea level, ocean mask, coast | Ocean connectivity respects topology |
+| Ocean selection | Candidate sea level, ocean mask, coast | Initial estimate; final dry area checked after inland water |
 | Basin analysis | Basin hierarchy, spill levels, catchments | Preserve original elevations |
 | Baseline climate | Temperature and precipitation | Latitude, altitude, winds, and water influence |
 | Water balance | Basin water levels and dry/wet states | Lakes are outcomes, not compulsory sink filling |
 | Drainage | Flow graph, discharge, river reaches | No drainage cycles; explicit closed sinks |
 | Cryosphere | Snowfields, ice fields, glacier masks | Temperature and snowfall constraints |
 | Biomes | Vegetation/ecological classification | Derived from climate and surface conditions |
-| Export | Resolved config, manifest, chunks, summaries | Renderer never changes generation |
+| Final area validation | Dry land area and target error | Bounded candidate search; acceptance within 1% |
+| Export | Resolved config, manifest, chunks, summaries | Image rendering never changes generation |
 
 Climate and hydrology interact. For v1 use a deterministic bounded coupling procedure: first climate uses ocean proximity, then basin water balance determines inland water, then climate may apply one inland-water adjustment and recompute balance once. Save the pass count. This is a finite approximation, not a claim of converged atmospheric equilibrium.
 
@@ -213,7 +247,7 @@ Promise repeatability for a pinned generator/toolchain and configuration. Cross-
 
 `config.json` is the complete resolved input document. It stores requested parameters and explicit defaults, but calculated results such as final sea level belong in `map.json`. A user may override sea level explicitly by selecting a different ocean mode; that mode no longer promises the land target.
 
-Illustrative shape; the numeric tuning values are starting points, not validated visual recommendations:
+Illustrative shape; the resolved sampling choice shown is an example, not a mandatory default. Width and height count samples. Numeric tuning values and resource/search budgets are starting points, not validated recommendations:
 
 ```json
 {
@@ -221,28 +255,41 @@ Illustrative shape; the numeric tuning values are starting points, not validated
   "algorithm_version": "mpg-v1",
   "seed": "8675309",
   "size": {
-    "land_cells": 1000000,
-    "land_count_mode": "continental",
+    "land_cells": 10000,
+    "land_area_per_requested_cell_km2": 100,
+    "target_land_area_km2": 1000000,
     "aspect": "cinematic",
     "aspect_ratio": 2.39,
     "land_fraction": 0.30,
     "dimensions_mode": "automatic",
-    "width": 2823,
-    "height": 1181,
-    "cell_size_m": 10000
+    "width": 2820,
+    "height": 1180,
+    "game_cell_size_m": 10000
+  },
+  "sampling": {
+    "mode": "auto",
+    "policy_version": "resolution-v1",
+    "samples_per_game_cell_side": 5,
+    "sample_size_m": 2000,
+    "memory_budget_mib": 2048
   },
   "topology": {"wrap_east_west": true, "wrap_north_south": false},
   "elevation": {
     "noise_algorithm": "gradient3-v1",
-    "continental_wavelength_cells": 800,
-    "detail_wavelength_cells": 80,
+    "continental_wavelength_samples": 800,
+    "detail_wavelength_samples": 80,
     "octaves": 6,
     "persistence": 0.5,
     "lacunarity": 2.0,
-    "warp_amplitude_cells": 100,
+    "warp_amplitude_samples": 100,
     "relief_scale_m": 6000
   },
-  "ocean": {"mode": "target_land", "sea_level_override_m": null},
+  "ocean": {"mode": "target_dry_land_area", "sea_level_override_m": null},
+  "area_search": {
+    "policy": "bounded-candidates-v1",
+    "relative_tolerance": 0.01,
+    "max_evaluations": 24
+  },
   "climate": {
     "equator_temperature_c": 30,
     "pole_temperature_c": -25,
@@ -262,7 +309,7 @@ Illustrative shape; the numeric tuning values are starting points, not validated
 }
 ```
 
-Use a decimal string for a uint64 seed so other JSON consumers do not lose precision. Validate positive dimensions/cell scale, `0 < land_fraction < 1`, finite numeric parameters, allowed enum values, and compatible versions. Unknown fields should fail with a useful message to catch misspelled tweaks. Resolved configuration must eventually include every coefficient used by each model; the example abbreviates model-specific tuning fields.
+Use a decimal string for a uint64 seed so other JSON consumers do not lose precision. Validate positive sample dimensions/spacing and consistency with the 10 km game-cell size, `0 < land_fraction < 1`, finite numeric parameters, allowed enum values, and compatible versions. Unknown fields should fail with a useful message to catch misspelled tweaks. Resolved configuration must eventually include every coefficient used by each model; the example abbreviates model-specific tuning fields.
 
 Maintain machine-readable JSON Schema files alongside Go validation. Schema checks structural constraints; Go checks cross-field constraints, resource budgets, and graph/data invariants. Loading old schema versions requires an explicit migration, never silently adopting newer defaults.
 
@@ -291,17 +338,19 @@ Manifest contract:
 | schema_version, algorithm_version | Reader and generation compatibility |
 | config_sha256 | Hash of canonical resolved input |
 | width, height, chunk_size | Resolved grid shape |
-| cell_size_m, topology | Required physical scale (default 10000 m per side) and spatial interpretation |
+| sample_size_m, samples_per_game_cell_side, game_cell_size_m, topology | Resolved generation scale, 10000 m game-cell scale, and topology |
 | sea_level_m | Calculated ocean surface |
-| counts | Target/actual continental land, dry surface, ocean, inland water, ice |
+| counts | Sample counts for dry surface, ocean, inland water, and ice overlays |
+| land_area | Requested/achieved dry area in km², signed error, relative error, tolerance status |
+| area_search | Evaluations, termination reason, and selected candidate |
 | units | Units of every numeric layer |
 | codebooks | Stable integer-to-label mappings for categorical layers |
 | chunks | Chunk origin, actual dimensions, relative file path, content checksum |
 | basins_file, rivers_file | Paths to global graph tables |
 
-Each chunk stores its cell origin `(x, y)`, actual width/height, and parallel row-major arrays. Array index `i` resolves to `(x + i % width, y + i / width)`. Every required array has exactly `width*height` elements. Edge chunks are smaller; no padding or duplicate seam column is stored.
+Each chunk stores its sample origin `(x, y)`, actual width/height, and parallel row-major arrays. Array index `i` resolves to `(x + i % width, y + i / width)`. Every required array has exactly `width*height` elements. Edge chunks are smaller; no padding or duplicate seam column is stored.
 
-Numeric layers: bedrock elevation, temperature, precipitation, potential evaporation, runoff, river discharge, and slope. Categorical/reference layers: ocean mask or surface class, biome, ice class, basin ID, water-body ID, and downstream cell index. Use explicit null/sentinel conventions in the schema. A globally unique cell index is `y*world_width+x`.
+Numeric layers: bedrock elevation, temperature, precipitation, potential evaporation, runoff, river discharge, and slope. Categorical/reference layers: ocean mask or surface class, biome, ice class, basin ID, water-body ID, and downstream cell index. Use explicit null/sentinel conventions in the schema. A globally unique sample index is `y*world_width+x`.
 
 Separate graphs contain basin spill/outlet references, balance summaries, water-surface levels and classifications, plus river reaches. Reference IDs are assigned in stable geographic order, never discovery order from nondeterministic workers.
 
@@ -338,6 +387,8 @@ schemas/                 config, manifest, chunk, basin, river schemas
 features/                Human-readable behavior specifications
 ```
 
+The future game-data export may require its own executable; image rendering and game-data aggregation are distinct consumers. Its aggregation design remains deferred.
+
 Keep APIs internal until another project needs stable imports. Centralize units and topology rather than reproducing them in every stage.
 
 ## Invariants and acceptance checks
@@ -345,7 +396,10 @@ Keep APIs internal until another project needs stable imports. Centralize units 
 - Identical pinned inputs produce identical canonical data and checksums.
 - Every spatial stage honors east–west wrap and bounded north/south edges.
 - No extra seam column exists; longitude-shifted render windows stitch correctly.
-- Land target deviations are explicit and attributable to coherent ocean connectivity.
+- Requested land area equals requested land-cell units multiplied by 100 km² at every sampling resolution.
+- Final dry land area is measured after inland-water classification and is within 1%, or output explicitly reports an unmet target.
+- Resolution changes preserve target area; replay uses the saved resolution.
+- Terrain ice counts as land; ice over water remains water.
 - Surface counts sum to total cells; ice and river overlays do not double-count surfaces.
 - Every basin has a valid hierarchy/outlet or is an explicit closed terminal basin.
 - Drainage is acyclic; accumulated water is conserved within documented numerical tolerance.
@@ -362,12 +416,12 @@ Optional human-readable behavior examples can live in paths such as `features/hy
 
 ## Implementation order
 
-1. **Foundation:** module, CLIs, config/schema validation, sizing, units, topology, stable seed derivation. Finish when resolved inputs round-trip and boundary behavior is verified.
-2. **Geography preview:** periodic elevation, ocean selection, measured land counts, initial elevation/geography rendering. Finish when seam behavior and attractive continental shapes are inspected across several seeds/aspects.
+1. **Foundation:** module, CLIs, config/schema validation, area-based sizing, automatic/explicit sampling, units, topology, stable seed derivation. Finish when resolved inputs round-trip and boundary behavior is verified.
+2. **Geography preview:** periodic elevation, ocean selection, measured preliminary physical land area, initial elevation/geography rendering. Finish when seam behavior and attractive continental shapes are inspected across several seeds/aspects.
 3. **Persistent world format:** manifest, chunks, checksums, window reader and renderer. Finish when a saved world renders full or selected windows without regeneration.
 4. **Basin structure:** depression hierarchy, storage curves, routing flats, nested/outlet fixtures. Finish when closed basins survive analysis without terrain replacement.
 5. **Climate:** temperature, rainfall/rain shadows, evaporation and runoff. Finish when poles, altitude cooling, wet coasts, and dry interiors are inspectable as separate layers.
-6. **Water balance and rivers:** wet/dry/seasonal basin outcomes, overflow and river graph, bounded climate coupling. Finish when water conservation and contrasting dry/wet basin fixtures pass.
+6. **Water balance and rivers:** wet/dry/seasonal basin outcomes, overflow and river graph, bounded climate coupling. Finish when water conservation and contrasting dry/wet basin fixtures pass, and final-area candidate search achieves the tolerance or explicitly reports failure.
 7. **Cryosphere and biomes:** snow/ice proxy and classification tables. Finish when cold deserts, alpine ice, polar regions, and biome transitions are plausible.
 8. **Usability and scale:** legends, presets, validation messages, memory profiling, deterministic parallelism where useful, regression suite and usage documentation.
 
@@ -381,4 +435,4 @@ Possible later work: alternative noise recipes, richer precipitation, glacier to
 
 ## Transition handoff
 
-This document is sufficient to start implementation in `github.com/mdhender/mpg`. No repository has been created or modified by producing this snapshot. First validate the proposed defaults with small prototypes; tune them visibly, record resolved values, and preserve the agreed choices above. The most consequential remaining contract is the definition of the land target: this design records the physically coherent continental-area approach and its unavoidable connectivity tolerance instead of silently promising exact dry land.
+This document is sufficient to start implementation in `github.com/mdhender/mpg`. No repository has been created or modified by producing this snapshot. First validate the proposed defaults with small prototypes; tune them visibly, record resolved values, and preserve the agreed choices above. The agreed land contract is final dry area: requested land-cell units × 100 km², accepted within 1%. Sampling is a generator concern; aggregation into 10 km game cells belongs to a future export design.
