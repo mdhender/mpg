@@ -40,7 +40,7 @@ const (
 func runSweep(args []string, stdout, stderr io.Writer) int {
 	fs := newFlagSet("sweep", stderr)
 	seedsFlag := fs.String("seeds", "", "world `seeds`: decimal uint64 values and ranges, as in 1-16 or 1,5,9-12 (required)")
-	stagesFlag := fs.String("stage", "", "comma-separated `stages`, one column each in order: pipeline stage names or numbers, optionally stage:variant, or the noise preview (required)")
+	stagesFlag := fs.String("stage", "", "comma-separated `stages`, one column each in order: pipeline stage names or numbers, optionally stage:variant (required)")
 	aspectsFlag := fs.String("aspect", "", "comma-separated playable `aspects`, one block of rows each (overrides --config)")
 	presetsFlag := fs.String("preset", "", "comma-separated layout `presets`, one block of rows each within an aspect (overrides --config)")
 	cf := addConfigFlags(fs)
@@ -144,13 +144,11 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 
 	// The pipeline needs an output directory for config.json; sweep keeps
 	// nothing from it.
-	var workDir string
-	if last >= 0 {
-		if workDir, err = os.MkdirTemp("", "mpg-sweep-"); err != nil {
-			return fail("%v", err)
-		}
-		defer os.RemoveAll(workDir)
+	workDir, err := os.MkdirTemp("", "mpg-sweep-")
+	if err != nil {
+		return fail("%v", err)
 	}
+	defer os.RemoveAll(workDir)
 
 	sheet := render.Sheet{TileWidth: *tile, CaptionLines: captionLines}
 	for _, c := range cols {
@@ -167,36 +165,24 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 			tiles[k].Image = render.Downscale(img, *tile, tileH)
 			size[k] = img.Bounds().Size()
 		}
-		for k, c := range cols {
-			if c.index >= 0 {
-				continue
-			}
-			img, err := noisePreview(row.cfg)
-			if err != nil {
-				return fail("seed %d: noise: %v", uint64(row.cfg.Seed), err)
-			}
-			keep(k, img)
+		ctx, err := pipeline.NewContext(row.cfg, workDir, "", stderr)
+		if err != nil {
+			return fail("%v", err)
 		}
-		if last >= 0 {
-			ctx, err := pipeline.NewContext(row.cfg, workDir, "", stderr)
-			if err != nil {
-				return fail("%v", err)
-			}
-			ctx.Sink = func(st pipeline.Stage, variant string, img image.Image) error {
-				for k, c := range cols {
-					if c.index >= 0 && registry[c.index].Name == st.Name && c.variant == variant && tiles[k].Image == nil {
-						keep(k, img)
-					}
+		ctx.Sink = func(st pipeline.Stage, variant string, img image.Image) error {
+			for k, c := range cols {
+				if registry[c.index].Name == st.Name && c.variant == variant && tiles[k].Image == nil {
+					keep(k, img)
 				}
-				return nil
 			}
-			res, err := pipeline.Run(ctx, registry, last)
-			if err != nil {
-				return fail("seed %d: %v", uint64(row.cfg.Seed), err)
-			}
-			if res.NotImplemented != nil {
-				return fail("stage %s is not implemented yet", res.NotImplemented)
-			}
+			return nil
+		}
+		res, err := pipeline.Run(ctx, registry, last)
+		if err != nil {
+			return fail("seed %d: %v", uint64(row.cfg.Seed), err)
+		}
+		if res.NotImplemented != nil {
+			return fail("stage %s is not implemented yet", res.NotImplemented)
 		}
 		for k, c := range cols {
 			tiles[k].Caption = []string{
@@ -319,15 +305,15 @@ func parseList(s string, limit int) ([]string, error) {
 
 // sweepStage is one sheet column.
 type sweepStage struct {
-	name    string // header: "noise", "elevation", or "mesh:area"
-	index   int    // index in the registry, or -1 for the noise preview
+	name    string // header: "elevation" or "mesh:area"
+	index   int    // index in the registry
 	variant string // render variant of a registry stage, "" for the main one
 }
 
 var kebabRE = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 // parseSweepStages parses --stage: registry stage names or numbers, each
-// optionally with ":variant" to pick a render variant, or the noise preview.
+// optionally with ":variant" to pick a render variant.
 // It does not check that the stages are implemented; see checkImplemented.
 func parseSweepStages(s string, registry []pipeline.Stage) ([]sweepStage, error) {
 	items, err := parseList(s, 32)
@@ -336,17 +322,13 @@ func parseSweepStages(s string, registry []pipeline.Stage) ([]sweepStage, error)
 	}
 	var cols []sweepStage
 	for _, item := range items {
-		if item == previewNoise {
-			cols = append(cols, sweepStage{name: previewNoise, index: -1})
-			continue
-		}
 		name, variant, hasVariant := strings.Cut(item, ":")
 		if hasVariant && !kebabRE.MatchString(variant) {
 			return nil, fmt.Errorf("variant %q in %q is not lowercase kebab case", variant, item)
 		}
 		i, err := pipeline.Lookup(registry, name)
 		if err != nil {
-			return nil, fmt.Errorf("%v, or %s (the noise preview)", err, previewNoise)
+			return nil, err
 		}
 		col := sweepStage{name: registry[i].Name, index: i, variant: variant}
 		if hasVariant {
@@ -363,8 +345,8 @@ func parseSweepStages(s string, registry []pipeline.Stage) ([]sweepStage, error)
 }
 
 // checkImplemented returns the registry index of the last pipeline stage the
-// columns need (-1 when only previews are requested), or an error when it or
-// any stage before it is not implemented yet.
+// columns need, or an error when it or any stage before it is not
+// implemented yet.
 func checkImplemented(cols []sweepStage, registry []pipeline.Stage) (int, error) {
 	last := -1
 	for _, c := range cols {

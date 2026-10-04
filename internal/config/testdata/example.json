@@ -110,6 +110,47 @@
       }
     }
   },
+  "elevation": {
+    "relief_scale_m": 500,
+    "ocean_depth_m": 4000,
+    "datum_max_shift": 2,
+    "bias_flatten": 0.6,
+    "continental": {
+      "wavelength_km": 256,
+      "octaves": 6,
+      "lacunarity": 2,
+      "gain": 0.6,
+      "amplitude": 1.3
+    },
+    "warp": {
+      "strength_km": 40,
+      "wavelength_km": 400,
+      "octaves": 2,
+      "lacunarity": 2,
+      "gain": 0.5
+    },
+    "ridges": {
+      "height_m": 3500,
+      "wavelength_km": 300,
+      "octaves": 5,
+      "lacunarity": 2,
+      "gain": 0.5,
+      "weight": 2,
+      "threshold": 0.35,
+      "land_ramp": 0.35,
+      "belt_wavelength_km": 700,
+      "belt_threshold": 0
+    },
+    "falloff": {
+      "ceiling_m": -1000,
+      "depth_m": -4000,
+      "pull": 1.5,
+      "pull_km": 100,
+      "jitter_km": 100,
+      "jitter_wavelength_km": 300,
+      "taper_km": 30
+    }
+  },
   "volcanic": {
     "hotspots_per_mkm2": 2
   },

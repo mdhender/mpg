@@ -159,7 +159,7 @@ func TestHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = "1384bf35ba3b71d0672312f66351d63817bcc5ef85a011c1b99d877fae78fc0b"
+	const want = "43d8a35f24bfcde0d338de780adf82eddd656ba6a07b3c64bfccd3ae6d1e9bd1"
 	if h != want {
 		t.Errorf("Hash = %s, want %s", h, want)
 	}
@@ -307,6 +307,24 @@ func TestValidate(t *testing.T) {
 		{"weights", func(c *Config) { c.Layout.Continents.WeightMax = 1.5 }, "layout.continents.weight_min"},
 		{"wobble", func(c *Config) { c.Layout.Islands.Rivals.Wobble = 1 }, "layout.islands.rivals.wobble"},
 		{"repulsor radius", func(c *Config) { c.Layout.Custom.Rivals.RepulsorRadius = 0 }, "layout.custom.rivals.repulsor_radius"},
+		{"relief zero", func(c *Config) { c.Elevation.ReliefScaleM = 0 }, "elevation.relief_scale_m"},
+		{"ocean NaN", func(c *Config) { c.Elevation.OceanDepthM = math.NaN() }, "elevation.ocean_depth_m"},
+		{"datum shift", func(c *Config) { c.Elevation.DatumMaxShift = -0.1 }, "elevation.datum_max_shift"},
+		{"flatten", func(c *Config) { c.Elevation.BiasFlatten = 1.5 }, "elevation.bias_flatten"},
+		{"continental octaves", func(c *Config) { c.Elevation.Continental.Octaves = 0 }, "elevation.continental.octaves"},
+		{"continental gain", func(c *Config) { c.Elevation.Continental.Gain = 1 }, "elevation.continental.gain"},
+		{"continental amplitude", func(c *Config) { c.Elevation.Continental.Amplitude = math.Inf(1) }, "elevation.continental.amplitude"},
+		{"warp strength", func(c *Config) { c.Elevation.Warp.StrengthKm = -1 }, "elevation.warp.strength_km"},
+		{"warp lacunarity", func(c *Config) { c.Elevation.Warp.Lacunarity = 1 }, "elevation.warp.lacunarity"},
+		{"ridge wavelength", func(c *Config) { c.Elevation.Ridges.WavelengthKm = 0 }, "elevation.ridges.wavelength_km"},
+		{"ridge threshold", func(c *Config) { c.Elevation.Ridges.Threshold = 1 }, "elevation.ridges.threshold"},
+		{"ridge land ramp", func(c *Config) { c.Elevation.Ridges.LandRamp = 0 }, "elevation.ridges.land_ramp"},
+		{"belt threshold", func(c *Config) { c.Elevation.Ridges.BeltThreshold = 3 }, "elevation.ridges.belt_threshold"},
+		{"ceiling at sea level", func(c *Config) { c.Elevation.Falloff.CeilingM = 0 }, "elevation.falloff.ceiling_m"},
+		{"depth above ceiling", func(c *Config) { c.Elevation.Falloff.DepthM = -500 }, "elevation.falloff.depth_m"},
+		{"pull km", func(c *Config) { c.Elevation.Falloff.PullKm = 0 }, "elevation.falloff.pull_km"},
+		{"jitter", func(c *Config) { c.Elevation.Falloff.JitterKm = -1 }, "elevation.falloff.jitter_km"},
+		{"taper", func(c *Config) { c.Elevation.Falloff.TaperKm = math.NaN() }, "elevation.falloff.taper_km"},
 		{"custom empty", func(c *Config) { c.Layout.Preset = PresetCustom }, "layout.custom.attractors is empty"},
 		{"custom weight", func(c *Config) {
 			c.Layout.Custom.Attractors = []CustomAttractor{{XKm: 100, YKm: 500, RadiusKm: 50, Weight: 0}}

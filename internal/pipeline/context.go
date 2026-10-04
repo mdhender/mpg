@@ -53,6 +53,8 @@ type Products struct {
 	Layout *layout.Layout
 	// Bias is the layout stage's continental bias field, in [−1, 1].
 	Bias *field.Field
+	// Elevation is the elevation stage's bedrock elevation in meters.
+	Elevation *field.Field
 }
 
 // NewContext resolves cfg and returns a context for a run writing to

@@ -32,7 +32,7 @@ func Stages() []Stage {
 	return []Stage{
 		{Number: 1, Name: "config", Run: runConfig},
 		{Number: 2, Name: "layout", Run: runLayout},
-		{Number: 3, Name: "elevation"},
+		{Number: 3, Name: "elevation", Run: runElevation},
 		{Number: 4, Name: "mesh"},
 		{Number: 5, Name: "cells"},
 		{Number: 6, Name: "sea-level"},

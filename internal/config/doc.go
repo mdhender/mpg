@@ -72,6 +72,16 @@
 // Their lists are written as [] when empty. See package layout for how the
 // parameters are used.
 //
+// # Elevation
+//
+// The elevation group sets the bedrock heightmap: the land height and sea
+// depth per unit of continental signal (relief_scale_m, ocean_depth_m), the
+// datum shift's bound and the bias flattening, the continental fBm, the
+// domain warp, the ridged mountain chains and their belts, and the polar
+// falloff (its signal pull, jitter, ceiling, depth, and taper). Lengths are
+// km and heights meters (DESIGN.md: "rules about the ground use physical
+// units"). See package elevation for the formula.
+//
 // # Versioning
 //
 // The file carries "schema": 1. A file without a schema, or with another

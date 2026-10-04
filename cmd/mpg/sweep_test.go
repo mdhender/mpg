@@ -67,30 +67,30 @@ func TestParseSeeds(t *testing.T) {
 
 func TestParseSweepStages(t *testing.T) {
 	registry := pipeline.Stages()
-	cols, err := parseSweepStages("noise,config,3,mesh:area", registry)
+	cols, err := parseSweepStages("layout,config,3,mesh:area", registry)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []sweepStage{{"noise", -1, ""}, {"config", 0, ""}, {"elevation", 2, ""}, {"mesh:area", 3, "area"}}
+	want := []sweepStage{{"layout", 1, ""}, {"config", 0, ""}, {"elevation", 2, ""}, {"mesh:area", 3, "area"}}
 	if !slices.Equal(cols, want) {
 		t.Errorf("cols = %+v, want %+v", cols, want)
 	}
-	for _, in := range []string{"bogus", "noise,", "noise,noise", "elevation,3", "mesh:", "mesh:Area", "noise:x", "0"} {
+	for _, in := range []string{"bogus", "noise", "layout,", "layout,layout", "elevation,3", "mesh:", "mesh:Area", "0"} {
 		if _, err := parseSweepStages(in, registry); err == nil {
 			t.Errorf("parseSweepStages(%q) succeeded", in)
 		}
 	}
-	if _, err := parseSweepStages("bogus", registry); !strings.Contains(err.Error(), "noise") {
-		t.Errorf("unknown-stage error %q does not offer noise", err)
+	if _, err := parseSweepStages("bogus", registry); !strings.Contains(err.Error(), "elevation") {
+		t.Errorf("unknown-stage error %q does not list the stages", err)
 	}
 
-	// Only the noise preview needs no pipeline; config and layout are
-	// implemented; elevation is not, nor is anything after it.
+	// Config, layout and elevation are implemented; mesh is not, nor is
+	// anything after it.
 	for _, tc := range []struct {
 		in   string
 		last int
 		ok   bool
-	}{{"noise", -1, true}, {"noise,config", 0, true}, {"config,elevation", -1, false}, {"layout", 1, true}, {"mesh", -1, false}} {
+	}{{"config", 0, true}, {"layout,config", 1, true}, {"config,elevation", 2, true}, {"elevation,mesh", -1, false}, {"cells", -1, false}} {
 		cols, err := parseSweepStages(tc.in, registry)
 		if err != nil {
 			t.Fatal(err)
@@ -109,17 +109,17 @@ func TestSweepErrors(t *testing.T) {
 		code int
 		msg  string
 	}{
-		{[]string{"--stage", "noise", "--output", out}, 2, "--seeds is required"},
+		{[]string{"--stage", "layout", "--output", out}, 2, "--seeds is required"},
 		{[]string{"--seeds", "1", "--output", out}, 2, "--stage is required"},
-		{[]string{"--seeds", "1", "--stage", "noise"}, 2, "--output is required"},
-		{[]string{"--seeds", "2-1", "--stage", "noise", "--output", out}, 2, "reversed"},
+		{[]string{"--seeds", "1", "--stage", "layout"}, 2, "--output is required"},
+		{[]string{"--seeds", "2-1", "--stage", "layout", "--output", out}, 2, "reversed"},
 		{[]string{"--seeds", "1", "--stage", "bogus", "--output", out}, 2, "sea-level"},
-		{[]string{"--seeds", "1", "--stage", "noise", "--tile", "8", "--output", out}, 2, "--tile"},
-		{[]string{"--seeds", "1", "--stage", "noise", "--aspect", "square,", "--output", out}, 2, "--aspect"},
-		{[]string{"--seeds", "1", "--stage", "noise", "--output", out, "extra"}, 2, "unexpected"},
-		{[]string{"--seeds", "1", "--stage", "noise,elevation", "--output", out}, 1, "stage 3 elevation is not implemented"},
-		{[]string{"--seeds", "1", "--stage", "noise", "--aspect", "squarish", "--output", out}, 1, "world.aspect"},
-		{[]string{"--seeds", "1", "--stage", "noise", "--config", "no-such-file.json", "--output", out}, 1, "no-such-file"},
+		{[]string{"--seeds", "1", "--stage", "layout", "--tile", "8", "--output", out}, 2, "--tile"},
+		{[]string{"--seeds", "1", "--stage", "layout", "--aspect", "square,", "--output", out}, 2, "--aspect"},
+		{[]string{"--seeds", "1", "--stage", "layout", "--output", out, "extra"}, 2, "unexpected"},
+		{[]string{"--seeds", "1", "--stage", "elevation,mesh", "--output", out}, 1, "stage 4 mesh is not implemented"},
+		{[]string{"--seeds", "1", "--stage", "layout", "--aspect", "squarish", "--output", out}, 1, "world.aspect"},
+		{[]string{"--seeds", "1", "--stage", "layout", "--config", "no-such-file.json", "--output", out}, 1, "no-such-file"},
 	} {
 		code, _, stderr := sweep(t, tc.args...)
 		if code != tc.code || !strings.Contains(stderr, tc.msg) {
@@ -131,14 +131,14 @@ func TestSweepErrors(t *testing.T) {
 	}
 }
 
-// sweepPixelHash pins the small sweep below: seeds 1 and 7, the noise
-// preview and the (render-less) config stage, cinematic and square, 600
-// land cells, 64-pixel tiles. Row labels carry the layout preset.
-const sweepPixelHash = "9bddbbaecbe333a000cf3700030dab4c5250b461c391ed24a53a74df9c12c4d5"
+// sweepPixelHash pins the small sweep below: seeds 1 and 7, the elevation
+// render and the (render-less) config stage, cinematic and square, 600 land
+// cells, 64-pixel tiles. Row labels carry the layout preset.
+const sweepPixelHash = "16b16ac50f4f547b2ef9f7d58a2f13313a4c6aedbb5adfdce3c3ed69e2ba0eb5"
 
 func TestSweepSheet(t *testing.T) {
 	dir := t.TempDir()
-	args := []string{"--seeds", "1,7", "--stage", "noise,config", "--aspect", "cinematic,square",
+	args := []string{"--seeds", "1,7", "--stage", "elevation,config", "--aspect", "cinematic,square",
 		"--land-cells", "600", "--tile", "64"}
 	var hashes []string
 	for n := range 2 {
@@ -203,7 +203,7 @@ func TestSweepSheet(t *testing.T) {
 			extra[e.Key] = e.Value
 		}
 		for k, v := range map[string]string{
-			"mpg:seeds": "1,7", "mpg:stages": "noise,config", "mpg:aspects": "cinematic,square", "mpg:presets": "continents", "mpg:tile-width": "64",
+			"mpg:seeds": "1,7", "mpg:stages": "elevation,config", "mpg:aspects": "cinematic,square", "mpg:presets": "continents", "mpg:tile-width": "64",
 		} {
 			if extra[k] != v {
 				t.Errorf("%s = %q, want %q", k, extra[k], v)

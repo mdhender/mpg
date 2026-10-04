@@ -28,15 +28,16 @@ type Config struct {
 	// Schema is the config.json schema version, SchemaVersion.
 	Schema int `json:"schema"`
 	// Seed is the world seed, written as a decimal string.
-	Seed     Seed     `json:"seed"`
-	Province Province `json:"province"`
-	World    World    `json:"world"`
-	Rim      Rim      `json:"rim"`
-	Raster   Raster   `json:"raster"`
-	Layout   Layout   `json:"layout"`
-	Volcanic Volcanic `json:"volcanic"`
-	Basin    Basin    `json:"basin"`
-	River    River    `json:"river"`
+	Seed      Seed      `json:"seed"`
+	Province  Province  `json:"province"`
+	World     World     `json:"world"`
+	Rim       Rim       `json:"rim"`
+	Raster    Raster    `json:"raster"`
+	Layout    Layout    `json:"layout"`
+	Elevation Elevation `json:"elevation"`
+	Volcanic  Volcanic  `json:"volcanic"`
+	Basin     Basin     `json:"basin"`
+	River     River     `json:"river"`
 }
 
 // Province sizes one province (one Voronoi cell) by the area of a wilderness
@@ -127,12 +128,13 @@ func Default() Config {
 			LandFraction: 0.30,
 			Aspect:       "cinematic",
 		},
-		Rim:      Rim{Cells: 4, FalloffCells: 12},
-		Raster:   Raster{SpacingKm: 2},
-		Layout:   DefaultLayout(),
-		Volcanic: Volcanic{HotspotsPerMkm2: 2},
-		Basin:    Basin{MinDepthM: 50, InlandSeaMinCells: 20},
-		River:    River{ThresholdKm2: 500},
+		Rim:       Rim{Cells: 4, FalloffCells: 12},
+		Raster:    Raster{SpacingKm: 2},
+		Layout:    DefaultLayout(),
+		Elevation: DefaultElevation(),
+		Volcanic:  Volcanic{HotspotsPerMkm2: 2},
+		Basin:     Basin{MinDepthM: 50, InlandSeaMinCells: 20},
+		River:     River{ThresholdKm2: 500},
 	}
 }
 
@@ -181,6 +183,7 @@ func (c *Config) Validate() error {
 		bad("raster.spacing_km %v must be positive and finite", v)
 	}
 	c.Layout.validate(bad)
+	c.Elevation.validate(bad)
 	if v := c.Volcanic.HotspotsPerMkm2; !nonNegative(v) {
 		bad("volcanic.hotspots_per_mkm2 %v must be non-negative and finite", v)
 	}
