@@ -6,11 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project state
 
-`mpg` (`github.com/mdhender/mpg`, Go 1.26) is a deterministic, noise-based fantasy world generator. The repository is
+`mpg` (`github.com/mdhender/mpg`, Go 1.26) generates a playable Voronoi **province map** for our strategic fantasy
+games. Noise, climate, and hydrology on a raster feed a mesh; the mesh is the product. The repository is
 pre-implementation: only the root package (`version.go`) exists. `DESIGN.md` is the authoritative design — read the
-relevant section before implementing any stage, and follow its "Implementation order" (foundation → geography preview →
-world format → basins → climate → water balance/rivers → cryosphere/biomes → usability). Its "Package layout" section
-gives the planned `cmd/` and `internal/` structure; keep APIs under `internal/`.
+relevant section before implementing any stage, and follow its "Milestones" (tuning harness first, then layout and
+elevation, mesh, a first playable export, climate, basins, rivers, biomes, measures). Its "Package layout" gives the
+planned `cmd/`, `internal/`, and exported `world/` packages.
 
 ## Commands
 
@@ -18,10 +19,10 @@ gives the planned `cmd/` and `internal/` structure; keep APIs under `internal/`.
 go build ./...
 go vet ./...
 go test ./...
-go test ./internal/grid -run TestWrap   # single package / single test
+go test ./internal/topo -run TestWrap   # single package / single test
 ```
 
-Planned CLIs (per `DESIGN.md`): `cmd/mpg` (`mpg generate ...`) and `cmd/mpg-render` (reads saved worlds only).
+Planned CLI (per `DESIGN.md`): `cmd/mpg` with `generate`, `sweep`, `render-stage`, `validate`.
 
 ## Versioning
 
@@ -32,24 +33,23 @@ Planned CLIs (per `DESIGN.md`): `cmd/mpg` (`mpg generate ...`) and `cmd/mpg-rend
 
 These are easy to violate and hard to spot from any single package:
 
-- **Topology:** grid is `(x, y)` from the northwest corner, row-major, sample index `y*width+x`. East–west wraps
-  (positive modulo); north–south never wraps — out-of-range neighbors are absent, not clamped or treated as ocean.
-  All stages and the renderer must use one shared topology helper. No duplicate seam column is ever stored.
-- **Periodic noise:** sample noise on a cylinder (`theta = 2π(x+0.5)/width`, z from latitude); domain warps must also be
-  periodic. Matching first/last columns is not sufficient.
-- **Three distinct units:** a requested land cell is 100 km² of *final dry land*; a generation sample has
-  resolver-chosen size (`samples_per_game_cell_side` ∈ e.g. 1/2/5/10); a game cell is 10 km × 10 km and belongs to a
-  future export step. All arrays, chunks, and coordinates are in samples; physics uses resolved sample spacing in meters.
-- **Land-area target:** final dry area (after inland-water classification; land ice counts, ice over water does not)
-  must be within 1% of `land_cells × 100 km²`, found by a bounded deterministic sea-level search. Report an unmet target
-  explicitly — never fudge samples or silently change the request.
-- **Determinism:** derive per-stage seeds via SHA-256 over domain prefix, world seed, stage name, and algorithm version,
-  feeding two uint64s into `rand.NewPCG`. Never use map iteration order, worker scheduling, or a global RNG. Break ties
-  by stable cell index; reduce in a defined order; no NaN/Inf in output; no timestamps or absolute paths in hashed content.
-- **Hydrology preserves terrain:** keep original elevation separate from any filled working surface. Depressions are
-  basins whose wet/dry/seasonal state comes from water balance, not compulsory filling. Drainage graphs must be acyclic.
-- **Config vs. manifest:** `config.json` is the complete resolved input (seed as decimal string, unknown fields
-  rejected, every default written out); calculated outcomes such as sea level go in `map.json`. Replaying a config must
-  never consult current defaults. Output is a manifest plus per-chunk JSON files (default 64×64 samples).
-- **Separation of concerns:** geography, climate, biomes, and rendering stay distinct; rendering never changes
-  generation data or config hashes.
+- **Province = cell.** Each Voronoi cell has the *area* of one 6-mile wilderness hex (≈80.75 km², derived from
+  `hex_flat_to_flat_mi`), so exploring one takes a game day. Every cell is wholly land or wholly water. The land target
+  is a count of land cells within 1% of N, found by a bounded deterministic sea-level search; report an unmet target.
+- **Topology:** km coordinates from the northwest corner; east–west wraps, north–south never does. One shared
+  topology package for raster and mesh. Noise and domain warps are sampled on a cylinder, so they are truly periodic.
+- **Polar rim:** top and bottom bands of `rim` cells, an impassable ice sheet, behind an ocean falloff, so land never
+  touches the edge. Ocean is water connected to the rim.
+- **One height.** Cell altitude (median of its raster samples) drives every height rule: land test, basins, lakes,
+  corner heights, incline, landforms, temperature. Relief (p95 − p5) is roughness only.
+- **Edges carry the game data:** a unique clockwise 8-point compass direction per cell (≤ 8 neighbors; short edges
+  are collapsed), signed grade incline where A→B = −(B→A), coast, and river class. Rivers run only on land–land
+  edges along a corner drainage tree; never through cells, never along shores.
+- **Possible, not forced:** dry basins, lakes, inland seas, ice, glaciers, and volcanoes emerge or don't; measures
+  report them and never require them.
+- **Determinism:** per-stage seeds via SHA-256 → `rand.NewPCG`; stable tie-breaks by index; no map-order or
+  scheduling dependence; no NaN/Inf; no timestamps or paths in hashed content; guard against FMA differences.
+- **Files:** `config.json` is the complete resolved input (unknown fields rejected); `world.json` is the one game data
+  file (game data plus renderer geometry, outcomes); `measures.json` is the playability report. Exported Go types are
+  the schema. Rendering never changes data or hashes.
+- **Tuning early and often:** every stage has a render; keep `--renders`, `--stop-after`, and `sweep` working.

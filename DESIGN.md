@@ -1,438 +1,410 @@
-# mpg — Noise-Based Fantasy World Generator
+# mpg — Province-map generator
 
 Go module: `github.com/mdhender/mpg`  
 Design snapshot: 2026-10-04  
-Status: agreed direction and proposed implementation design; no implementation implied.
+Status: agreed design; nothing is implemented.
 
-## Purpose
+## Goal
 
-Build a deterministic fantasy map generator that starts with a random seed, a desired number of land cells, and an aspect ratio. Produce attractive, varied geography from noise, including meaningful rivers, lakes, inland seas, glaciers, ice fields, and dry interior basins. Save a fully resolved JSON configuration for experimentation and JSON world data that a separate renderer can read in blocks.
+mpg generates a **playable province map** for our strategic fantasy games. The deliverable is a Voronoi mesh with these properties:
 
-The visual inspiration is the Panama DEM-based `github.com/maloquacious/hmz*` stages and `github.com/maloquacious/wg`. These are references for appearance, not required data sources or dependencies. This document does not assume those repositories have been inspected.
+- Every cell is a **province** with the area (not the shape) of one 6-mile wilderness hex, about 81 km². That lets the game set exploring a province at one day.
+- Every cell is **all land or all water**.
+- Every cell carries geography (landform), biome, and altitude.
+- Every edge carries direction, neighbor, river, coast, and incline.
+- The mesh includes enough geometry for the game's map renderer to draw PNG segments for players.
 
-The goal is an interesting, plausible game world rather than a scientific Earth simulator or an Earth-sized dataset.
+The noise, climate, and hydrology work exists to make that mesh interesting. It is not the product.
 
-## Agreed decisions
+**Possible, not forced.** Dry basins, inland lakes and seas, ice fields, glaciers, and volcanoes come out of the terrain and climate when conditions allow. No setting guarantees any of them, and a world without one is valid. The measures report how many appeared; they never require one.
 
-- Implement in Go, using `math/rand/v2` when pseudorandom draws are needed.
-- Derive independent seeds for named stages; avoid a global sequential random stream.
-- Generate elevation with layered noise and domain warping.
-- Wrap east–west; never wrap north–south. Use a cylindrical grid with bounded polar edges.
-- Use latitude and altitude as proxies for temperature. Assume no axial tilt and an east–west solar path; seasonal simulation is unnecessary.
-- Exclude erosion simulation and plate tectonics.
-- Preserve topographic depressions. A closed basin may contain fresh or salt water, a seasonal lake, a playa, or an interior desert.
-- Keep geography, climate, biomes, and rendering distinct.
-- Provide separate generator and renderer executables.
-- Save resolved configuration and world data as JSON.
-- Support block/window rendering without regenerating the world.
-- Each requested land cell denotes 100 km² of final dry land area. It does not denote a generation sample.
-- Sampling resolution is configurable, with automatic selection by the generator as the default. Save the resolved sampling choice.
-- Final dry land area must be within 1% of the requested area; explicitly report inability to meet that tolerance.
-- The future game-data export step aggregates samples into 10 km × 10 km game cells; the game does not need sampling metadata.
+This is the same shape as the Panama pipeline (`maloquacious/hmz2*`):
 
-## Proposed defaults
-
-These choices complete the design without requiring additional input. They are adjustable defaults, not additional user requirements.
-
-| Choice | Initial default | Reason |
-|---|---|---|
-| Generation samples | Square, rectangular grid | Simple arrays, image rendering, and neighborhood operations |
-| Land fraction for sizing | 0.30 | Supplies the missing quantity needed to derive total area |
-| Chunk dimensions | 64 × 64 samples | Practical unit for rectangular rendering |
-| Continental noise | Seeded 3-D gradient noise, layered into fBm | Seamless cylindrical sampling and manageable implementation |
-| Drainage neighbors | Eight, with diagonal distance weighting | Less directional bias than four-neighbor drainage |
-| Water connectivity | Four-neighbor | Corner-touching water does not create a navigable connection |
-| Equatorial/polar temperature | 30°C / −25°C | Useful initial climate range |
-| Atmospheric lapse rate | 6.5°C per km | Simple altitude cooling parameter |
-| Output | Manifest plus separate JSON chunk files | Real block access without parsing one enormous JSON file |
-
-Choose and pin the exact noise implementation during the first implementation milestone. Its algorithm/version becomes part of reproducibility metadata. Do not rely on an unspecified library's evolving defaults.
-
-## Coordinates and topology
-
-Coordinates are `(x, y)`, with origin at the northwest corner. `x` increases east and `y` increases south. Rows are stored in row-major order. Valid stored coordinates satisfy `0 <= x < width` and `0 <= y < height`.
-
-Normalize longitude with positive modulo. North/south out-of-range neighbors are absent, not wrapped, clamped duplicates, or automatic ocean outlets. All connectivity, distance, wind, drainage, and renderer-window operations share the same topology helper.
-
-Sample-center latitude proxy:
-
-```text
-latitude = 1 - 2 * (y + 0.5) / height
-```
-
-This gives northern and southern polar regions without claiming an accurate spherical projection. Sample areas are constant; rows do not shrink toward the poles. Traveling across a polar edge is unsupported.
-
-For periodic noise, sample a cylinder:
-
-```text
-theta = 2*pi*(x + 0.5)/width
-sample = (R*cos(theta), R*sin(theta), S*latitude)
-```
-
-Choose `R` and `S` from the spatial scale so longitudinal and vertical detail have comparable cell-scale wavelengths. Domain warps and all spatial perturbations must themselves be periodic. Merely matching the first and last columns is insufficient: they are adjacent cell centers, not duplicate coordinates.
-
-## Physical scale, samples, and game cells
-
-Keep three concepts separate:
-
-| Concept | Meaning |
+| Panama (hmz2*) | mpg |
 |---|---|
-| Requested land cell | A fixed area unit of 100 km² |
-| Generation sample | A square of generator-selected physical size |
-| Game cell | A 10 km × 10 km unit produced by a future game-data export step |
+| Real DEM (`dem2hm`) | Synthetic heightmap built from noise |
+| Flat-top hex grid overlay | Relaxed Voronoi overlay on a cylinder |
+| `hmz2ter` landforms, `hmz2bio` climate, `hmz2riv` edge rivers | The same steps, done per cell, with rivers on Voronoi edges |
+| `hmz2map` emits the game's JSON | `world.json` |
 
-A request for 10,000 land cells means **1,000,000 km² of final dry land**, independently of sampling resolution. Changing the number of samples must never change this physical target.
+Two unit rules carry over from `hmz2ter`:
 
-Configure `sampling.mode` as `auto` by default, or `explicit` with `samples_per_game_cell_side`. The automatic policy selects an integer number of samples per 10 km side using algorithm requirements, useful detail, and a documented resource budget. Candidate values can include 1, 2, 5, and 10; no particular value is the default requirement. Sample spacing is `10000 / samples_per_game_cell_side` meters. Persist the selected value, spacing, and policy version. Replaying resolved configuration uses the saved resolution rather than choosing again.
+- **Rules about the ground use physical units.** Relief and elevation are in meters; drainage and lake areas are in km².
+- **Rules about play use cell steps.** Rim width, depth bands, strait and neck widths, and coast distance are counted in cells.
 
-| Samples per 10 km side | Sample spacing | Sample area | Samples equivalent to 1,000,000 km² of land |
-|---|---|---|---:|
-| 1 | 10 km | 100 km² | 10,000 |
-| 2 | 5 km | 25 km² | 40,000 |
-| 5 | 2 km | 4 km² | 250,000 |
-| 10 | 1 km | 1 km² | 1,000,000 |
+## Changes from the first design
 
-All generation arrays, topology, chunk dimensions, and coordinate indices refer to **samples**. Distances, slope, area, and hydrology use resolved sample spacing. World width and height in meters are sample dimensions multiplied by sample spacing. Samples have constant area at every latitude.
+This design replaces the first noise-based design (`DESIGN.md` at commit `9f391c2`; see git history). Compared with it:
 
-Altitude-sensitive climate, basin analysis, drainage, and cryosphere operate on sample terrain before any game-cell aggregation. Elevation remains in meters independently of horizontal spacing.
-
-The future game-data render/export stage owns averaging, categorical summaries, and feature connectivity when creating 10 km × 10 km game cells. Its detailed aggregation rules are deliberately not designed here. The game receives physical game-cell dimensions and summarized geography, without needing to know the generation sample size. Image pixels are a separate rendering choice.
-
-## Inputs and size resolution
-
-Initial interface:
-
-```sh
-mpg generate --seed 8675309 --land-cells 1000000 --aspect cinematic --output worlds/example
-mpg generate --config worlds/example/config.json --output worlds/tweaked
-mpg-render --world worlds/example/map.json --layer geography --output geography.png
-mpg-render --world worlds/example/map.json --layer biome --window 1200,300,512,512 --output detail.png
-```
-
-Names resolve as follows. Explicit ratios accept positive finite numbers on both sides of a colon.
-
-| Name | Ratio |
+| | Item |
 |---|---|
-| square | 1:1 |
-| portrait | 3:4 |
-| landscape | 4:3 |
-| widescreen | 16:9 |
-| cinematic | 2.39:1 |
+| **Keep** | Go; `math/rand/v2`; per-stage seeds from SHA-256 → `rand.NewPCG`; stable tie-breaking by index |
+| **Keep** | East–west wrap; cylindrical periodic noise; periodic domain warp |
+| **Keep** | Layered noise with domain warp and ridged mountains; no erosion and no plate tectonics |
+| **Keep** | Latitude plus lapse-rate temperature; stylized precipitation with winds and rain shadows; no tilt or seasons |
+| **Keep** | Depressions preserved: a closed basin can hold a lake, a salt lake, or a dry playa or desert. Lakes are outcomes, not compulsory filling. |
+| **Keep** | Drainage that is acyclic by construction, with explicit terminal sinks |
+| **Keep** | Resolved `config.json` holds inputs only; outcomes go to the output files; replaying a config never reads current defaults |
+| **Keep** | Bounded, deterministic sea-level search that targets land, with an explicit report when the target is unmet |
+| **Keep** | Geography, climate, biome, and rendering kept separate |
+| **Change** | "Land cell" means one Voronoi land cell (one province). The land target becomes a **count of land cells**, not an area measured in raster samples. |
+| **Change** | The game unit becomes the **Voronoi province**, replacing the 10 km square game cell. The "future export" step becomes the core of the generator. |
+| **Change** | North and south edges become a **polar rim**: a sheet of impassable ice, instead of bare bounded edges. |
+| **Change** | Ocean, lakes, basins, and rivers are decided **on the mesh**, not on the raster. The raster stays as the synthetic DEM and the climate grid. |
+| **Change** | Water balance becomes a discrete per-cell fill, replacing storage curves on raster samples. |
+| **Change** | The schema is exported Go types (as in `hmz2map`); JSON Schema files are optional. |
+| **Add** | A **layout** stage that controls continent count, size, and separation |
+| **Add** | Mesh construction: cylinder Voronoi, Lloyd relaxation, short-edge collapse, rim cells |
+| **Add** | Per-edge game data and per-cell geometry for the game renderer |
+| **Add** | **Playability measures** in every run, with checks on them |
+| **Add** | **Stage renders from milestone 1**, plus a multi-seed contact sheet |
+| **Drop** | Samples-per-game-cell divisibility; chunked raster JSON as the game contract; the raster window renderer as a product (it remains a dev view) |
+| **Drop** | Ocean seeded from the global minimum elevation (the rim replaces it); raster 8-neighbor river extraction |
 
-Use **cinematic** for cinematic widescreen, avoiding an ambiguous change to the conventional 16:9 meaning of **widescreen**. Accept `16:9`, `2.39:1`, and other numeric ratios directly.
+## Units and sizing
 
-For requested land-cell area units `L`, sizing fraction `f`, aspect `a = width/height`, and sample area `A_s` in km²:
+- **Province area `A`** is the area of one wilderness hex, so exploring a province takes one game day. Configure the hex instead of the area: `province.hex_flat_to_flat_mi` (default 6). Then `A = (√3/2)·d²` = 31.18 mi² ≈ **80.75 km²**. Save both `d` and the derived `A`. Only area matches the hex; cells are not hex-shaped or hex-sized in any one direction.
+- **Requested land cells `N`.**
+- **Land fraction `f`.** Default 0.30, measured over playable (non-rim) cells.
 
-```text
-target_land_area_km2 = L * 100
-target_world_area_km2 ≈ target_land_area_km2 / f
-target_sample_count ≈ target_world_area_km2 / A_s
-height_samples ≈ sqrt(target_sample_count / a)
-width_samples ≈ a * height_samples
-```
-
-Choose sampling resolution before resolving sample dimensions. Search nearby positive integer dimensions and minimize a documented combined physical-area/aspect error, with deterministic tie-breaking. Use dimensions divisible by the selected samples-per-game-cell-side so future 10 km game cells cover the whole grid without partial cells. Do not require divisibility by chunk size; edge chunks may be smaller. Check overflow and resource limits using total samples, not requested land cells.
-
-Explicit width and height in an edited configuration are sample counts and take precedence over automatic sizing. Validate their physical area, aspect, divisibility, and ability to contain the requested land area. Store requested and actual aspect ratios.
-
-## Final land-area contract
-
-`--land-cells` expresses **100 km² per requested unit**. It does not request a number of above-sea-level samples, continental cells, or final game cells classified as land.
-
-Count as land:
-- Dry ground, including dry closed basins below ocean sea level.
-- Ground covered by glaciers, snowfields, or ice fields.
-
-Exclude from land:
-- Ocean, lakes, and inland seas.
-- Other explicitly modeled standing-water surfaces; seasonal water uses the model's documented representative annual state.
-- Explicitly modeled river water area, if present. Rivers represented only as line overlays do not subtract area.
-- Ice over ocean or standing water; freezing water does not turn it into land.
-
-Calculate final area after basin water balance and inland-water classification. In v1 each sample contributes its full physical area according to its authoritative land/water surface class; report this discretization explicitly. A future fractional-coverage model may refine area estimates without changing the area-request meaning.
-
-**Acceptance tolerance: absolute relative error <= 1%.** Report requested area, achieved area, signed area error, and relative error. If resolution or geographic connectivity prevents meeting tolerance, report an unmet target explicitly rather than claiming success. Automatically choose resolution fine enough to make the tolerance feasible for the requested size, subject to resource limits; never silently change the requested area to fit resources.
-
-Sea-level quantile selection is an initial estimate only. It cannot guarantee final dry area because ocean connectivity and inland water matter. Evaluate candidate sea levels by recomputing affected ocean, basin, climate/water-balance, and drainage stages with unchanged stage seeds. Use a bounded, deterministic search, retaining the best measured candidate. Do not assume final dry area varies monotonically: basin connections can cause jumps and water balance can change inland water.
-
-Save the search policy, iteration budget, tolerance, selected sea level, achieved area, and termination reason. Input policy belongs in resolved configuration; calculated outcomes belong in the manifest. Do not move isolated water/land samples merely to force the target.
-
-Require a nonempty primary ocean in v1. Choose a deterministic ocean seed from the global minimum elevation, ties by sample index. Disconnected low depressions are inland basins and may be dry. Generation and area checks retain this distinction.
-
-## Generation pipeline
-
-| Stage | Produces | Key constraint |
-|---|---|---|
-| Resolve configuration | Target area, sampling resolution, sample dimensions, units, algorithms, defaults | Save defaults and automatic resolution decisions |
-| Elevation | Bedrock elevation in meters | Periodic east–west; no erosion or tectonics |
-| Ocean selection | Candidate sea level, ocean mask, coast | Initial estimate; final dry area checked after inland water |
-| Basin analysis | Basin hierarchy, spill levels, catchments | Preserve original elevations |
-| Baseline climate | Temperature and precipitation | Latitude, altitude, winds, and water influence |
-| Water balance | Basin water levels and dry/wet states | Lakes are outcomes, not compulsory sink filling |
-| Drainage | Flow graph, discharge, river reaches | No drainage cycles; explicit closed sinks |
-| Cryosphere | Snowfields, ice fields, glacier masks | Temperature and snowfall constraints |
-| Biomes | Vegetation/ecological classification | Derived from climate and surface conditions |
-| Final area validation | Dry land area and target error | Bounded candidate search; acceptance within 1% |
-| Export | Resolved config, manifest, chunks, summaries | Image rendering never changes generation |
-
-Climate and hydrology interact. For v1 use a deterministic bounded coupling procedure: first climate uses ocean proximity, then basin water balance determines inland water, then climate may apply one inland-water adjustment and recompute balance once. Save the pass count. This is a finite approximation, not a claim of converged atmospheric equilibrium.
-
-### Elevation
-
-Combine low-frequency continental noise, periodic domain warp, mid-frequency relief, optional ridged mountain noise, and small detail. Keep amplitude and wavelength parameters explicit. Convert normalized height to a documented meter scale before climate and hydrology use it. Do not interpret arbitrary noise values as physical altitude.
-
-Mountain chains are noise-derived features; no plate model is required. Store original elevation and any hydrology working surface separately. Hydrology must not silently alter terrain to erase depressions.
-
-### Basin analysis and water balance
-
-Distinguish topographic basin, drainage catchment, and actual water body. Use deterministic priority-flood/depression analysis to identify spill points and nested basins. A filled working surface may help establish routing and hierarchy; it is not the rendered terrain or a declaration that every depression is wet.
-
-For each basin, build an elevation/area/storage curve. Aggregate runoff from contributing catchments. Annual water balance uses consistent units:
+Derived sizes:
 
 ```text
-storage change = catchment runoff + precipitation on water
-                 - evaporation from water - seepage - overflow
+playable_cells ≈ N / f
+playable_area  = playable_cells × A            (km²)
+height_km      = sqrt(playable_area / aspect) + 2 × rim_km
+width_km       = aspect × (height_km − 2 × rim_km)
 ```
 
-Rainfall over the catchment contributes through runoff; do not also add it wholesale as direct water-surface precipitation. Use area in square meters, annual depths in meters, and resulting volumes in cubic meters per year.
+Aspect names (square, portrait, landscape, widescreen 16:9, cinematic 2.39:1) and explicit ratios (positive finite numbers on both sides of a colon, such as `16:9` or `2.39:1`) are accepted. `widescreen` means 16:9; `cinematic` means 2.39:1. Aspect applies to the playable area. The rim adds height only.
 
-Solve a simplified equilibrium water level against the basin's area curve, bounded by its spill level. Positive surplus at the spill level becomes downstream overflow. If no stable wet level exists, classify the basin as dry or seasonal under explicit rules. Handle nested basins from upstream to downstream, merging pools when their levels reach connecting saddles. Record unresolved or model-limited states rather than hiding numerical failures.
+Example: N = 10,000 and f = 0.30 give about 33,300 playable cells and 2.69M km². At cinematic aspect that is about 2,540 × 1,060 km before the rim.
 
-A low basin is not automatically desert: a humid dry basin may still support vegetation. Desert biome follows aridity, while playa describes the exposed basin floor. Likewise, a closed lake is not automatically salty; use a documented salinity proxy based on endorheic status and evaporation/inflow, not a full salt-chemistry simulation.
+**Raster spacing** is a generator concern. Default: about 2 km, which gives about 20 samples per province. That is enough for per-cell statistics such as median, percentiles, and relief. The resolved spacing is saved. Raster dimensions do not need to be divisible by anything.
 
-Proposed water classifications: lake, inland sea, seasonal lake, salt lake, salt inland sea. “Inland sea” is a configurable size-based game classification, independent of salinity. Thresholds must use cell area or explicitly documented cell counts.
+**Land contract:**
+- The final number of land cells must be within **1% of N**. With cells this uniform, the count stands in for area: land area ≈ N × A. Report the measured land area too.
+- Lake and inland-sea cells are water.
+- Glacier-covered land is land.
+- Rim cells are never counted.
 
-### Climate
+## Coordinates, topology, and the rim
 
-Baseline temperature interpolates from equator to poles using a smooth latitude curve, then subtracts lapse-rate cooling above sea level. Below-sea-level dry terrain does not receive unlimited artificial warming; define and bound that adjustment explicitly.
+- **World coordinates** are kilometers. The origin is the northwest corner; `x` runs east in `[0, W)` and wraps, and `y` runs south in `[0, H)` and does not wrap.
+- **One shared topology package** handles wrapped deltas, distances, and bearings for both the raster and the mesh.
+- **Latitude proxy** is computed over the full height, so the rim is the true pole:
 
-Precipitation is a stylized annual model: latitude bands, smooth periodic variability, ocean moisture supply, simple prevailing winds, and orographic lifting/rain shadows. This is sufficient to create wet coasts and dry interiors without simulating global atmosphere dynamics. Distance to water alone is not a rain-shadow model.
+  ```text
+  latitude = 1 − 2·y/H
+  ```
 
-Advection across wrapped rows uses a fixed iteration count and deterministic update order. Avoid unbounded circular scans. Store precipitation, potential evaporation, runoff, temperature, and an aridity index with explicit units.
+### Rim
 
-### Rivers
+- **Band.** The top and bottom bands are rim. Default: 4 cells deep, after `hmz2map -border`'s 4-hex band.
+- **Falloff.** Inside the rim's edge, the falloff band pulls elevation smoothly down to deep ocean. Land therefore never touches the rim, and coasts near the poles look natural rather than cropped.
+- **Rim cells** are flagged `rim` and `impassable`. The flag overrides everything else about the cell: the game treats it as impassable, and the renderer draws it as a sheet of impassable ice whatever its geography and biome say.
+  - Inside the generator, rim cells count as deep salt water, so the ocean beside them is connected to them and climate sees open water at the poles.
+- **Rim width** is how many cells deep the ice band reaches in from the north and south edges. Default: 4 cells.
+- **Falloff width** is how many cells of open ocean, at least, separate the ice from any land. Default: about 12 cells. It keeps coasts from running straight into the ice.
 
-Route runoff using the basin hierarchy and a deterministic acyclic flow graph. Resolve flats and equal-height neighbors with stable ordering; never introduce cycles through tie-breaking. Rivers terminate in ocean, an inland water body, or an explicit dry closed sink; polar map edges are not sinks by default.
+The rim solves several problems:
 
-Accumulate discharge in cubic meters per second using the annual runoff approximation. Select river channels from configurable discharge thresholds. Keep river overlays distinct from land/water surface class. Store reach connectivity and destination identifiers so the renderer can draw continuous rivers across chunk and longitude boundaries.
+- **The edge.** No land, river, or basin ever meets the map edge, and players never reach a wall of land.
+- **Ocean definition.** Ocean is the water cells connected, through cell adjacency, to the rim. Any other water is inland: a lake, inland sea, or salt lake. This replaces the global-minimum ocean seed.
+- **Mesh edges.** No ragged polygons at the top and bottom. The rim absorbs Voronoi clipping.
+- **Climate extremes** fall in the rim, so playable land ranges from polar fringe to equator.
 
-### Snow, glaciers, and ice fields
+## Pipeline
 
-Permanent ice requires cold conditions and sufficient snow accumulation; temperature alone can otherwise turn cold deserts into implausible glaciers. Use an annual accumulation/melt proxy. Distinguish land ice from sea ice and standing-water ice.
+| # | Stage | Domain | Produces | Stage render |
+|---|---|---|---|---|
+| 1 | Resolve config | — | Sizes, spacing, seeds, every default | — |
+| 2 | Layout | raster | Continental bias field from attractors and repulsors | Bias field with attractor marks |
+| 3 | Elevation | raster | Bedrock elevation in meters (layout + fBm + warp + ridges + volcanic hotspots + rim falloff) | Hypsometric map with hillshade; hotspots marked |
+| 4 | Mesh | mesh | Sites, Lloyd relaxation, short-edge collapse, cells, corners, edges, rim cells | Mesh over elevation; area heatmap; short edges highlighted |
+| 5 | Cell statistics | raster → mesh | Per-cell altitude (median), relief (p95 − p5), latitude | Cell altitude |
+| 6 | Sea level and ocean | mesh | Sea level and ocean cells (flood from the rim) | Land/water cells |
+| 7 | Climate | raster (+ cell mask) | Precipitation, potential evaporation, and runoff aggregated to cells; cell temperature from latitude and altitude | Temperature; precipitation; aridity |
+| 8 | Basins and lakes | mesh | Basin hierarchy, wet/dry decision, lake and inland-sea cells, spill corners | Basins colored; lakes |
+| 9 | Land-target check | mesh | Repeats stages 6 and 8 within a budget until the land count is in tolerance | Search trace |
+| 10 | Rivers | mesh corners | Drainage tree on corners; river edges with a class | Rivers on edges, width by class |
+| 11 | Classification | mesh | Landform, depth band, surface, biome, flags | Landforms; biomes |
+| 12 | Edges | mesh | Bearing, compass direction, neighbor, coast, river, incline, passability | Inclines; passability |
+| 13 | Measures | mesh | Playability report | Landmass and chokepoint map |
+| 14 | Export | — | `world.json`, `measures.json` | Player-style map |
 
-V1 glaciers are a simplified geography classification, not a dynamical ice-flow simulation. If downhill glacier tongues are added, constrain extension by slope, cold conditions, accumulation, and a finite distance. Do not label all perennial snow as a flowing glacier. Ice fields and glacier-covered terrain remain separate overlays on bedrock and hydrology.
+**Stages 2, 3, and 7** are field-like, so they stay on the raster.
 
-### Biomes and game terrain
+**Stages 6 to 13** are topological and run on the cell graph. At 30k to 200k cells each pass costs milliseconds, which is why the land-target search can afford to re-run basins.
 
-Assign biomes from temperature, precipitation/aridity, and relevant surface conditions, using a versioned lookup table. Initial candidates: polar desert, tundra, boreal forest, temperate forest, temperate rainforest, grassland, steppe, desert, savanna, tropical seasonal forest, tropical rainforest, and alpine vegetation.
+**Climate coupling** is bounded:
+1. Compute climate once with the ocean-only mask from the first sea-level estimate.
+2. The land-target search re-runs stages 6 and 8 against that fixed climate.
+3. Compute climate once more with the final lakes, for biomes.
+4. Save the pass count.
 
-Wetlands require a hydrological wetness indicator, not just high rainfall. Keep ecological biome separate from landform and surface overlays. Game movement costs and production yields are future consumers, not requirements of the generator.
+### Layout
 
-## Determinism and reproducibility
+Noise alone produces either one featureless block or lace. wgvc needed attractors and a rival ramp to control islands. Here that control is added to the continental bias field, before the noise:
 
-Derive seeds with a specified stable digest such as SHA-256 over a domain prefix, world seed, stage name, and algorithm version. Use defined byte order and length-prefixed fields. Feed two derived uint64 values into `rand.NewPCG`; never use Go's process-randomized map hashing as a seed function.
+- **Seeded attractor points** on the cylinder, using periodic distance, each with a radius and weight. They can be placed by a preset pattern or randomly with minimum spacing.
+- **Repulsors** between rival attractors, so continents stay separate. The gaps they leave become straits.
+- **Presets:** `pangaea`, `continents` (3–5), `archipelago`, `islands` (wgvc-style), and `custom`.
 
-Stage names are stable strings such as `elevation`, `warp`, and `precipitation`. Coordinate noise must use a stable seed and coordinates, not random draws whose order depends on chunk scheduling.
+Layout is a bias, not a mask. Noise still makes the coastlines; the playability measures in stage 13 report whether the intent survived.
 
-- Fix queue, sort, traversal, and equal-value tie-breaking by stable cell index.
-- Sort map keys where serialized ordering matters.
-- Parallelize independent per-cell work; perform reductions in a defined order.
-- Pin dependencies and store algorithm versions.
-- Exclude timestamps and absolute paths from canonical content hashes.
-- Do not serialize NaN or infinity.
+### Volcanic hotspots
 
-Promise repeatability for a pinned generator/toolchain and configuration. Cross-architecture bit-identical floating-point output needs dedicated verification; do not promise it prematurely. Stage-specific seeds isolate random draws, but a change to upstream geography will legitimately change downstream hydrology and biomes.
+Volcanoes are possible, not forced: rare, seeded, and sometimes absent.
 
-## Configuration contract
+- **Count.** Drawn from the `volcanic` seed with a mean of `volcanic_hotspots_per_mkm2` per million km² of playable area. Default 2, which gives about 5 for the 10,000-cell example. Any count, including zero, is valid.
+- **Placement.** Uniform over the playable area outside the rim falloff, in ocean or on land. A hotspot in the sea makes a volcanic island only if its cone reaches sea level.
+- **Shape.** Each hotspot adds a cone (default peak 1,500–3,000 m, radius 15–30 km) on a broad, low swell (default +300 m over about 100 km). The swell is what makes the surrounding plateau.
+- **Result.** The land cell containing a cone's peak gets the `volcano` flag. Nearby plateaus become `volcanic-highlands`.
 
-`config.json` is the complete resolved input document. It stores requested parameters and explicit defaults, but calculated results such as final sea level belong in `map.json`. A user may override sea level explicitly by selecting a different ocean mode; that mode no longer promises the land target.
+### Mesh
 
-Illustrative shape; the resolved sampling choice shown is an example, not a mandatory default. Width and height count samples. Numeric tuning values and resource/search budgets are starting points, not validated recommendations:
+- **Sites.** Jittered grid or Poisson-disk sites over the full cylinder, including the rim, seeded from `mesh`. Site count = total area / `A`.
+- **Voronoi on a cylinder.** Compute with ghost copies of the sites shifted ±W. Keep only the original sites' cells. North and south are clipped inside the rim, so clipping never affects playable cells.
+- **Lloyd relaxation.** Default 2–3 passes, using wrapped centroids. Then scale so the mean cell area is exactly `A`.
+- **Short-edge collapse.** Any edge shorter than `min_edge_km` is collapsed: its two corners merge into one 4-way corner. Default `min_edge_km` = 0.3 × √A, about 2.7 km.
+  - The two cells that shared the collapsed edge now touch only at a point, so they are **not neighbors**.
+  - Point contact never connects land to land or water to water, so water that touches only at a corner is not connected.
+  - The collapse is deterministic, shortest edge first, with ties broken by edge index.
+- **Degree cap.** Every cell needs a distinct compass direction for each neighbor, so no cell may have more than 8 neighbors. After the short-edge collapse, a cell with 9 or more neighbors has its shortest edge collapsed, repeating until it has 8. Lloyd-relaxed cells have mostly 5–7 neighbors, so this should be rare; report how often it happens.
+- **Mesh checks:**
+  - no edge shorter than `min_edge_km`;
+  - cell areas within configured bounds (default 0.5A to 1.6A);
+  - neighbor counts within 3–8;
+  - every corner touches 3–4 cells.
 
-```json
-{
-  "schema_version": 1,
-  "algorithm_version": "mpg-v1",
-  "seed": "8675309",
-  "size": {
-    "land_cells": 10000,
-    "land_area_per_requested_cell_km2": 100,
-    "target_land_area_km2": 1000000,
-    "aspect": "cinematic",
-    "aspect_ratio": 2.39,
-    "land_fraction": 0.30,
-    "dimensions_mode": "automatic",
-    "width": 2820,
-    "height": 1180,
-    "game_cell_size_m": 10000
-  },
-  "sampling": {
-    "mode": "auto",
-    "policy_version": "resolution-v1",
-    "samples_per_game_cell_side": 5,
-    "sample_size_m": 2000,
-    "memory_budget_mib": 2048
-  },
-  "topology": {"wrap_east_west": true, "wrap_north_south": false},
-  "elevation": {
-    "noise_algorithm": "gradient3-v1",
-    "continental_wavelength_samples": 800,
-    "detail_wavelength_samples": 80,
-    "octaves": 6,
-    "persistence": 0.5,
-    "lacunarity": 2.0,
-    "warp_amplitude_samples": 100,
-    "relief_scale_m": 6000
-  },
-  "ocean": {"mode": "target_dry_land_area", "sea_level_override_m": null},
-  "area_search": {
-    "policy": "bounded-candidates-v1",
-    "relative_tolerance": 0.01,
-    "max_evaluations": 24
-  },
-  "climate": {
-    "equator_temperature_c": 30,
-    "pole_temperature_c": -25,
-    "lapse_rate_c_per_km": 6.5,
-    "model": "latitude-wind-v1",
-    "coupling_passes": 2
-  },
-  "hydrology": {
-    "model": "basin-balance-v1",
-    "inland_sea_min_area_km2": 500,
-    "river_min_discharge_m3_s": 1,
-    "seepage_mm_year": 10
-  },
-  "cryosphere": {"model": "snow-balance-v1"},
-  "biomes": {"classification": "temperature-aridity-v1"},
-  "output": {"chunk_size": 64, "format": "json-chunks-v1"}
-}
-```
+### Cell statistics and sea level
 
-Use a decimal string for a uint64 seed so other JSON consumers do not lose precision. Validate positive sample dimensions/spacing and consistency with the 10 km game-cell size, `0 < land_fraction < 1`, finite numeric parameters, allowed enum values, and compatible versions. Unknown fields should fail with a useful message to catch misspelled tweaks. Resolved configuration must eventually include every coefficient used by each model; the example abbreviates model-specific tuning fields.
+- **Sample assignment.** Each raster sample belongs to the cell whose site is nearest, using wrapped distance and a bucket grid. Statistics follow `hmz2ter`'s nearest-rank percentiles: the median gives altitude, and p95 − p5 gives relief.
+- **Altitude is the only height.** A cell's **altitude** is its median elevation. Every height rule on the mesh uses it: the land test, sea level, basins and spill levels, lake surfaces, corner heights, incline, landforms, and cell temperature (latitude curve minus lapse-rate cooling at the cell's altitude). Relief (p95 − p5) is a roughness measure, not a height; it only sets landforms.
+- **Land test.** A non-rim cell is a land candidate if its altitude is above sea level.
+- **Ocean.** Water candidates connected to the rim are ocean. Unconnected candidates below sea level are basin floors, which stage 8 decides.
+- **Sea-level search.**
+  - The initial estimate is the quantile that leaves `N` + (expected lake cells) land candidates.
+  - After that, run a bounded deterministic search over candidate cell altitudes, keeping the best measured result.
+  - Basins can jump, so the land count is not assumed to change monotonically.
+  - Save the policy, budget, chosen level, achieved count, and termination reason.
 
-Maintain machine-readable JSON Schema files alongside Go validation. Schema checks structural constraints; Go checks cross-field constraints, resource budgets, and graph/data invariants. Loading old schema versions requires an explicit migration, never silently adopting newer defaults.
+### Basins and lakes
 
-## World data and block access
+- **Priority flood.** A priority flood over the cell graph, seeded from ocean cells and using cell altitude, finds depressions, spill cells, spill edges, and the nested hierarchy. Original elevations are never modified.
+- **Water balance** is a discrete fill, because every cell is one whole area unit:
+  1. Sort each basin's cells by altitude.
+  2. Fill them in that order.
+  3. Stop when evaporation from the lake area plus seepage balances catchment runoff, or when the spill level is reached.
+- **Surplus at the spill** overflows through **one spill corner**, which became a wgvc rule for good reason, and continues downstream.
+- **No stable level** means the basin stays dry land with surface `playa` and is a **dry sink** for rivers.
+- **Classification:**
+  - lake: 1 to `inland_sea_min_cells` − 1 cells (one-cell lakes are fine);
+  - inland sea: `inland_sea_min_cells` or more (**default 20**);
+  - each is marked salt if endorheic and evaporation-dominated (a salinity proxy, not chemistry).
+- A lake is one connected set of cells with one surface level.
+- **Minimum depth.** A depression counts as a basin only if its spill level is at least `basin_min_depth_m` above its lowest cell's altitude. **Default: 50 m.**
+  - Shallower depressions are treated as flat ground at their spill level for routing only: no lake, no playa, no dry sink, and altitudes are not changed. Nested sub-basins shallower than the minimum below their own spill merge into their parent.
+  - Why 50 m: closed ground 50 m deep across at least one ~9 km province is real topography. Shallower dips are mostly noise left over after taking each cell's median, the same size as `hmz2ter`'s plains relief band (20–60 m), and keeping them pockmarks the map with one-cell lakes and pits.
+  - Tune it with the basin depth histogram in the measures. Lower it for more lakes and playas, raise it for fewer.
 
-Recommended output directory:
+### Rivers on edges
+
+Rivers run along Voronoi edges, corner to corner, and never through a cell's interior. This follows mapgen2, wgvc, and `hmz2riv`'s snapped edges.
+
+- **Corner height** is the mean altitude of the 3–4 cells that meet at the corner, so rivers follow the low ground between low cells using the same single height.
+- **Corner graph.** The graph has land corners joined by **land–land edges**. A corner that touches any water cell is **terminal**: a mouth on the ocean or a lake. Dry-sink corners from stage 8 are also terminal.
+- **Drainage tree.** A priority flood over the corner graph, seeded from terminal corners, gives every land corner one downstream corner. The result is acyclic by construction. Flats are broken by stable index.
+- **Lake outlets.** A river may enter a lake at any shore corner and leaves only through the spill corner. An overflowing lake's spill corner starts its own downstream path, carrying the lake's surplus.
+- **Accumulation.**
+  - Each land cell sends its runoff (area × runoff depth) to its lowest corner on the graph.
+  - Accumulate down the tree.
+  - Each edge on the tree carries the drainage (km²) and discharge (m³/s) of its downstream corner.
+- **River selection.**
+  - An edge is a river when its drainage is at least `river_threshold_km2`.
+  - Classes (`stream`, `river`, `major-river`) come from configured drainage breaks, with the lowest break at the threshold.
+  - Drainage and discharge are internal: they set the class and appear in the measures and debug dumps, not in `world.json`.
+  - Each cell is about 81 km², so the threshold has to span several cells. The default `river_threshold_km2` is **500 km²** (about 6 cells of catchment); tune from there.
+  - For comparison: on Panama, `hmz2riv`'s 50 km² gave about one river edge for every two 10 km hexes, chosen deliberately to slow north–south travel.
+
+This guarantees by construction:
+
+- Rivers are only ever on edges.
+- Rivers never run along a coast or lake shore, because those edges are excluded from the graph.
+- Every river ends at a mouth, a lake, or a dry sink.
+- Rivers never cross the rim.
+- Rivers cross the east–west seam naturally.
+
+### Classification
+
+Use the hm* codebooks where they fit, so the engine and converter tools stay familiar.
+
+- **Landform (land), from relief and altitude:**
+  - `flats`, `plains`, `rolling-plains`, `hills`, `mountains`, `plateaus`, using `hmz2ter`'s relief thresholds as starting values. Retune them, because relief within an 81 km² cell of synthetic terrain will not match DEM relief.
+  - `volcanic-highlands`: a `plateaus` cell within `volcanic_radius_km` of a volcano (`hmz2ter`'s rule, default 25 km).
+- **Landform (water):** `salt-water` (ocean, inland sea) and `fresh-water` (lake). Salinity is a flag.
+- **Depth (salt water):** `shallow`, `open`, `deep`, from distance in cell steps to the nearest non-salt-water cell, as in `hmz2ter`. The bands are play rules, so they are retuned in cells.
+- **Surface and biome:**
+  - From temperature, precipitation and aridity, and wetness. The lookup table is versioned and uses `hmz2bio`'s vocabulary. Initial candidates: polar desert, tundra, boreal forest, temperate forest, temperate rainforest, grassland, steppe, desert, savanna, tropical seasonal forest, tropical rainforest, and alpine vegetation.
+  - Glacier and ice field are **surfaces** on land cells. Permanent ice needs cold plus enough snowfall, so cold dry land can stay bare. Ice fields cover broad cold high ground; a glacier is permanent ice on a mountain cell, or reaching down from one. Neither is placed on purpose.
+  - Pack ice is a surface on water.
+  - Wetlands need a hydrological wetness signal: river edges, a lake shore, or low relief with surplus.
+
+### Edges
+
+The game wants per-edge data. Store each undirected edge once, and give each cell an ordered list of half-edges.
+
+- **Bearing.** Degrees clockwise from north, from this cell's site to the neighbor's site, using the wrapped delta.
+- **Direction.** The game's direction for the edge: one of the 8 compass points `N`, `NE`, `E`, `SE`, `S`, `SW`, `W`, `NW`, ordered clockwise.
+  - **Unique per cell.** No two edges of a cell share a direction, so an order like "move NE" is never ambiguous. A cell with fewer than 8 neighbors leaves some directions unused, and moving in an unused direction is not possible.
+  - **Order-preserving.** Sort the cell's edges by bearing. Directions follow the same clockwise order, so the edges and the rose never cross.
+  - **Closest fit.** Among order-preserving assignments, choose the one with the smallest total angular error between each bearing and its compass point's angle (multiples of 45°). With at most 8 edges this is a small dynamic program per cell. Break ties by the lower maximum error, then by the assignment that starts at the earliest compass point.
+  - **Not symmetric.** If A's edge to B is `NE`, B's edge to A is usually, but not always, `SW`. Both directions are stored, one on each half-edge.
+  - **Error recorded.** Store each edge's angular error from its bearing. wgvc found that nearest-point labels on a Voronoi mesh collide often (193 of 300 provinces had a duplicate), which is why the assignment is solved per cell instead.
+- Cells list their half-edges in clockwise order, starting from the one nearest `N`.
+- **Neighbor.** The neighbor cell id and the shared edge id.
+- **Coast.** Set when exactly one side is water. The water kind is ocean, lake, or inland sea.
+- **River.** The river class (`stream`, `river`, `major-river`), or none. That is all the game gets. The game turns the class into a travel-time modifier; rules such as major rivers being impassable except across nearly level edges are game rules, not generator rules. A river edge is always land–land, so it is a border between provinces.
+- **Incline.** A signed grade in percent between the two cells' altitudes: (neighbor altitude − this altitude) / site distance × 100. Positive climbs, negative descends. The magnitude is capped at 100% and rounded to one decimal place.
+  - There is one gradient per edge, so A → B is exactly the negative of B → A (+15% and −15%). Compute it once per undirected edge and negate it for the reverse half-edge, so rounding can never break the symmetry.
+  - The game decides what grades mean for movement; the generator does not classify them.
+  - Centers are about 9 km apart, so even a 2,000 m difference is a grade of about 22%. Most edges will be in single digits, and 100% will be very rare. Watch the grade histogram in the measures.
+- **Passable.** False across the rim. The game may add rules on top. Short edges are already gone, so every remaining edge is a real border.
+
+### One game data file
+
+`world.json` is the only game data file. The engine and the player-map renderer both read it; there is no separate export for rendering. For every cell it holds the game data (geography, biome, altitude, flags including `rim`) and the geometry to draw it.
+
+The geometry in `world.json`:
+
+- **Corners:** id, `(x, y)` in km, corner height, terminal or mouth flags.
+- **Cells:** site, centroid, a polygon as a clockwise list of corner ids, an unwrapped polygon in km relative to the site (so seam cells draw without special cases), and a bounding box.
+- **Edges:** corner ids at each end, length in km, and a per-edge seed, so the renderer can draw deterministic noisy edges for coasts and rivers if it wants to.
+- **River polylines:** corner chains from source to mouth, with the class of each segment, ready for drawing by width.
+- **Coastline polylines:** chains of coast edges, closed for islands and lakes.
+- **World metadata:** W, H, rim, wrap flag, province area, units, codebooks.
+
+Rendering a player's map segment means selecting cells whose bounding boxes intersect the window (taken modulo W) and drawing each polygon by its geography and biome, then rivers and coasts. Rim cells are drawn as impassable ice instead. No raster is needed.
+
+## Playability measures
+
+Write `measures.json` and a short text summary on every run. Configured checks fail loudly. Sweeps rank seeds by these measures.
+
+- **Land:** land cell count against N; land area; cell area mean and coefficient of variation; edge length minimum and p5; neighbor-count histogram; grade histogram; cells that needed the degree cap; direction error (mean, p95, max) and how often a reverse direction is not the opposite point.
+- **Landmasses:** count, size histogram, largest share of land, and count by class (continent, island, islet) using cell-count thresholds.
+- **Water:** ocean, inland sea, and lake counts and sizes; coast edges per land cell.
+- **Features:** dry basins (count, sizes, depths); basin depth histogram, including the depressions below the minimum; ice-field and glacier cells; volcanoes, and how many are on land. Report only.
+- **Chokepoints:**
+  - **straits**: water crossings of at most `k` cells between landmasses or between parts of one landmass;
+  - **necks**: land isthmuses of at most `k` cells;
+  - **passes**: low-incline routes through mountain chains.
+  These come from wgvc, measured in cells.
+- **Rivers:** river edges per land cell, mouths, longest river in edges, share of land cells touching a river.
+- **Usability:** habitable share of land (not glacier, desert, mountain, or polar desert); biome and landform histograms; land within `d` cells of the coast.
+
+Checks begin as report-only. Promote them to gates once tuning shows sensible ranges.
+
+These are **measurements, not placements**. Starting positions, settlements, resources, and balance are game rules, as in wgvc.
+
+## Tuning: early and often
+
+The tuning tool was wgvb's most valuable artifact, and it came too late. Here it is milestone 1.
+
+- `mpg generate --renders DIR` writes one PNG per stage (the right-hand column of the pipeline table), using the same names for every seed.
+- `mpg generate --stop-after STAGE` lets tuning iterate on early stages without paying for later ones.
+- `mpg sweep --seeds 1-16 --stage elevation,cells,biomes --output sheet.png` builds a contact sheet: seeds × stages, each tile labeled with its key measures. Use it to compare presets and parameter changes side by side.
+- Each render records the config hash and stage, so an image always traces back to its inputs.
+- Renders never change data or hashes.
+
+## Outputs
 
 ```text
 worlds/example/
-  config.json
-  map.json
-  basins.json
-  rivers.json
-  chunks/
-    000000-000000.json
-    000001-000000.json
-    ...
+  config.json      resolved input (every default written out; seed as a decimal string)
+  world.json       the game contract: metadata, codebooks, cells, edges, corners, rivers, coasts, outcomes
+  measures.json    playability and validation report
+  renders/         stage PNGs (optional)
+  fields/          raster dumps for debugging (optional, not a contract)
 ```
 
-`map.json` is the world manifest. One monolithic JSON object containing all chunks would still require scanning/parsing the whole file to reach an arbitrary chunk; separate chunk files provide actual block access while keeping JSON as requested. A single-file interchange archive can be added later.
+- One `world.json` is fine at this scale: tens of thousands of cells, a few hundred thousand edges.
+- Chunking and compression wait for real measurements.
+- Outcomes such as sea level, achieved count, search trace, and pass counts go in `world.json`, never in `config.json`.
+- Unknown config fields fail with a useful message, to catch misspelled tweaks. Loading an older schema version needs an explicit migration and never silently adopts newer defaults.
+- The Go types in a small exported package are the schema, as `hmz2map` does, so the engine and converters can import them.
 
-Manifest contract:
+## Determinism
 
-| Field | Meaning |
-|---|---|
-| schema_version, algorithm_version | Reader and generation compatibility |
-| config_sha256 | Hash of canonical resolved input |
-| width, height, chunk_size | Resolved grid shape |
-| sample_size_m, samples_per_game_cell_side, game_cell_size_m, topology | Resolved generation scale, 10000 m game-cell scale, and topology |
-| sea_level_m | Calculated ocean surface |
-| counts | Sample counts for dry surface, ocean, inland water, and ice overlays |
-| land_area | Requested/achieved dry area in km², signed error, relative error, tolerance status |
-| area_search | Evaluations, termination reason, and selected candidate |
-| units | Units of every numeric layer |
-| codebooks | Stable integer-to-label mappings for categorical layers |
-| chunks | Chunk origin, actual dimensions, relative file path, content checksum |
-| basins_file, rivers_file | Paths to global graph tables |
+Identical config and pinned generator produce identical `world.json` and checksums.
 
-Each chunk stores its sample origin `(x, y)`, actual width/height, and parallel row-major arrays. Array index `i` resolves to `(x + i % width, y + i / width)`. Every required array has exactly `width*height` elements. Edge chunks are smaller; no padding or duplicate seam column is stored.
+- stage seeds from SHA-256 over a domain prefix, the world seed, the stage name, and the algorithm version, with a defined byte order and length-prefixed fields; never Go's process-randomized map hashing;
+- two derived uint64 values feed a `rand.NewPCG` source owned by each stage; no global source;
+- coordinate noise depends only on the seed and coordinates, never on the order work is scheduled;
+- parallel work only on independent per-cell or per-sample computations, with reductions in a defined order;
+- stable ordering and tie-breaks everywhere;
+- no map iteration order in results;
+- no NaN or Inf;
+- no timestamps or paths in hashed content.
 
-Numeric layers: bedrock elevation, temperature, precipitation, potential evaporation, runoff, river discharge, and slope. Categorical/reference layers: ocean mask or surface class, biome, ice class, basin ID, water-body ID, and downstream cell index. Use explicit null/sentinel conventions in the schema. A globally unique sample index is `y*world_width+x`.
+Stage names include `layout`, `elevation`, `warp`, `ridges`, `volcanic`, `mesh`, `climate`, and `edge-noise`.
 
-Separate graphs contain basin spill/outlet references, balance summaries, water-surface levels and classifications, plus river reaches. Reference IDs are assigned in stable geographic order, never discovery order from nondeterministic workers.
+Cross-machine replay is a stated goal: one gamemaster's config should rebuild the same world on another machine. wgvc hit FMA differences on arm64, so the same safeguards apply here:
 
-Do not quantize authoritative data merely to improve file size in v1. Optional gzip JSON can follow after measurements. Generation remains a global process because sea-level selection, watersheds, and rivers depend on distant cells; chunked export is not a promise of independent local generation.
-
-## Renderer
-
-`mpg-render` reads saved data only. Layers: elevation, geography, temperature, precipitation, climate, biome, hydrology, and cryosphere. Define `climate` as a documented composite; retain individual numeric layers for inspection.
-
-Support full-world images and rectangular windows. A window may cross the east–west seam and stitch the appropriate chunks. Reject windows outside north/south bounds. Read only intersecting chunk files plus relevant global metadata/graphs. Use a small halo for slope shading and feature continuity.
-
-Keep palettes, legends, hillshade, and line widths in renderer options. Save numeric legends with units. The geography view combines landforms, water, and ice; biome and climate views retain river/coast overlays as optional context. PNG is the initial output format. Rendering settings do not change map data or configuration hashes.
+- avoid fused-multiply-add contraction in hashed arithmetic, by explicit rounding through `float64(...)` conversions;
+- pin noise and transcendental functions;
+- run golden-hash tests on both architectures.
 
 ## Package layout
 
 ```text
-cmd/mpg/                 Generator CLI and config validation commands
-cmd/mpg-render/          Renderer CLI
-internal/config/         Input resolution, defaults, migrations, validation
-internal/seed/           Stable stage/coordinate seed derivation
-internal/grid/           Coordinates, neighborhoods, wrapped distances
-internal/noise/          Pinned periodic noise and domain warping
-internal/elevation/      Terrain synthesis
-internal/ocean/          Ocean connectivity and sea-level selection
-internal/basin/          Depression hierarchy and storage curves
-internal/climate/        Temperature, precipitation, evaporation, runoff
-internal/hydrology/      Water balance, drainage graph, river extraction
-internal/cryosphere/     Snow/ice classifications
-internal/biome/          Versioned ecological classification
-internal/world/          Shared layer types and graph records
-internal/storage/        Manifest/chunk JSON readers and writers
-internal/render/         Palettes, windows, shading, overlays
-schemas/                 config, manifest, chunk, basin, river schemas
-features/                Human-readable behavior specifications
+cmd/mpg/              generate, sweep, render-stage, validate
+internal/config/      resolution, defaults, validation, migration
+internal/seed/        stage seed derivation
+internal/topo/        cylinder math: wrap, distance, bearing, latitude, rim
+internal/field/       raster type, sampling, stage renders
+internal/noise/       pinned periodic noise, warp, ridges
+internal/layout/      attractors, repulsors, presets
+internal/elevation/   heightmap synthesis, volcanic hotspots, rim falloff
+internal/mesh/        cylinder Voronoi, Lloyd, short-edge collapse, corner/edge graph
+internal/cells/       per-cell statistics, sea level, ocean
+internal/climate/     temperature, precipitation, evaporation, runoff
+internal/basin/       cell-graph basins, water balance, lakes
+internal/river/       corner drainage tree, river edges
+internal/classify/    landform, depth, surface, biome
+internal/measure/     playability measures and checks
+internal/render/      stage renders, contact sheets
+world/                exported Go types for world.json (the schema)
 ```
 
-The future game-data export may require its own executable; image rendering and game-data aggregation are distinct consumers. Its aggregation design remains deferred.
+## Milestones
 
-Keep APIs internal until another project needs stable imports. Centralize units and topology rather than reproducing them in every stage.
+Each milestone ends with renders inspected across several seeds and aspects.
 
-## Invariants and acceptance checks
+1. **Foundation and the tuning harness:**
+   - config resolution, seeds, cylinder topology, and the raster field;
+   - stage PNG output and `sweep` contact sheets;
+   - proof: a periodic noise field renders seamlessly when shifted across the seam.
+2. **Layout and elevation:** presets, attractors and repulsors, volcanic hotspots, and rim falloff. Tune until continents look intentional across seeds.
+3. **Mesh:** cylinder Voronoi, Lloyd, short-edge collapse, rim cells, and the mesh checks and render.
+4. **First playable export:**
+   - cell statistics, sea-level search on cell counts, landforms, depth, and edges with bearing, compass direction, coast, and incline;
+   - `world.json` v0 and a player-style render;
+   - hand it to the game early.
+5. **Climate:** temperature, precipitation with rain shadows, evaporation, runoff, and per-cell aggregation.
+6. **Basins and lakes:** cell-graph hierarchy, discrete water balance, lakes and inland seas, dry sinks; the land-target search with basins included.
+7. **Rivers:** corner drainage tree, river edges and polylines, and river measures. Tune the threshold against play.
+8. **Biomes and surfaces:** biome table, glacier and ice, wetlands.
+9. **Playability measures and gates:** chokepoints, landmass classes, habitability; seed ranking; schema freeze for `world.json` v1.
 
-- Identical pinned inputs produce identical canonical data and checksums.
-- Every spatial stage honors east–west wrap and bounded north/south edges.
-- No extra seam column exists; longitude-shifted render windows stitch correctly.
-- Requested land area equals requested land-cell units multiplied by 100 km² at every sampling resolution.
-- Final dry land area is measured after inland-water classification and is within 1%, or output explicitly reports an unmet target.
-- Resolution changes preserve target area; replay uses the saved resolution.
-- Terrain ice counts as land; ice over water remains water.
-- Surface counts sum to total cells; ice and river overlays do not double-count surfaces.
-- Every basin has a valid hierarchy/outlet or is an explicit closed terminal basin.
-- Drainage is acyclic; accumulated water is conserved within documented numerical tolerance.
-- Standing water has one surface level per connected pool and does not exceed an unprocessed spill level.
-- A dry basin can exist below ocean level without being classified as ocean.
-- Cold arid terrain need not have glaciers; humid basins need not be deserts.
-- Chunk coverage has no overlaps/gaps, layer lengths match dimensions, and references resolve.
-- Full-image crops and equivalent window renders agree, including seam-crossing windows.
-- Saved configuration regenerates without consulting current defaults.
+Fixtures: seam-crossing cells and rivers; rim behavior; short-edge collapse; a nested basin with overflow; a dry basin below sea level; a one-cell lake; a river that must not run along a shore.
 
-Use small hand-built fixtures for seam connectivity, flat drainage, nested basins, overflow, dry basins, and polar boundaries. Use fixed seeds for reproducibility and representative visual inspection. Golden images help detect rendering regressions but do not establish hydrological correctness.
+## Exclusions
 
-Optional human-readable behavior examples can live in paths such as `features/hydrology/preserve_dry_closed_basins.feature` and `features/rendering/render_across_longitude_seam.feature`. The design does not require Cucumber or a particular agent/test workflow.
+No erosion, plate tectonics, axial tilt, seasons, or north–south wrap.
 
-## Implementation order
+No placement of settlements, resources, starting positions, or borders. Those belong to the game. mpg measures potential; it does not place things.
 
-1. **Foundation:** module, CLIs, config/schema validation, area-based sizing, automatic/explicit sampling, units, topology, stable seed derivation. Finish when resolved inputs round-trip and boundary behavior is verified.
-2. **Geography preview:** periodic elevation, ocean selection, measured preliminary physical land area, initial elevation/geography rendering. Finish when seam behavior and attractive continental shapes are inspected across several seeds/aspects.
-3. **Persistent world format:** manifest, chunks, checksums, window reader and renderer. Finish when a saved world renders full or selected windows without regeneration.
-4. **Basin structure:** depression hierarchy, storage curves, routing flats, nested/outlet fixtures. Finish when closed basins survive analysis without terrain replacement.
-5. **Climate:** temperature, rainfall/rain shadows, evaporation and runoff. Finish when poles, altitude cooling, wet coasts, and dry interiors are inspectable as separate layers.
-6. **Water balance and rivers:** wet/dry/seasonal basin outcomes, overflow and river graph, bounded climate coupling. Finish when water conservation and contrasting dry/wet basin fixtures pass, and final-area candidate search achieves the tolerance or explicitly reports failure.
-7. **Cryosphere and biomes:** snow/ice proxy and classification tables. Finish when cold deserts, alpine ice, polar regions, and biome transitions are plausible.
-8. **Usability and scale:** legends, presets, validation messages, memory profiling, deterministic parallelism where useful, regression suite and usage documentation.
+## Open questions
 
-Do not begin with every climate knob or optimized storage codec. Establish appealing periodic terrain and coherent basins first, while preserving schema/version contracts.
-
-## Explicit exclusions and future extensions
-
-No erosion, plate tectonics, axial tilt, seasonal weather simulation, spherical pole traversal, north–south wrap, or mandatory Earth-scale maps. No game movement costs, economic yields, settlements, or political borders in v1.
-
-Possible later work: alternative noise recipes, richer precipitation, glacier tongues, lake salinity refinement, compressed chunks, alternate render styles, and data adapters for other game projects. These remain independent of the agreed exclusions.
-
-## Transition handoff
-
-This document is sufficient to start implementation in `github.com/mdhender/mpg`. No repository has been created or modified by producing this snapshot. First validate the proposed defaults with small prototypes; tune them visibly, record resolved values, and preserve the agreed choices above. The agreed land contract is final dry area: requested land-cell units × 100 km², accepted within 1%. Sampling is a generator concern; aggregation into 10 km game cells belongs to a future export design.
+None at present.
