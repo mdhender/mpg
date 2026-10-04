@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "seed": "42",
+  "province": {
+    "hex_flat_to_flat_mi": 6,
+    "area_km2": 80.74783796582268
+  },
+  "world": {
+    "land_cells": 10000,
+    "land_fraction": 0.3,
+    "aspect": "cinematic",
+    "aspect_ratio": 2.39,
+    "playable_cells": 33333,
+    "playable_area_km2": 2691567.6829147674,
+    "width_km": 2536.3057312095275,
+    "height_km": 1133.103627742564
+  },
+  "rim": {
+    "cells": 4,
+    "km": 35.94392031280343,
+    "falloff_cells": 12,
+    "falloff_km": 107.83176093841028
+  },
+  "raster": {
+    "spacing_km": 2
+  },
+  "volcanic": {
+    "hotspots_per_mkm2": 2
+  },
+  "basin": {
+    "min_depth_m": 50,
+    "inland_sea_min_cells": 20
+  },
+  "river": {
+    "threshold_km2": 500
+  }
+}

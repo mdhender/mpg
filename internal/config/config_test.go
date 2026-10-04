@@ -1,0 +1,336 @@
+// Copyright (c) 2026 Michael D Henderson. All rights reserved.
+
+package config
+
+import (
+	"bytes"
+	"flag"
+	"math"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/mdhender/mpg/internal/topo"
+)
+
+var update = flag.Bool("update", false, "rewrite the golden files in testdata")
+
+// example returns the design's example, N = 10,000 and f = 0.30 at cinematic
+// aspect, resolved with seed 42.
+func example(t *testing.T) Config {
+	t.Helper()
+	c := Default()
+	c.Seed = 42
+	c.World.LandCells = 10_000
+	c.World.LandFraction = 0.30
+	c.World.Aspect = "cinematic"
+	if err := c.Resolve(); err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	return c
+}
+
+func encode(t *testing.T, c Config) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := c.Encode(&buf); err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	return buf.Bytes()
+}
+
+func near(got, want, tol float64) bool { return math.Abs(got-want) <= tol }
+
+func TestDesignExample(t *testing.T) {
+	c := example(t)
+	if !near(c.Province.AreaKm2, 80.75, 0.01) {
+		t.Errorf("area = %v km², want about 80.75", c.Province.AreaKm2)
+	}
+	if c.World.PlayableCells != 33_333 {
+		t.Errorf("playable cells = %d, want 33333", c.World.PlayableCells)
+	}
+	if !near(c.World.PlayableAreaKm2, 2.69e6, 0.01e6) {
+		t.Errorf("playable area = %v km², want about 2.69M", c.World.PlayableAreaKm2)
+	}
+	if !near(c.World.WidthKm, 2540, 10) {
+		t.Errorf("width = %v km, want about 2,540", c.World.WidthKm)
+	}
+	playableHeight := c.World.HeightKm - 2*c.Rim.Km
+	if !near(playableHeight, 1060, 5) {
+		t.Errorf("height before rim = %v km, want about 1,060", playableHeight)
+	}
+	cell := math.Sqrt(c.Province.AreaKm2)
+	if !near(cell, 8.99, 0.01) {
+		t.Errorf("√A = %v km, want about 8.99", cell)
+	}
+	if !near(c.Rim.Km, 4*cell, 1e-9) || !near(c.Rim.FalloffKm, 12*cell, 1e-9) {
+		t.Errorf("rim %v km, falloff %v km; want 4 and 12 × √A", c.Rim.Km, c.Rim.FalloffKm)
+	}
+	if !near(c.World.WidthKm/playableHeight, 2.39, 1e-9) {
+		t.Errorf("aspect = %v, want 2.39", c.World.WidthKm/playableHeight)
+	}
+	if !near(c.World.WidthKm*playableHeight, c.World.PlayableAreaKm2, 1e-6) {
+		t.Errorf("width × playable height = %v, want playable area %v", c.World.WidthKm*playableHeight, c.World.PlayableAreaKm2)
+	}
+
+	// The exact bits are pinned by the golden file.
+	got := encode(t, c)
+	golden := filepath.Join("testdata", "example.json")
+	if *update {
+		if err := os.WriteFile(golden, got, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(golden)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Errorf("encoded example differs from %s:\n%s", golden, got)
+	}
+}
+
+func TestDefaultIsExample(t *testing.T) {
+	c := Default()
+	c.Seed = 42
+	if err := c.Resolve(); err != nil {
+		t.Fatal(err)
+	}
+	if c != example(t) {
+		t.Errorf("Default() resolved = %+v, want the design example", c)
+	}
+}
+
+func TestResolvedSizesPassTopo(t *testing.T) {
+	for _, aspect := range []string{"square", "portrait", "landscape", "widescreen", "cinematic", "4:1", "1:3"} {
+		for _, n := range []int{2_000, 10_000, 60_000} {
+			c := Default()
+			c.World.Aspect = aspect
+			c.World.LandCells = n
+			if err := c.Resolve(); err != nil {
+				t.Errorf("%s, N=%d: %v", aspect, n, err)
+				continue
+			}
+			cyl, err := topo.New(c.World.WidthKm, c.World.HeightKm, c.Rim.Km, c.Rim.FalloffKm)
+			if err != nil {
+				t.Errorf("%s, N=%d: topo.New: %v", aspect, n, err)
+				continue
+			}
+			if cyl.W() != c.World.WidthKm || cyl.H() != c.World.HeightKm {
+				t.Errorf("%s, N=%d: cylinder %v × %v", aspect, n, cyl.W(), cyl.H())
+			}
+		}
+	}
+}
+
+func TestRoundTripFixedPoint(t *testing.T) {
+	first := encode(t, example(t))
+	c, err := Decode(bytes.NewReader(first))
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if err := c.Resolve(); err != nil {
+		t.Fatalf("re-Resolve: %v", err)
+	}
+	second := encode(t, c)
+	if !bytes.Equal(first, second) {
+		t.Errorf("round trip changed the file:\n%s\n---\n%s", first, second)
+	}
+	if c != example(t) {
+		t.Errorf("round trip changed the config")
+	}
+}
+
+func TestPartialFileGetsDefaults(t *testing.T) {
+	c, err := Decode(strings.NewReader(`{"schema": 1, "seed": "42"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c != example(t) {
+		t.Errorf("partial file resolved to %+v", c)
+	}
+}
+
+func TestHash(t *testing.T) {
+	c := example(t)
+	h, err := c.Hash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = "96bbe0771a1f68f3c18a88d9d53d5c31b02c5b15e43fb0f17e016e06c9db220d"
+	if h != want {
+		t.Errorf("Hash = %s, want %s", h, want)
+	}
+	c.Seed = 43
+	if h2, _ := c.Hash(); h2 == h {
+		t.Error("hash ignores the seed")
+	}
+}
+
+func TestEncodeUnresolved(t *testing.T) {
+	c := Default()
+	if err := c.Encode(&bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "not resolved") {
+		t.Errorf("Encode(unresolved) = %v, want a not-resolved error", err)
+	}
+}
+
+func TestDecodeErrors(t *testing.T) {
+	cases := []struct {
+		name, in, want string
+	}{
+		{"misspelled", `{"schema":1,"world":{"land_fracton":0.3}}`, `unknown field "world.land_fracton"; did you mean "world.land_fraction"?`},
+		{"misspelled top", `{"schema":1,"provinces":{}}`, `unknown field "provinces"; did you mean "province"?`},
+		{"unknown far", `{"schema":1,"zzzzzzzzzzzz":1}`, `unknown field "zzzzzzzzzzzz"`},
+		{"duplicate", `{"schema":1,"seed":"1","seed":"2"}`, `duplicate field "seed"`},
+		{"no schema", `{"seed":"1"}`, `missing "schema"`},
+		{"schema 2", `{"schema":2,"newfield":1}`, `schema 2 is not supported`},
+		{"schema 0", `{"schema":0}`, `schema 0 is not supported`},
+		{"schema string", `{"schema":"1"}`, `schema "1" is not supported`},
+		{"trailing", `{"schema":1} {}`, `after top-level value`},
+		{"trailing junk", `{"schema":1} x`, `invalid character`},
+		{"truncated", `{"schema":1,`, `unexpected end`},
+		{"not object", `[1]`, `cannot unmarshal`},
+		{"seed number", `{"schema":1,"seed":42}`, `seed must be a decimal string`},
+		{"seed null", `{"schema":1,"seed":null}`, `seed must be a decimal string`},
+		{"seed negative", `{"schema":1,"seed":"-1"}`, `seed "-1" must be a decimal integer`},
+		{"seed leading zero", `{"schema":1,"seed":"007"}`, `without sign or leading zeros`},
+		{"seed overflow", `{"schema":1,"seed":"18446744073709551616"}`, `must be a decimal integer`},
+		{"wrong type", `{"schema":1,"world":{"land_cells":"x"}}`, `cannot unmarshal string`},
+		{"inconsistent", `{"schema":1,"world":{"land_cells":20000,"width_km":2536.3057312095275}}`, `world.width_km is 2536.3057312095275 but the inputs give`},
+		{"invalid input", `{"schema":1,"world":{"land_fraction":1}}`, `world.land_fraction 1 must be greater than 0 and less than 1`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Decode(strings.NewReader(tc.in))
+			if err == nil {
+				t.Fatalf("Decode(%s) succeeded", tc.in)
+			}
+			if !strings.Contains(err.Error(), tc.want) || !strings.HasPrefix(err.Error(), "config: ") {
+				t.Errorf("Decode(%s) = %q, want it to contain %q", tc.in, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestSeedRoundTrip(t *testing.T) {
+	for _, s := range []Seed{0, 1, 42, math.MaxUint64} {
+		c := example(t)
+		c.Seed = s
+		got, err := Decode(bytes.NewReader(encode(t, c)))
+		if err != nil {
+			t.Fatalf("seed %d: %v", uint64(s), err)
+		}
+		if got.Seed != s {
+			t.Errorf("seed %d round-tripped to %d", uint64(s), uint64(got.Seed))
+		}
+	}
+	c := example(t)
+	c.Seed = math.MaxUint64
+	if b := encode(t, c); !bytes.Contains(b, []byte(`"seed": "18446744073709551615"`)) {
+		t.Errorf("max seed encoded as:\n%s", b)
+	}
+}
+
+func TestParseAspect(t *testing.T) {
+	good := []struct {
+		in   string
+		want float64
+	}{
+		{"square", 1},
+		{"portrait", 2.0 / 3},
+		{"landscape", 1.5},
+		{"widescreen", 16.0 / 9},
+		{"cinematic", 2.39},
+		{"16:9", 16.0 / 9},
+		{"2.39:1", 2.39},
+		{"1:1", 1},
+		{"1:2.5", 0.4},
+		{"1e1:5", 2},
+	}
+	for _, tc := range good {
+		got, err := ParseAspect(tc.in)
+		if err != nil || got != tc.want {
+			t.Errorf("ParseAspect(%q) = %v, %v; want %v", tc.in, got, err, tc.want)
+		}
+	}
+	bad := []string{
+		"", "abc", "Square", " square", "16x9", "1:", ":1", "1:2:3",
+		"0:1", "1:0", "-1:2", "2:-1", "inf:1", "1:Inf", "NaN:1", "1:nan",
+		"1e400:1", "1e300:1e-300", "a:b",
+	}
+	for _, in := range bad {
+		if got, err := ParseAspect(in); err == nil {
+			t.Errorf("ParseAspect(%q) = %v, want an error", in, got)
+		}
+	}
+}
+
+func TestValidate(t *testing.T) {
+	cases := []struct {
+		name string
+		edit func(*Config)
+		want string
+	}{
+		{"f zero", func(c *Config) { c.World.LandFraction = 0 }, "world.land_fraction"},
+		{"f one", func(c *Config) { c.World.LandFraction = 1 }, "world.land_fraction"},
+		{"f negative", func(c *Config) { c.World.LandFraction = -0.3 }, "world.land_fraction"},
+		{"f NaN", func(c *Config) { c.World.LandFraction = math.NaN() }, "world.land_fraction"},
+		{"N zero", func(c *Config) { c.World.LandCells = 0 }, "world.land_cells"},
+		{"N negative", func(c *Config) { c.World.LandCells = -5 }, "world.land_cells"},
+		{"N huge", func(c *Config) { c.World.LandCells = MaxLandCells + 1 }, "world.land_cells"},
+		{"aspect", func(c *Config) { c.World.Aspect = "0:1" }, "world.aspect"},
+		{"hex zero", func(c *Config) { c.Province.HexFlatToFlatMi = 0 }, "province.hex_flat_to_flat_mi"},
+		{"hex inf", func(c *Config) { c.Province.HexFlatToFlatMi = math.Inf(1) }, "province.hex_flat_to_flat_mi"},
+		{"hex NaN", func(c *Config) { c.Province.HexFlatToFlatMi = math.NaN() }, "province.hex_flat_to_flat_mi"},
+		{"spacing zero", func(c *Config) { c.Raster.SpacingKm = 0 }, "raster.spacing_km"},
+		{"spacing negative", func(c *Config) { c.Raster.SpacingKm = -2 }, "raster.spacing_km"},
+		{"spacing inf", func(c *Config) { c.Raster.SpacingKm = math.Inf(1) }, "raster.spacing_km"},
+		{"spacing too coarse", func(c *Config) { c.Raster.SpacingKm = 9 }, "raster.spacing_km 9 must be less than the province side"},
+		{"rim zero", func(c *Config) { c.Rim.Cells = 0 }, "rim.cells"},
+		{"falloff negative", func(c *Config) { c.Rim.FalloffCells = -1 }, "rim.falloff_cells"},
+		{"falloff too wide", func(c *Config) { c.World.LandCells = 30; c.Rim.FalloffCells = 12 }, "falloff bands"},
+		{"hotspots negative", func(c *Config) { c.Volcanic.HotspotsPerMkm2 = -1 }, "volcanic.hotspots_per_mkm2"},
+		{"basin depth NaN", func(c *Config) { c.Basin.MinDepthM = math.NaN() }, "basin.min_depth_m"},
+		{"inland sea 1", func(c *Config) { c.Basin.InlandSeaMinCells = 1 }, "basin.inland_sea_min_cells"},
+		{"river zero", func(c *Config) { c.River.ThresholdKm2 = 0 }, "river.threshold_km2"},
+		{"schema", func(c *Config) { c.Schema = 2 }, "schema 2 is not supported"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := Default()
+			tc.edit(&c)
+			err := c.Resolve()
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Resolve = %v, want an error containing %q", err, tc.want)
+			}
+			if c.Province.AreaKm2 != 0 || c.World.WidthKm != 0 {
+				t.Error("a failed Resolve filled derived fields")
+			}
+		})
+	}
+
+	// Validate reports every problem, not just the first.
+	c := Default()
+	c.World.LandCells = 0
+	c.Raster.SpacingKm = 0
+	err := c.Validate()
+	if err == nil || !strings.Contains(err.Error(), "world.land_cells") || !strings.Contains(err.Error(), "raster.spacing_km") {
+		t.Errorf("Validate = %v, want both errors", err)
+	}
+}
+
+func TestClearDerived(t *testing.T) {
+	c := example(t)
+	c.World.LandCells = 20_000
+	if err := c.Resolve(); err == nil {
+		t.Fatal("changing an input on a resolved config resolved without ClearDerived")
+	}
+	c.ClearDerived()
+	if err := c.Resolve(); err != nil {
+		t.Fatal(err)
+	}
+	if c.World.PlayableCells != 66_667 {
+		t.Errorf("playable cells = %d, want 66667", c.World.PlayableCells)
+	}
+}
