@@ -166,17 +166,18 @@ Volcanoes are possible, not forced: rare, seeded, and sometimes absent.
 
 - **Sites.** Jittered grid or Poisson-disk sites over the full cylinder, including the rim, seeded from `mesh`. Site count = total area / `A`.
 - **Voronoi on a cylinder.** Compute with ghost copies of the sites shifted ±W. Keep only the original sites' cells. North and south are clipped inside the rim, so clipping never affects playable cells.
-- **Lloyd relaxation.** Default 2–3 passes, using wrapped centroids. Then scale so the mean cell area is exactly `A`.
-- **Short-edge collapse.** Any edge shorter than `min_edge_km` is collapsed: its two corners merge into one 4-way corner. Default `min_edge_km` = 0.3 × √A, about 2.7 km.
+- **Lloyd relaxation.** Default 2 passes, using wrapped centroids. The cylinder's size is fixed by the raster, so the mesh is not rescaled: with site count n = round(total area / `A`), the mean cell area W·H/n is within 1/(2n) of `A`. Report the mean area, its deviation from `A`, and the area coefficient of variation.
+- **Short-edge collapse.** Edges shorter than `min_edge_km` (default 0.3 × √A, about 2.7 km) are taken shortest first, with ties broken by edge index; whenever a corner moves, the lengths of its edges are recomputed. A short edge is **collapsed** when that is safe: the merged corner would touch at most 4 cells, and each of the two cells beside the edge keeps at least 4 sides and 3 neighbors. Collapsing merges the edge's two corners into one 4-way corner at the edge's midpoint.
   - The two cells that shared the collapsed edge now touch only at a point, so they are **not neighbors**.
   - Point contact never connects land to land or water to water, so water that touches only at a corner is not connected.
-  - The collapse is deterministic, shortest edge first, with ties broken by edge index.
-- **Degree cap.** Every cell needs a distinct compass direction for each neighbor, so no cell may have more than 8 neighbors. After the short-edge collapse, a cell with 9 or more neighbors has its shortest edge collapsed, repeating until it has 8. Lloyd-relaxed cells have mostly 5–7 neighbors, so this should be rare; report how often it happens.
+  - Otherwise the edge is **stretched**: its ends move apart along the perpendicular bisector of its two cells' sites until it is `min_edge_km` long, and its cells stay neighbors. This happens where two short edges meet, which would otherwise make a 5-way corner, and where a collapse would leave a triangle well under A/2. It affects about 1% of short edges.
+  - The process is deterministic and bounded; corners move at most about half of `min_edge_km`, a little more where moves chain. Report collapses, stretches, and the largest corner shift.
+- **Degree cap.** Every cell needs a distinct compass direction for each neighbor, so no cell may have more than 8 neighbors. After the short-edge collapse, a cell with 9 or more neighbors has its shortest collapsible edge collapsed, repeating until it has 8. Lloyd-relaxed cells have mostly 5–7 neighbors, so this should be rare; report how often it happens.
 - **Mesh checks:**
   - no edge shorter than `min_edge_km`;
   - cell areas within configured bounds (default 0.5A to 1.6A);
-  - neighbor counts within 3–8;
-  - every corner touches 3–4 cells.
+  - neighbor counts within 3–8 for playable cells; rim cells 1–8, since a rim cell against the map edge can have only one or two neighbors straight from the Voronoi diagram;
+  - every corner touches 3–4 cells, or 2–4 on the north and south map edge.
 
 ### Cell statistics and sea level
 

@@ -68,6 +68,10 @@ func areaCentroid(q []topo.Point) (area float64, centroid topo.Point) {
 	return sum / 2, topo.Point{X: cx / (3 * sum), Y: cy / (3 * sum)}
 }
 
+// InRim reports whether cell c's site lies in the rim band (topo
+// Cylinder.InRim of its y). It stands in for the rim flag, which comes later.
+func (m *Mesh) InRim(c int) bool { return m.cyl.InRim(m.Cells[c].Site.Y) }
+
 // EdgeLength returns edge e's length in km, across the seam if it spans it.
 func (m *Mesh) EdgeLength(e int) float64 {
 	c := m.Edges[e].Corners

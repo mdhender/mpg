@@ -19,7 +19,7 @@ const Stage = "mesh"
 // Version is the mesh algorithm version, the version argument to the "mesh"
 // seed stream. Any change to the bits of the sites or the graph built from
 // them takes a new version.
-const Version = "mesh/2"
+const Version = "mesh/3"
 
 // SiteCount returns the number of sites for a cylinder of the given size and
 // province area A: round(W·H / A), the full cylinder, rim included, over A,

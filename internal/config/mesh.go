@@ -19,8 +19,8 @@ type Mesh struct {
 	// (DESIGN.md: 2–3).
 	LloydPasses int `json:"lloyd_passes"`
 	// MinEdgeFraction, in [0, 1), is the shortest edge kept, as a fraction
-	// of the province side √A; shorter edges are collapsed. 0 disables the
-	// collapse.
+	// of the province side √A; shorter edges are collapsed, or stretched
+	// to it where a collapse is unsafe. 0 disables the collapse.
 	MinEdgeFraction float64 `json:"min_edge_fraction"`
 	// MinEdgeKm is MinEdgeFraction × √A (derived; DESIGN.md: min_edge_km).
 	MinEdgeKm float64 `json:"min_edge_km"`

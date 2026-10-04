@@ -212,9 +212,10 @@ func TestRealMeshes(t *testing.T) {
 	}
 }
 
-// TestBruteForce checks a small real mesh against the Voronoi definition.
+// TestBruteForce checks a small real mesh, before the collapse, against the
+// Voronoi definition.
 func TestBruteForce(t *testing.T) {
-	m := build(t, resolved(t, 5, "cinematic", 300))
+	m := voronoiOf(t, resolved(t, 5, "cinematic", 300))
 	checkMesh(t, m)
 	checkVoronoi(t, m, 1e-6)
 }

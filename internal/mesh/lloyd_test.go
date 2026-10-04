@@ -104,15 +104,18 @@ func TestLloydPasses(t *testing.T) {
 	if slices.Equal(one, sites) {
 		t.Error("a pass did not move the sites")
 	}
-	// New applies the configured passes.
+	// New applies the configured passes, then the collapse.
 	m, err := Build(cyl, two)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if m, err = Collapse(m, c.Mesh.MinEdgeKm, c.Mesh.DegreeCap); err != nil {
 		t.Fatal(err)
 	}
 	a, _ := m.AppendBinary(nil)
 	b, _ := build(t, c).AppendBinary(nil)
 	if c.Mesh.LloydPasses != 2 || !slices.Equal(a, b) {
-		t.Errorf("New (lloyd_passes %d) differs from Build after 2 passes", c.Mesh.LloydPasses)
+		t.Errorf("New (lloyd_passes %d) differs from Collapse(Build) after 2 passes", c.Mesh.LloydPasses)
 	}
 }
 

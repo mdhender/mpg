@@ -92,17 +92,25 @@ type Mesh struct {
 	// each Lloyd pass New ran: LloydCV[0] is the unrelaxed sites'. The
 	// mesh's own CV is in Stats. It is a diagnostic, not part of the graph.
 	LloydCV []float64
+
+	// Collapses, Stretches, and DegreeCapHits count what Collapse did:
+	// short edges collapsed into 4-way corners (the degree cap's
+	// included), short edges stretched to the minimum instead, and
+	// collapses made by the degree cap. MaxShiftKm is the farthest any
+	// Voronoi corner moved, and Stretched lists the stretched edges,
+	// ascending. They are diagnostics, not part of the graph.
+	Collapses, Stretches, DegreeCapHits int
+	MaxShiftKm                          float64
+	Stretched                           []int
 }
 
 // Cylinder returns the cylinder the mesh lies on.
 func (m *Mesh) Cylinder() topo.Cylinder { return m.cyl }
 
 // New builds cfg's mesh: the sites from the "mesh" seed stream, relaxed by
-// cfg.Mesh.LloydPasses Lloyd passes, and the cylinder Voronoi graph over
-// them. cfg must be resolved.
-//
-// The short-edge collapse and the degree cap are later steps; New does not
-// apply them yet.
+// cfg.Mesh.LloydPasses Lloyd passes, the cylinder Voronoi graph over them,
+// and the short-edge collapse and degree cap (Collapse) at
+// cfg.Mesh.MinEdgeKm and cfg.Mesh.DegreeCap. cfg must be resolved.
 func New(cfg config.Config) (*Mesh, error) {
 	cyl, err := topo.New(cfg.World.WidthKm, cfg.World.HeightKm, cfg.Rim.Km, cfg.Rim.FalloffKm)
 	if err != nil {
@@ -121,5 +129,5 @@ func New(cfg config.Config) (*Mesh, error) {
 		return nil, err
 	}
 	m.LloydCV = cv
-	return m, nil
+	return Collapse(m, cfg.Mesh.MinEdgeKm, cfg.Mesh.DegreeCap)
 }

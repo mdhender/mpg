@@ -5,6 +5,7 @@ package mesh
 import (
 	"image"
 	"image/color"
+	"image/draw"
 	"math"
 
 	"github.com/mdhender/mpg/internal/field"
@@ -56,23 +57,68 @@ func StageRender(base *image.RGBA, f *field.Field, m *Mesh) *image.RGBA {
 func drawOutlines(img *image.RGBA, m *Mesh, sx, sy float64, ink color.RGBA) {
 	px := func(p topo.Point) render.Pt { return render.Pt{X: fmath.Mul(p.X, sx), Y: fmath.Mul(p.Y, sy)} }
 	w := m.cyl.W()
-	wpx := w * sx
 	for _, y := range []float64{m.cyl.Rim(), m.cyl.H() - m.cyl.Rim()} {
 		render.Line(img, px(topo.Point{X: 0, Y: y}), px(topo.Point{X: w, Y: y}), 1, rimInk)
 	}
-	for _, e := range m.Edges {
-		a := m.Corners[e.Corners[0]].Point
-		dx, dy := m.cyl.Delta(a, m.Corners[e.Corners[1]].Point)
-		pa, pb := px(a), px(topo.Point{X: a.X + dx, Y: a.Y + dy})
-		render.Line(img, pa, pb, 1, ink)
-		if bx := a.X + dx; bx < 0 || bx >= w { // the edge crosses the seam
-			shift := wpx
-			if bx >= w {
-				shift = -wpx
-			}
-			render.Line(img, render.Pt{X: pa.X + shift, Y: pa.Y}, render.Pt{X: pb.X + shift, Y: pb.Y}, 1, ink)
+	for e := range m.Edges {
+		drawEdge(img, m, e, sx, sy, 1, ink)
+	}
+}
+
+// drawEdge draws edge e on img in ink, width pixels wide, at sx and sy
+// pixels per km; an edge that crosses the seam is drawn on both sides.
+func drawEdge(img *image.RGBA, m *Mesh, e int, sx, sy, width float64, ink color.RGBA) {
+	px := func(p topo.Point) render.Pt { return render.Pt{X: fmath.Mul(p.X, sx), Y: fmath.Mul(p.Y, sy)} }
+	w := m.cyl.W()
+	edge := m.Edges[e]
+	a := m.Corners[edge.Corners[0]].Point
+	dx, dy := m.cyl.Delta(a, m.Corners[edge.Corners[1]].Point)
+	pa, pb := px(a), px(topo.Point{X: a.X + dx, Y: a.Y + dy})
+	render.Line(img, pa, pb, width, ink)
+	if bx := a.X + dx; bx < 0 || bx >= w { // the edge crosses the seam
+		shift := w * sx
+		if bx >= w {
+			shift = -shift
+		}
+		render.Line(img, render.Pt{X: pa.X + shift, Y: pa.Y}, render.Pt{X: pb.X + shift, Y: pb.Y}, width, ink)
+	}
+}
+
+// Short-edge render inks.
+var (
+	shortBase    = color.RGBA{R: 0xf4, G: 0xf1, B: 0xea, A: 0xff}
+	shortOutline = color.RGBA{R: 0x9a, G: 0x9a, B: 0x9a, A: 0xff}
+	stretchInk   = color.RGBA{R: 0xd0, G: 0x10, B: 0x10, A: 0xff}
+	fourWayInk   = color.RGBA{R: 0x10, G: 0x50, B: 0xc0, A: 0xff}
+)
+
+// ShortRender draws the mesh stage's short-edge render at StageRender's
+// size: thin gray outlines on a plain ground, with what the short-edge
+// collapse did marked on them: each corner off the rim boundary that
+// touches four cells (a collapsed edge, or a degree-cap collapse) as a blue
+// dot, and each stretched edge in red with a red disc at its midpoint, so
+// the rare stretches stand out at sheet scale. It also draws the rim's
+// inner edges.
+func ShortRender(f *field.Field, m *Mesh) *image.RGBA {
+	s := RenderScale(f, m)
+	img := image.NewRGBA(image.Rect(0, 0, f.NX()*s, f.NY()*s))
+	draw.Draw(img, img.Rect, image.NewUniform(shortBase), image.Point{}, draw.Src)
+	sx, sy := float64(s)/f.PitchX(), float64(s)/f.PitchY()
+	px := func(p topo.Point) render.Pt { return render.Pt{X: fmath.Mul(p.X, sx), Y: fmath.Mul(p.Y, sy)} }
+	drawOutlines(img, m, sx, sy, shortOutline)
+	dot := max(1, float64(s)/2)
+	for _, k := range m.Corners {
+		if !k.Boundary && len(k.Cells) == 4 {
+			render.Disc(img, px(k.Point), dot, fourWayInk)
 		}
 	}
+	for _, e := range m.Stretched {
+		drawEdge(img, m, e, sx, sy, max(2, float64(s)/3), stretchInk)
+		a, b := m.Corners[m.Edges[e].Corners[0]].Point, m.Corners[m.Edges[e].Corners[1]].Point
+		dx, dy := m.cyl.Delta(a, b)
+		render.Disc(img, px(topo.Point{X: m.cyl.WrapX(a.X + fmath.Mul(dx, 0.5)), Y: a.Y + fmath.Mul(dy, 0.5)}), 2*dot+1, stretchInk)
+	}
+	return img
 }
 
 // areaRamp colors a cell by its area as a multiple of A: blue below,

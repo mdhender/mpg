@@ -42,6 +42,27 @@ func build(t testing.TB, c config.Config) *Mesh {
 	return m
 }
 
+// voronoiOf returns c's mesh before the collapse: the Voronoi graph of its
+// relaxed sites, as New builds it before calling Collapse.
+func voronoiOf(t testing.TB, c config.Config) *Mesh {
+	t.Helper()
+	cyl := cylinderOf(t, c)
+	sites, err := Sites(c, cyl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	relaxed, cv, err := Lloyd(cyl, sites, c.Mesh.LloydPasses)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := Build(cyl, relaxed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.LloydCV = cv
+	return m
+}
+
 // cylinder returns topo.New's cylinder, failing the test on an error.
 func cylinder(t testing.TB, w, h, rim float64) topo.Cylinder {
 	t.Helper()

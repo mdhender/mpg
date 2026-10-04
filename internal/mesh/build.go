@@ -232,17 +232,35 @@ func assemble(cyl topo.Cylinder, sites []topo.Point, rings [][]seg) (*Mesh, erro
 
 	cornerOf, corners := mergeCorners(cyl, pts)
 
+	polys := make([][]int, len(rings))
+	across := make([][]int, len(rings))
+	for i, ring := range rings {
+		polys[i] = make([]int, len(ring))
+		across[i] = make([]int, len(ring))
+		for k, sg := range ring {
+			polys[i][k] = cornerOf[first[i]+k]
+			across[i][k] = sg.Across
+		}
+	}
+	return graph(cyl, sites, corners, polys, across)
+}
+
+// graph builds and checks the mesh of cells whose polygons, clockwise, are
+// polys[i] in corner ids, with across[i][k] the cell (or Boundary) across
+// the side from polys[i][k] to polys[i][k+1]. The corners must be numbered
+// canonically and have no Cells or Edges yet. A side whose two ends are the
+// same corner is dropped.
+func graph(cyl topo.Cylinder, sites []topo.Point, corners []Corner, polys, acrossIn [][]int) (*Mesh, error) {
 	m := &Mesh{cyl: cyl, Cells: make([]Cell, len(sites)), Corners: corners}
 	var hes []halfEdge
 	acrossOf := make([][]int, len(sites))
-	for i, ring := range rings {
+	for i, poly := range polys {
 		var ids, across []int
-		for k, sg := range ring {
-			c := cornerOf[first[i]+k]
-			next := cornerOf[first[i]+(k+1)%len(ring)]
+		for k, c := range poly {
+			next := poly[(k+1)%len(poly)]
 			if c != next { // a side shorter than MergeKm is dropped
 				ids = append(ids, c)
-				across = append(across, sg.Across)
+				across = append(across, acrossIn[i][k])
 			}
 		}
 		if len(ids) < 3 {

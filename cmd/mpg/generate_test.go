@@ -233,7 +233,7 @@ func TestGenerateRendersDir(t *testing.T) {
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	if !slices.Equal(names, []string{"02-layout.png", "03-elevation.png", "04-mesh-area.png", "04-mesh.png"}) {
-		t.Errorf("renders = %q, want the layout, elevation, mesh area and mesh renders", names)
+	if !slices.Equal(names, []string{"02-layout.png", "03-elevation.png", "04-mesh-area.png", "04-mesh-short.png", "04-mesh.png"}) {
+		t.Errorf("renders = %q, want the layout, elevation, mesh area, mesh short-edge and mesh renders", names)
 	}
 }
