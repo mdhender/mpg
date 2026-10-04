@@ -15,6 +15,7 @@ import (
 	"github.com/mdhender/mpg/internal/config"
 	"github.com/mdhender/mpg/internal/elevation"
 	"github.com/mdhender/mpg/internal/layout"
+	"github.com/mdhender/mpg/internal/mesh"
 	"github.com/mdhender/mpg/internal/render"
 	"github.com/mdhender/mpg/internal/seed"
 )
@@ -208,8 +209,8 @@ func TestConfigStage(t *testing.T) {
 
 	// The full registry stops at the first unimplemented stage.
 	res, err = Run(newTestContext(t, false), Stages(), -1)
-	if err != nil || res.NotImplemented == nil || res.NotImplemented.Name != "mesh" {
-		t.Errorf("full run = %+v, %v; want a stop at mesh", res, err)
+	if err != nil || res.NotImplemented == nil || res.NotImplemented.Name != "cells" {
+		t.Errorf("full run = %+v, %v; want a stop at cells", res, err)
 	}
 }
 
@@ -353,6 +354,41 @@ func TestElevationStage(t *testing.T) {
 		t.Errorf("renders %q, want the layout and elevation renders", variants)
 	}
 	if _, err := os.Stat(filepath.Join(c.RendersDir, "03-elevation.png")); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestMeshStage(t *testing.T) {
+	c := newTestContext(t, true)
+	var variants []string
+	c.Sink = func(st Stage, variant string, img image.Image) error {
+		variants = append(variants, st.String()+"/"+variant)
+		return nil
+	}
+	res, err := Run(c, Stages(), 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh"}) {
+		t.Errorf("ran %q", names(res.Ran))
+	}
+	m := c.Products.Mesh
+	if m == nil {
+		t.Fatal("mesh stage left its product empty")
+	}
+	want, err := mesh.New(c.Config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := m.AppendBinary(nil)
+	b, _ := want.AppendBinary(nil)
+	if !bytes.Equal(a, b) {
+		t.Error("stage product differs from mesh.New")
+	}
+	if !slices.Equal(variants, []string{"2 layout/", "3 elevation/", "4 mesh/"}) {
+		t.Errorf("renders %q, want the layout, elevation and mesh renders", variants)
+	}
+	if _, err := os.Stat(filepath.Join(c.RendersDir, "04-mesh.png")); err != nil {
 		t.Error(err)
 	}
 }

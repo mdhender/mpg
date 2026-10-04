@@ -160,6 +160,16 @@
     "swell_m": 300,
     "swell_radius_km": 100
   },
+  "mesh": {
+    "placement": "jittered-grid",
+    "jitter": 0.8,
+    "lloyd_passes": 2,
+    "min_edge_fraction": 0.3,
+    "min_edge_km": 2.695794023460257,
+    "area_min": 0.5,
+    "area_max": 1.6,
+    "degree_cap": 8
+  },
   "basin": {
     "min_depth_m": 50,
     "inland_sea_min_cells": 20

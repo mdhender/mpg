@@ -82,6 +82,16 @@
 // km and heights meters (DESIGN.md: "rules about the ground use physical
 // units"). See package elevation for the formula.
 //
+// # Mesh
+//
+// The mesh group sets the province mesh: the site placement (a jittered
+// grid, with its jitter as a fraction of the grid box), the Lloyd passes,
+// the short-edge collapse threshold, the cell-area bounds of the mesh checks
+// (as multiples of A), and the degree cap. The collapse threshold is
+// configured as a fraction of √A, like the rim widths, and converted to km:
+// mesh.min_edge_km = mesh.min_edge_fraction × √A (derived), about 2.7 km at
+// the default 0.3. See package mesh.
+//
 // # Versioning
 //
 // The file carries "schema": 1. A file without a schema, or with another

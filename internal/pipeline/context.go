@@ -16,6 +16,7 @@ import (
 	"github.com/mdhender/mpg/internal/elevation"
 	"github.com/mdhender/mpg/internal/field"
 	"github.com/mdhender/mpg/internal/layout"
+	"github.com/mdhender/mpg/internal/mesh"
 	"github.com/mdhender/mpg/internal/render"
 	"github.com/mdhender/mpg/internal/seed"
 )
@@ -60,6 +61,8 @@ type Products struct {
 	// empty when the world has none. Classification flags the volcano cell
 	// and the volcanic highlands from it.
 	Hotspots []elevation.Hotspot
+	// Mesh is the mesh stage's province graph.
+	Mesh *mesh.Mesh
 }
 
 // NewContext resolves cfg and returns a context for a run writing to

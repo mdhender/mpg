@@ -75,6 +75,10 @@ func TestDesignExample(t *testing.T) {
 		t.Errorf("width × playable height = %v, want playable area %v", c.World.WidthKm*playableHeight, c.World.PlayableAreaKm2)
 	}
 
+	if !near(c.Mesh.MinEdgeKm, 0.3*cell, 1e-12) || !near(c.Mesh.MinEdgeKm, 2.7, 0.01) {
+		t.Errorf("mesh.min_edge_km = %v, want 0.3 × √A, about 2.7", c.Mesh.MinEdgeKm)
+	}
+
 	// The exact bits are pinned by the golden file.
 	got := encode(t, c)
 	golden := filepath.Join("testdata", "example.json")
@@ -159,7 +163,7 @@ func TestHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = "fe27008c1905a6b36800e1a4350adc5a13c2b2b3ae6124a5c68800ac1059ba87"
+	const want = "805f2cc704ea4c005fb4d9cae2be8f3b6c43b73946cc69bed3225372b289dc8c"
 	if h != want {
 		t.Errorf("Hash = %s, want %s", h, want)
 	}
@@ -201,6 +205,12 @@ func TestDecodeErrors(t *testing.T) {
 		{"inconsistent", `{"schema":1,"world":{"land_cells":20000,"width_km":2536.3057312095275}}`, `world.width_km is 2536.3057312095275 but the inputs give`},
 		{"invalid input", `{"schema":1,"world":{"land_fraction":1}}`, `world.land_fraction 1 must be greater than 0 and less than 1`},
 		{"misspelled layout", `{"schema":1,"layout":{"islands":{"lobes_mx":2}}}`, `unknown field "layout.islands.lobes_mx"; did you mean "layout.islands.lobes_max"?`},
+		{"mesh jitter", `{"schema":1,"mesh":{"jitter":1}}`, `mesh.jitter 1 must be in [0, 1)`},
+		{"mesh degree cap", `{"schema":1,"mesh":{"degree_cap":9}}`, `mesh.degree_cap 9 must be in [3, 8]`},
+		{"mesh placement", `{"schema":1,"mesh":{"placement":"poisson"}}`, `mesh.placement "poisson" must be "jittered-grid"`},
+		{"mesh area bounds", `{"schema":1,"mesh":{"area_min":0,"area_max":0.9}}`, `mesh.area_max 0.9 must be in [1, 10]`},
+		{"mesh lloyd", `{"schema":1,"mesh":{"lloyd_passes":-1}}`, `mesh.lloyd_passes -1 must be in [0, 10]`},
+		{"mesh min edge derived", `{"schema":1,"mesh":{"min_edge_km":2.7}}`, `mesh.min_edge_km is 2.7 but the inputs give`},
 		{"unknown custom field", `{"schema":1,"layout":{"custom":{"attractors":[{"x_km":1,"radius_kn":5}]}}}`, `unknown field "layout.custom.attractors[0].radius_kn"; did you mean "layout.custom.attractors[0].radius_km"?`},
 	}
 	for _, tc := range cases {

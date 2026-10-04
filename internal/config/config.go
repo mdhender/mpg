@@ -36,6 +36,7 @@ type Config struct {
 	Layout    Layout    `json:"layout"`
 	Elevation Elevation `json:"elevation"`
 	Volcanic  Volcanic  `json:"volcanic"`
+	Mesh      Mesh      `json:"mesh"`
 	Basin     Basin     `json:"basin"`
 	River     River     `json:"river"`
 }
@@ -188,6 +189,7 @@ func Default() Config {
 		Layout:    DefaultLayout(),
 		Elevation: DefaultElevation(),
 		Volcanic:  DefaultVolcanic(),
+		Mesh:      DefaultMesh(),
 		Basin:     Basin{MinDepthM: 50, InlandSeaMinCells: 20},
 		River:     River{ThresholdKm2: 500},
 	}
@@ -204,6 +206,7 @@ func (c *Config) ClearDerived() {
 	c.World.HeightKm = 0
 	c.Rim.Km = 0
 	c.Rim.FalloffKm = 0
+	c.Mesh.MinEdgeKm = 0
 }
 
 // Validate checks the inputs (not the derived fields) and returns every
@@ -240,6 +243,7 @@ func (c *Config) Validate() error {
 	c.Layout.validate(bad)
 	c.Elevation.validate(bad)
 	c.Volcanic.validate(bad)
+	c.Mesh.validate(bad)
 	if v := c.Basin.MinDepthM; !nonNegative(v) {
 		bad("basin.min_depth_m %v must be non-negative and finite", v)
 	}
@@ -277,6 +281,7 @@ func (c *Config) Resolve() error {
 	check("world.height_km", c.World.HeightKm, d.World.HeightKm)
 	check("rim.km", c.Rim.Km, d.Rim.Km)
 	check("rim.falloff_km", c.Rim.FalloffKm, d.Rim.FalloffKm)
+	check("mesh.min_edge_km", c.Mesh.MinEdgeKm, d.Mesh.MinEdgeKm)
 	if err := errors.Join(errs...); err != nil {
 		return err
 	}
@@ -311,6 +316,7 @@ func (c *Config) derive() (Config, error) {
 	d.World.HeightKm = playableHeight + fmath.Mul(2, rimKm)
 	d.Rim.Km = rimKm
 	d.Rim.FalloffKm = falloffKm
+	d.Mesh.MinEdgeKm = fmath.Mul(c.Mesh.MinEdgeFraction, cellKm)
 
 	for _, f := range []struct {
 		name string

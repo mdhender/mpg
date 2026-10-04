@@ -84,13 +84,13 @@ func TestParseSweepStages(t *testing.T) {
 		t.Errorf("unknown-stage error %q does not list the stages", err)
 	}
 
-	// Config, layout and elevation are implemented; mesh is not, nor is
-	// anything after it.
+	// Config, layout, elevation and mesh are implemented; cells is not, nor
+	// is anything after it.
 	for _, tc := range []struct {
 		in   string
 		last int
 		ok   bool
-	}{{"config", 0, true}, {"layout,config", 1, true}, {"config,elevation", 2, true}, {"elevation,mesh", -1, false}, {"cells", -1, false}} {
+	}{{"config", 0, true}, {"layout,config", 1, true}, {"config,elevation", 2, true}, {"elevation,mesh", 3, true}, {"mesh,cells", -1, false}, {"cells", -1, false}} {
 		cols, err := parseSweepStages(tc.in, registry)
 		if err != nil {
 			t.Fatal(err)
@@ -117,7 +117,7 @@ func TestSweepErrors(t *testing.T) {
 		{[]string{"--seeds", "1", "--stage", "layout", "--tile", "8", "--output", out}, 2, "--tile"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--aspect", "square,", "--output", out}, 2, "--aspect"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--output", out, "extra"}, 2, "unexpected"},
-		{[]string{"--seeds", "1", "--stage", "elevation,mesh", "--output", out}, 1, "stage 4 mesh is not implemented"},
+		{[]string{"--seeds", "1", "--stage", "elevation,cells", "--output", out}, 1, "stage 5 cells is not implemented"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--aspect", "squarish", "--output", out}, 1, "world.aspect"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--config", "no-such-file.json", "--output", out}, 1, "no-such-file"},
 	} {
