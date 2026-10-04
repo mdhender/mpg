@@ -107,10 +107,10 @@ func TestGoldenMesh(t *testing.T) {
 		aspect string
 		want   string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "7bb320c7698b2837bbb53bafb56434932c1f63e116a77c70c1dd4e08509e02e5"},
-		{"seed42-square", 42, "square", "2d856dfbeec7e8c2ea73e263eb14bf9d1e6af01c9e04eccb96a01509a2ea3203"},
-		{"seed7-cinematic", 7, "cinematic", "466a12a5cb30d8c786d8204f26946ce7858266002b908ae54ee50127d0bcd0e1"},
-		{"seed7-portrait", 7, "portrait", "e478a0e3c267ae6b58ab903a2436e899907a5d71dc5767b5edceaeeceeb7ff81"},
+		{"seed42-cinematic", 42, "cinematic", "540428d067e1139ed388d206d710b1e14ba66157f60740bd747341c18c8d21da"},
+		{"seed42-square", 42, "square", "1f1548c06035634812ea147ca565b6e1ce1291af5d3a5477fc70846552de45ee"},
+		{"seed7-cinematic", 7, "cinematic", "c1d5682c00a2a7268923b14e0abeaa71319eac95a21734af1ffa1192469f4136"},
+		{"seed7-portrait", 7, "portrait", "cc6008751b0152e1a9d4938f95bad7a21fa0929413ade329a1619dcca4c41068"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

@@ -385,8 +385,8 @@ func TestMeshStage(t *testing.T) {
 	if !bytes.Equal(a, b) {
 		t.Error("stage product differs from mesh.New")
 	}
-	if !slices.Equal(variants, []string{"2 layout/", "3 elevation/", "4 mesh/"}) {
-		t.Errorf("renders %q, want the layout, elevation and mesh renders", variants)
+	if !slices.Equal(variants, []string{"2 layout/", "3 elevation/", "4 mesh/", "4 mesh/area"}) {
+		t.Errorf("renders %q, want the layout, elevation, mesh and mesh area renders", variants)
 	}
 	if _, err := os.Stat(filepath.Join(c.RendersDir, "04-mesh.png")); err != nil {
 		t.Error(err)

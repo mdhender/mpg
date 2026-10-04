@@ -4,8 +4,6 @@ package mesh
 
 import (
 	"math"
-
-	"github.com/mdhender/mpg/internal/fmath"
 )
 
 // Stats summarizes a mesh for logs and tuning. The mesh checks proper
@@ -24,27 +22,32 @@ type Stats struct {
 	// AreaMean is the mean cell area in km², and AreaCV the coefficient of
 	// variation of the cell areas; AreaMin and AreaMax bound them.
 	AreaMean, AreaCV, AreaMin, AreaMax float64
+	// AreaDev is AreaMean's relative deviation from the province area A
+	// passed to Stats, AreaMean/A − 1, and AreaMinA and AreaMaxA are
+	// AreaMin and AreaMax as multiples of A. The cells tile the fixed
+	// W × H cylinder, so AreaMean is W·H/n, and with n = round(W·H/A) the
+	// deviation is at most about 1/(2n).
+	AreaDev, AreaMinA, AreaMaxA float64
 	// EdgeMin is the shortest edge in km, and ShortEdges counts the edges
 	// shorter than the threshold passed to Stats.
 	EdgeMin    float64
 	ShortEdges int
 }
 
-// Stats returns m's summary, counting edges shorter than shortKm.
-func (m *Mesh) Stats(shortKm float64) Stats {
+// Stats returns m's summary for province area areaKm2 (A), counting edges
+// shorter than shortKm.
+func (m *Mesh) Stats(areaKm2, shortKm float64) Stats {
 	s := Stats{
 		Cells: len(m.Cells), Corners: len(m.Corners), Edges: len(m.Edges),
 		NeighborMin: math.MaxInt, AreaMin: math.Inf(1), AreaMax: math.Inf(-1), EdgeMin: math.Inf(1),
 	}
 	areas := make([]float64, len(m.Cells))
-	var sum float64
 	for i, c := range m.Cells {
 		n := len(c.Neighbors)
 		s.NeighborMin, s.NeighborMax = min(s.NeighborMin, n), max(s.NeighborMax, n)
 		s.Neighbors[min(n, len(s.Neighbors)-1)]++
 		a := m.Area(i)
 		areas[i] = a
-		sum += a
 		s.AreaMin, s.AreaMax = min(s.AreaMin, a), max(s.AreaMax, a)
 		for _, p := range m.Polygon(i) {
 			if p.X < 0 || p.X >= m.cyl.W() {
@@ -54,13 +57,9 @@ func (m *Mesh) Stats(shortKm float64) Stats {
 		}
 	}
 	if len(areas) > 0 {
-		s.AreaMean = sum / float64(len(areas))
-		var ss float64
-		for _, a := range areas {
-			d := a - s.AreaMean
-			ss += fmath.Mul(d, d)
-		}
-		s.AreaCV = math.Sqrt(ss/float64(len(areas))) / s.AreaMean
+		s.AreaMean, s.AreaCV = meanCV(areas)
+		s.AreaDev = s.AreaMean/areaKm2 - 1
+		s.AreaMinA, s.AreaMaxA = s.AreaMin/areaKm2, s.AreaMax/areaKm2
 	}
 	for e := range m.Edges {
 		if m.Edges[e].OnBoundary() {

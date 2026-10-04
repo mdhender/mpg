@@ -87,16 +87,22 @@ type Mesh struct {
 	// the package documentation). It is a diagnostic, not part of the
 	// graph.
 	GhostMarginKm float64
+
+	// LloydCV holds the coefficient of variation of the cell areas before
+	// each Lloyd pass New ran: LloydCV[0] is the unrelaxed sites'. The
+	// mesh's own CV is in Stats. It is a diagnostic, not part of the graph.
+	LloydCV []float64
 }
 
 // Cylinder returns the cylinder the mesh lies on.
 func (m *Mesh) Cylinder() topo.Cylinder { return m.cyl }
 
-// New builds cfg's mesh: the sites from the "mesh" seed stream and the
-// cylinder Voronoi graph over them. cfg must be resolved.
+// New builds cfg's mesh: the sites from the "mesh" seed stream, relaxed by
+// cfg.Mesh.LloydPasses Lloyd passes, and the cylinder Voronoi graph over
+// them. cfg must be resolved.
 //
-// Lloyd relaxation, the short-edge collapse, and the degree cap are later
-// steps; New does not apply them yet.
+// The short-edge collapse and the degree cap are later steps; New does not
+// apply them yet.
 func New(cfg config.Config) (*Mesh, error) {
 	cyl, err := topo.New(cfg.World.WidthKm, cfg.World.HeightKm, cfg.Rim.Km, cfg.Rim.FalloffKm)
 	if err != nil {
@@ -106,5 +112,14 @@ func New(cfg config.Config) (*Mesh, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Build(cyl, sites)
+	relaxed, cv, err := Lloyd(cyl, sites, cfg.Mesh.LloydPasses)
+	if err != nil {
+		return nil, err
+	}
+	m, err := Build(cyl, relaxed)
+	if err != nil {
+		return nil, err
+	}
+	m.LloydCV = cv
+	return m, nil
 }

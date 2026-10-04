@@ -32,26 +32,38 @@ const ghostMarginCells = 4
 // few cells around), and when the sweep's output is inconsistent, which the
 // checks here turn into an error rather than a bad graph.
 func Build(cyl topo.Cylinder, sites []topo.Point) (*Mesh, error) {
-	if err := checkSites(cyl, sites); err != nil {
+	rings, margin, err := cellRings(cyl, sites)
+	if err != nil {
 		return nil, err
 	}
+	m, err := assemble(cyl, sites, rings)
+	if err != nil {
+		return nil, err
+	}
+	m.GhostMarginKm = margin
+	return m, nil
+}
+
+// cellRings checks the sites and returns each site's swept polygon,
+// clockwise and unwrapped about the site, with the ghost band that proved
+// them exact: the sweep run with a band widened until it is (see the
+// package documentation).
+func cellRings(cyl topo.Cylinder, sites []topo.Point) (rings [][]seg, margin float64, err error) {
+	if err := checkSites(cyl, sites); err != nil {
+		return nil, 0, err
+	}
 	w := cyl.W()
-	margin := min(ghostMarginCells*math.Sqrt(w*cyl.H()/float64(len(sites))), w)
+	margin = min(ghostMarginCells*math.Sqrt(w*cyl.H()/float64(len(sites))), w)
 	for {
 		rings, ok, err := sweep(cyl, sites, margin)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		if ok {
-			m, err := assemble(cyl, sites, rings)
-			if err != nil {
-				return nil, err
-			}
-			m.GhostMarginKm = margin
-			return m, nil
+			return rings, margin, nil
 		}
 		if margin == w {
-			return nil, fmt.Errorf("mesh: a cell is too wide for the cylinder (%v km around, %d sites); use more sites", w, len(sites))
+			return nil, 0, fmt.Errorf("mesh: a cell is too wide for the cylinder (%v km around, %d sites); use more sites", w, len(sites))
 		}
 		margin = min(2*margin, w)
 	}

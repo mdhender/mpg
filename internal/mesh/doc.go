@@ -2,9 +2,9 @@
 
 // Package mesh builds the province mesh (DESIGN.md, "Mesh"; pipeline stage
 // 4): the Voronoi diagram of sites on the cylinder, as a graph of cells,
-// corners, and edges with stable ids and wrap-aware geometry. Lloyd
-// relaxation, the short-edge collapse, the degree cap, rim flags, and the
-// mesh checks are later steps; they rebuild the graph from sites with Build.
+// corners, and edges with stable ids and wrap-aware geometry, over sites
+// relaxed by Lloyd's algorithm. The short-edge collapse, the degree cap,
+// rim flags, and the mesh checks are later steps.
 //
 // # Sites
 //
@@ -12,6 +12,30 @@
 // jittered grid of near-square boxes about √A on a side (see JitteredGrid),
 // drawn from the "mesh" seed stream at algorithm version Version. Site i is
 // the site of cell i.
+//
+// # Lloyd relaxation
+//
+// New relaxes the sites with cfg.Mesh.LloydPasses passes of Lloyd's
+// algorithm (Lloyd) before it builds the graph. Each pass sweeps the
+// cylinder Voronoi diagram of the current sites (the same sweep and ghost
+// band certificate as Build, without assembling the graph) and moves every
+// site, rim sites included, to its cell's wrapped centroid: the centroid of
+// the polygon unwrapped about the site, x wrapped back into [0, W). A rim
+// cell is clipped at y = 0 or y = H, so its centroid stays strictly inside.
+// The coefficient of variation of the cell areas falls with each pass; New
+// keeps the value before each pass in Mesh.LloydCV, and Stats reports the
+// relaxed mesh's.
+//
+// # Area
+//
+// DESIGN.md asks that the relaxed mesh then be scaled so the mean cell area
+// is exactly A. The mesh instead keeps the raster's fixed W × H cylinder,
+// which the raster and the mesh share, and meets the target by its site
+// count: the cells tile the cylinder, so their mean area is exactly W·H/n,
+// and n = round(W·H/A) puts it within 1/(2n) of A (about 1.4·10⁻⁵ in the
+// default world). Coordinates are never scaled. Stats reports the mean, its
+// relative deviation from A, the area CV, and the smallest and largest
+// cells as multiples of A.
 //
 // # Voronoi on a cylinder
 //
@@ -73,7 +97,7 @@
 // the seam comes out whole; Area and Centroid use them, and EdgeLength uses
 // topo's wrapped distance. Products that feed sums go through package
 // fmath, and TestNoFusedMultiplyAdd checks the compiled code, so the graph
-// is bit-identical on every architecture.
+// and the relaxed sites are bit-identical on every architecture.
 //
 // # Encoding
 //
