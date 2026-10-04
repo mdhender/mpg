@@ -24,7 +24,7 @@ func TestVersion(t *testing.T) {
 }
 
 func TestStubs(t *testing.T) {
-	for _, name := range []string{"generate", "sweep", "render-stage", "validate"} {
+	for _, name := range []string{"sweep", "render-stage", "validate"} {
 		var stdout, stderr bytes.Buffer
 		if code := run([]string{name}, &stdout, &stderr); code == 0 {
 			t.Errorf("run(%q) = 0, want non-zero", name)
