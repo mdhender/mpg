@@ -166,7 +166,6 @@ Layout is a bias, not a mask. Noise still makes the coastlines; the playability 
 
 - **Sample assignment.** Each raster sample belongs to the cell whose site is nearest, using wrapped distance and a bucket grid. Statistics follow `hmz2ter`: elevation min, p5, median, p95, and max, using nearest-rank percentiles; relief = p95 − p5.
 - **Land test.** A cell's **altitude** is its median elevation. A non-rim cell is a land candidate if its altitude is above sea level.
-- **Center height.** The elevation at the cell's site, from a 3×3 median of raster samples (as `hmz2ele` samples hex centers). Incline uses it.
 - **Ocean.** Water candidates connected to the rim are ocean. Unconnected candidates below sea level are basin floors, which stage 8 decides.
 - **Sea-level search.**
   - The initial estimate is the quantile that leaves `N` + (expected lake cells) land candidates.
@@ -204,7 +203,7 @@ Rivers run along Voronoi edges, corner to corner, and never through a cell's int
 - **River selection.**
   - An edge is a river when its drainage is at least `river_threshold_km2`.
   - Classes (stream, river, major river) come from drainage or discharge breaks.
-  - Each cell is about 81 km², so the threshold has to span several cells. Start around 500 km² and tune.
+  - Each cell is about 81 km², so the threshold has to span several cells. The default `river_threshold_km2` is **500 km²** (about 6 cells of catchment); tune from there.
   - For comparison: on Panama, `hmz2riv`'s 50 km² gave about one river edge for every two 10 km hexes, chosen deliberately to slow north–south travel.
 
 This guarantees by construction:
@@ -245,8 +244,8 @@ The game wants per-edge data. Store each undirected edge once, and give each cel
 - **Neighbor.** The neighbor cell id and the shared edge id.
 - **Coast.** Set when exactly one side is water. The water kind is ocean, lake, or inland sea.
 - **River.** Set when the edge is a river edge. Record its class, drainage, discharge, and flow direction (`from_corner` → `to_corner`). A river edge is always land–land, so it is a border between provinces.
-- **Incline.** A simple grade from 0% to 100%, measured center height to center height: |neighbor center height − this center height| / site distance × 100. It is capped at 100% and rounded to one decimal place.
-  - Whether the edge climbs or descends comes from the two center heights, so it is not stored separately.
+- **Incline.** A signed grade in percent between the two cells' altitudes: (neighbor altitude − this altitude) / site distance × 100. Positive climbs, negative descends. The magnitude is capped at 100% and rounded to one decimal place.
+  - There is one gradient per edge, so A → B is exactly the negative of B → A (+15% and −15%). Compute it once per undirected edge and negate it for the reverse half-edge, so rounding can never break the symmetry.
   - The game decides what grades mean for movement; the generator does not classify them.
   - Centers are about 9 km apart, so even a 2,000 m difference is a grade of about 22%. Most edges will be in single digits, and 100% will be very rare. Watch the grade histogram in the measures.
 - **Passable.** False across the rim. The game may add rules on top. Short edges are already gone, so every remaining edge is a real border.
@@ -380,7 +379,7 @@ No placement of settlements, resources, starting positions, or borders. Those be
 
 ## Open questions
 
-1. **River threshold and classes.** How dense should the network be? Does the engine want discharge, or only a class?
+1. **River classes.** The threshold starts at 500 km². Does the engine want discharge, or only a class (stream, river, major river)?
 2. **Lakes.** Allow one-cell lakes? What `inland_sea_min_cells` should apply? May a river enter a lake and leave it from a different corner? Proposed: yes, through the spill corner only.
 3. **Renderer geometry.** Is cell and edge geometry with an optional noisy-edge seed enough, or does the player map also want a hillshade raster per segment?
 4. **Volcanism.** Should `volcanic-highlands` get a hotspot stage, or stay unused for now?
