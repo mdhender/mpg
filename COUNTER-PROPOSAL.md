@@ -14,6 +14,8 @@ mpg generates a **playable province map** for our strategic fantasy games. The d
 
 The noise, climate, and hydrology work exists to make that mesh interesting. It is not the product.
 
+**Possible, not forced.** Dry basins, inland lakes and seas, ice fields, glaciers, and volcanoes come out of the terrain and climate when conditions allow. No setting guarantees any of them, and a world without one is valid. The measures report how many appeared; they never require one.
+
 This is the same shape as the Panama pipeline (`maloquacious/hmz2*`):
 
 | Panama (hmz2*) | mpg |
@@ -113,11 +115,11 @@ The rim solves several problems:
 |---|---|---|---|---|
 | 1 | Resolve config | — | Sizes, spacing, seeds, every default | — |
 | 2 | Layout | raster | Continental bias field from attractors and repulsors | Bias field with attractor marks |
-| 3 | Elevation | raster | Bedrock elevation in meters (layout + fBm + warp + ridges + rim falloff) | Hypsometric map with hillshade |
+| 3 | Elevation | raster | Bedrock elevation in meters (layout + fBm + warp + ridges + volcanic hotspots + rim falloff) | Hypsometric map with hillshade; hotspots marked |
 | 4 | Mesh | mesh | Sites, Lloyd relaxation, short-edge collapse, cells, corners, edges, rim cells | Mesh over elevation; area heatmap; short edges highlighted |
-| 5 | Cell statistics | raster → mesh | Per-cell elevation min, p5, median, p95, max; relief; latitude | Cell median elevation |
+| 5 | Cell statistics | raster → mesh | Per-cell altitude (median), relief (p95 − p5), latitude | Cell altitude |
 | 6 | Sea level and ocean | mesh | Sea level and ocean cells (flood from the rim) | Land/water cells |
-| 7 | Climate | raster (+ cell mask) | Temperature, precipitation, potential evaporation, runoff, aggregated to cells | Temperature; precipitation; aridity |
+| 7 | Climate | raster (+ cell mask) | Precipitation, potential evaporation, and runoff aggregated to cells; cell temperature from latitude and altitude | Temperature; precipitation; aridity |
 | 8 | Basins and lakes | mesh | Basin hierarchy, wet/dry decision, lake and inland-sea cells, spill corners | Basins colored; lakes |
 | 9 | Land-target check | mesh | Repeats stages 6 and 8 within a budget until the land count is in tolerance | Search trace |
 | 10 | Rivers | mesh corners | Drainage tree on corners; river edges with a class | Rivers on edges, width by class |
@@ -146,6 +148,15 @@ Noise alone produces either one featureless block or lace. wgvc needed attractor
 
 Layout is a bias, not a mask. Noise still makes the coastlines; the playability measures in stage 13 report whether the intent survived.
 
+### Volcanic hotspots
+
+Volcanoes are possible, not forced: rare, seeded, and sometimes absent.
+
+- **Count.** Drawn from the `volcanic` seed with a mean of `volcanic_hotspots_per_mkm2` per million km² of playable area. Default 2, which gives about 5 for the 10,000-cell example. Any count, including zero, is valid.
+- **Placement.** Uniform over the playable area outside the rim falloff, in ocean or on land. A hotspot in the sea makes a volcanic island only if its cone reaches sea level.
+- **Shape.** Each hotspot adds a cone (default peak 1,500–3,000 m, radius 15–30 km) on a broad, low swell (default +300 m over about 100 km). The swell is what makes the surrounding plateau.
+- **Result.** The land cell containing a cone's peak gets the `volcano` flag. Nearby plateaus become `volcanic-highlands`.
+
 ### Mesh
 
 - **Sites.** Jittered grid or Poisson-disk sites over the full cylinder, including the rim, seeded from `mesh`. Site count = total area / `A`.
@@ -164,8 +175,9 @@ Layout is a bias, not a mask. Noise still makes the coastlines; the playability 
 
 ### Cell statistics and sea level
 
-- **Sample assignment.** Each raster sample belongs to the cell whose site is nearest, using wrapped distance and a bucket grid. Statistics follow `hmz2ter`: elevation min, p5, median, p95, and max, using nearest-rank percentiles; relief = p95 − p5.
-- **Land test.** A cell's **altitude** is its median elevation. A non-rim cell is a land candidate if its altitude is above sea level.
+- **Sample assignment.** Each raster sample belongs to the cell whose site is nearest, using wrapped distance and a bucket grid. Statistics follow `hmz2ter`'s nearest-rank percentiles: the median gives altitude, and p95 − p5 gives relief.
+- **Altitude is the only height.** A cell's **altitude** is its median elevation. Every height rule on the mesh uses it: the land test, sea level, basins and spill levels, lake surfaces, corner heights, incline, landforms, and cell temperature (latitude curve minus lapse-rate cooling at the cell's altitude). Relief (p95 − p5) is a roughness measure, not a height; it only sets landforms.
+- **Land test.** A non-rim cell is a land candidate if its altitude is above sea level.
 - **Ocean.** Water candidates connected to the rim are ocean. Unconnected candidates below sea level are basin floors, which stage 8 decides.
 - **Sea-level search.**
   - The initial estimate is the quantile that leaves `N` + (expected lake cells) land candidates.
@@ -175,9 +187,9 @@ Layout is a bias, not a mask. Noise still makes the coastlines; the playability 
 
 ### Basins and lakes
 
-- **Priority flood.** A priority flood over the cell graph, seeded from ocean cells and using cell p5 elevation, finds depressions, spill cells, spill edges, and the nested hierarchy. Original elevations are never modified.
+- **Priority flood.** A priority flood over the cell graph, seeded from ocean cells and using cell altitude, finds depressions, spill cells, spill edges, and the nested hierarchy. Original elevations are never modified.
 - **Water balance** is a discrete fill, because every cell is one whole area unit:
-  1. Sort each basin's cells by elevation.
+  1. Sort each basin's cells by altitude.
   2. Fill them in that order.
   3. Stop when evaporation from the lake area plus seepage balances catchment runoff, or when the spill level is reached.
 - **Surplus at the spill** overflows through **one spill corner**, which became a wgvc rule for good reason, and continues downstream.
@@ -187,12 +199,16 @@ Layout is a bias, not a mask. Noise still makes the coastlines; the playability 
   - inland sea: `inland_sea_min_cells` or more;
   - each is marked salt if endorheic and evaporation-dominated (a salinity proxy, not chemistry).
 - A lake is one connected set of cells with one surface level.
+- **Minimum depth.** A depression counts as a basin only if its spill level is at least `basin_min_depth_m` above its lowest cell's altitude. **Default: 50 m.**
+  - Shallower depressions are treated as flat ground at their spill level for routing only: no lake, no playa, no dry sink, and altitudes are not changed. Nested sub-basins shallower than the minimum below their own spill merge into their parent.
+  - Why 50 m: closed ground 50 m deep across at least one ~9 km province is real topography. Shallower dips are mostly noise left over after taking each cell's median, the same size as `hmz2ter`'s plains relief band (20–60 m), and keeping them pockmarks the map with one-cell lakes and pits.
+  - Tune it with the basin depth histogram in the measures. Lower it for more lakes and playas, raise it for fewer.
 
 ### Rivers on edges
 
 Rivers run along Voronoi edges, corner to corner, and never through a cell's interior. This follows mapgen2, wgvc, and `hmz2riv`'s snapped edges.
 
-- **Corner elevation** is the raster elevation sampled at the corner, with a light 3×3 median, as `hmz2ele` samples corners.
+- **Corner height** is the mean altitude of the 3–4 cells that meet at the corner, so rivers follow the low ground between low cells using the same single height.
 - **Corner graph.** The graph has land corners joined by **land–land edges**. A corner that touches any water cell is **terminal**: a mouth on the ocean or a lake. Dry-sink corners from stage 8 are also terminal.
 - **Drainage tree.** A priority flood over the corner graph, seeded from terminal corners, gives every land corner one downstream corner. The result is acyclic by construction. Flats are broken by stable index.
 - **Lake outlets.** An overflowing lake's spill corner starts its own downstream path, carrying the lake's surplus.
@@ -221,12 +237,12 @@ Use the hm* codebooks where they fit, so the engine and converter tools stay fam
 
 - **Landform (land), from relief and altitude:**
   - `flats`, `plains`, `rolling-plains`, `hills`, `mountains`, `plateaus`, using `hmz2ter`'s relief thresholds as starting values. Retune them, because relief within an 81 km² cell of synthetic terrain will not match DEM relief.
-  - `volcanic-highlands` stays in the codebook, but nothing produces it until a volcanism stage exists.
+  - `volcanic-highlands`: a `plateaus` cell within `volcanic_radius_km` of a volcano (`hmz2ter`'s rule, default 25 km).
 - **Landform (water):** `salt-water` (ocean, inland sea) and `fresh-water` (lake). Salinity is a flag.
 - **Depth (salt water):** `shallow`, `open`, `deep`, from distance in cell steps to the nearest non-salt-water cell, as in `hmz2ter`. The bands are play rules, so they are retuned in cells.
 - **Surface and biome:**
   - From temperature, precipitation and aridity, and wetness. The versioned lookup table follows `DESIGN.md`'s candidates and `hmz2bio`'s vocabulary.
-  - Glacier and ice field are **surfaces** on land cells. Permanent ice needs cold plus enough snowfall.
+  - Glacier and ice field are **surfaces** on land cells. Permanent ice needs cold plus enough snowfall, so cold dry land can stay bare. Ice fields cover broad cold high ground; a glacier is permanent ice on a mountain cell, or reaching down from one. Neither is placed on purpose.
   - Pack ice is a surface on water.
   - Wetlands need a hydrological wetness signal: river edges, a lake shore, or low relief with surplus.
 
@@ -255,7 +271,7 @@ The game wants per-edge data. Store each undirected edge once, and give each cel
 
 `world.json` includes:
 
-- **Corners:** id, `(x, y)` in km, elevation, terminal or mouth flags.
+- **Corners:** id, `(x, y)` in km, corner height, terminal or mouth flags.
 - **Cells:** site, centroid, a polygon as a clockwise list of corner ids, an unwrapped polygon in km relative to the site (so seam cells draw without special cases), and a bounding box.
 - **Edges:** corner ids at each end, length in km, and a per-edge seed, so the renderer can draw deterministic noisy edges for coasts and rivers if it wants to.
 - **River polylines:** corner chains from source to mouth, with the class of each segment, ready for drawing by width.
@@ -271,6 +287,7 @@ Write `measures.json` and a short text summary on every run. Configured checks f
 - **Land:** land cell count against N; land area; cell area mean and coefficient of variation; edge length minimum and p5; neighbor-count histogram; grade histogram; cells that needed the degree cap; direction error (mean, p95, max) and how often a reverse direction is not the opposite point.
 - **Landmasses:** count, size histogram, largest share of land, and count by class (continent, island, islet) using cell-count thresholds.
 - **Water:** ocean, inland sea, and lake counts and sizes; coast edges per land cell.
+- **Features:** dry basins (count, sizes, depths); basin depth histogram, including the depressions below the minimum; ice-field and glacier cells; volcanoes, and how many are on land. Report only.
 - **Chokepoints:**
   - **straits**: water crossings of at most `k` cells between landmasses or between parts of one landmass;
   - **necks**: land isthmuses of at most `k` cells;
@@ -320,7 +337,7 @@ The determinism rules from `DESIGN.md` carry over unchanged:
 - no NaN or Inf;
 - no timestamps or paths in hashed content.
 
-Stage names include `layout`, `elevation`, `warp`, `ridges`, `mesh`, `climate`, and `edge-noise`.
+Stage names include `layout`, `elevation`, `warp`, `ridges`, `volcanic`, `mesh`, `climate`, and `edge-noise`.
 
 Cross-machine replay is a stated goal: one gamemaster's config should rebuild the same world on another machine. wgvc hit FMA differences on arm64, so the same safeguards apply here:
 
@@ -338,7 +355,7 @@ internal/topo/        cylinder math: wrap, distance, bearing, latitude, rim
 internal/field/       raster type, sampling, stage renders
 internal/noise/       pinned periodic noise, warp, ridges
 internal/layout/      attractors, repulsors, presets
-internal/elevation/   heightmap synthesis and rim falloff
+internal/elevation/   heightmap synthesis, volcanic hotspots, rim falloff
 internal/mesh/        cylinder Voronoi, Lloyd, short-edge collapse, corner/edge graph
 internal/cells/       per-cell statistics, sea level, ocean
 internal/climate/     temperature, precipitation, evaporation, runoff
@@ -358,7 +375,7 @@ Each milestone ends with renders inspected across several seeds and aspects.
    - config resolution, seeds, cylinder topology, and the raster field;
    - stage PNG output and `sweep` contact sheets;
    - proof: a periodic noise field renders seamlessly when shifted across the seam.
-2. **Layout and elevation:** presets, attractors and repulsors, and rim falloff. Tune until continents look intentional across seeds.
+2. **Layout and elevation:** presets, attractors and repulsors, volcanic hotspots, and rim falloff. Tune until continents look intentional across seeds.
 3. **Mesh:** cylinder Voronoi, Lloyd, short-edge collapse, rim cells, and the mesh checks and render.
 4. **First playable export:**
    - cell statistics, sea-level search on cell counts, landforms, depth, and edges with bearing, compass direction, coast, and incline;
@@ -382,5 +399,4 @@ No placement of settlements, resources, starting positions, or borders. Those be
 
 1. **Lakes.** Allow one-cell lakes? What `inland_sea_min_cells` should apply? May a river enter a lake and leave it from a different corner? Proposed: yes, through the spill corner only.
 2. **Renderer geometry.** Is cell and edge geometry with an optional noisy-edge seed enough, or does the player map also want a hillshade raster per segment?
-3. **Volcanism.** Should `volcanic-highlands` get a hotspot stage, or stay unused for now?
-4. **Rim depth and look.** Is 4 cells of impassable rim plus about 12 cells of falloff right? Should the rim render as open polar sea, pack ice, or both?
+3. **Rim depth and look.** Is 4 cells of impassable rim plus about 12 cells of falloff right? Should the rim render as open polar sea, pack ice, or both?
