@@ -195,8 +195,8 @@ func TestDeterminism(t *testing.T) {
 	prev := runtime.GOMAXPROCS(1)
 	b := build(t, c)
 	runtime.GOMAXPROCS(prev)
-	if !slices.Equal(a.f.Values(), b.f.Values()) || a.stats != b.stats {
-		t.Error("the same config gave different fields at GOMAXPROCS 1 and default")
+	if !slices.Equal(a.f.Values(), b.f.Values()) || a.stats != b.stats || !slices.Equal(a.elev.Hotspots(), b.elev.Hotspots()) {
+		t.Error("the same config gave different fields or hotspots at GOMAXPROCS 1 and default")
 	}
 	d := build(t, resolved(t, 12, "archipelago", "square"))
 	if slices.Equal(a.f.Values(), d.f.Values()) {
@@ -288,10 +288,22 @@ func TestSeaLevelForShare(t *testing.T) {
 }
 
 // TestRender checks the stage render's size, that land and water take their
-// tints, and writes it when MPG_RENDER_DIR is set.
+// tints, that the hotspots are marked, and writes it when MPG_RENDER_DIR is
+// set.
 func TestRender(t *testing.T) {
 	w := build(t, resolved(t, 1, "continents", "cinematic"))
-	img := Render(w.f, 0)
+	hs := w.elev.Hotspots()
+	if len(hs) == 0 {
+		t.Fatal("seed 1 drew no hotspots; pick another seed")
+	}
+	img := StageRender(w.f, 0, hs)
+	plain := Render(w.f, 0)
+	for _, h := range hs {
+		p := render.ToPixel(w.f, h.Point())
+		if got := img.RGBAAt(int(p.X), int(p.Y)); got != peakDot {
+			t.Errorf("hotspot at (%v, %v): pixel %v, want the peak mark", h.X, h.Y, got)
+		}
+	}
 	if img.Bounds().Dx() != w.f.NX() || img.Bounds().Dy() != w.f.NY() {
 		t.Fatalf("render %v, field %d × %d", img.Bounds(), w.f.NX(), w.f.NY())
 	}
@@ -300,10 +312,25 @@ func TestRender(t *testing.T) {
 		t.Errorf("rim pixel %v is not water", p)
 	}
 	if dir := os.Getenv("MPG_RENDER_DIR"); dir != "" {
-		path := filepath.Join(dir, "03-elevation-test.png")
-		if err := render.WritePNGFile(path, img, render.Meta{Stage: "03-elevation", ConfigHash: "test"}); err != nil {
-			t.Fatal(err)
+		for name, im := range map[string]image.Image{"03-elevation-test.png": img, "03-elevation-test-unmarked.png": plain} {
+			if err := render.WritePNGFile(filepath.Join(dir, name), im, render.Meta{Stage: "03-elevation", ConfigHash: "test"}); err != nil {
+				t.Fatal(err)
+			}
 		}
+	}
+}
+
+// TestMarkHotspotsSeam checks a mark that crosses the seam is drawn on both
+// sides: a hotspot on the seam marks the first and last columns alike.
+func TestMarkHotspotsSeam(t *testing.T) {
+	w := build(t, resolved(t, 1, "continents", "square"))
+	y := w.f.Cylinder().H() / 2
+	hs := []Hotspot{{X: 0, Y: y, PeakM: 2000, ConeRadiusKm: 20, SwellM: 300, SwellRadiusKm: 100}}
+	img := StageRender(w.f, 0, hs)
+	nx := w.f.NX()
+	j := int(render.ToPixel(w.f, hs[0].Point()).Y)
+	if img.RGBAAt(0, j) != peakDot || img.RGBAAt(nx-1, j) != peakDot {
+		t.Errorf("peak mark at the seam: column 0 %v, column %d %v", img.RGBAAt(0, j), nx-1, img.RGBAAt(nx-1, j))
 	}
 }
 

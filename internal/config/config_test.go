@@ -159,7 +159,7 @@ func TestHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = "43d8a35f24bfcde0d338de780adf82eddd656ba6a07b3c64bfccd3ae6d1e9bd1"
+	const want = "fe27008c1905a6b36800e1a4350adc5a13c2b2b3ae6124a5c68800ac1059ba87"
 	if h != want {
 		t.Errorf("Hash = %s, want %s", h, want)
 	}
@@ -294,6 +294,14 @@ func TestValidate(t *testing.T) {
 		{"falloff negative", func(c *Config) { c.Rim.FalloffCells = -1 }, "rim.falloff_cells"},
 		{"falloff too wide", func(c *Config) { c.World.LandCells = 30; c.Rim.FalloffCells = 12 }, "falloff bands"},
 		{"hotspots negative", func(c *Config) { c.Volcanic.HotspotsPerMkm2 = -1 }, "volcanic.hotspots_per_mkm2"},
+		{"hotspots huge", func(c *Config) { c.Volcanic.HotspotsPerMkm2 = 1001 }, "volcanic.hotspots_per_mkm2"},
+		{"hotspots NaN", func(c *Config) { c.Volcanic.HotspotsPerMkm2 = math.NaN() }, "volcanic.hotspots_per_mkm2"},
+		{"cone peak negative", func(c *Config) { c.Volcanic.ConePeakMinM = -1 }, "volcanic.cone_peak_min_m"},
+		{"cone peaks reversed", func(c *Config) { c.Volcanic.ConePeakMaxM = 1000 }, "volcanic.cone_peak_max_m"},
+		{"cone radius zero", func(c *Config) { c.Volcanic.ConeRadiusMinKm = 0 }, "volcanic.cone_radius_min_km"},
+		{"cone radii reversed", func(c *Config) { c.Volcanic.ConeRadiusMaxKm = 10 }, "volcanic.cone_radius_max_km"},
+		{"swell negative", func(c *Config) { c.Volcanic.SwellM = -1 }, "volcanic.swell_m"},
+		{"swell radius zero", func(c *Config) { c.Volcanic.SwellRadiusKm = 0 }, "volcanic.swell_radius_km"},
 		{"basin depth NaN", func(c *Config) { c.Basin.MinDepthM = math.NaN() }, "basin.min_depth_m"},
 		{"inland sea 1", func(c *Config) { c.Basin.InlandSeaMinCells = 1 }, "basin.inland_sea_min_cells"},
 		{"river zero", func(c *Config) { c.River.ThresholdKm2 = 0 }, "river.threshold_km2"},

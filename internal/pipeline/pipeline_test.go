@@ -346,6 +346,9 @@ func TestElevationStage(t *testing.T) {
 	if !slices.Equal(f.Values(), want.Values()) {
 		t.Error("stage product differs from elevation.New")
 	}
+	if hs := c.Products.Hotspots; len(hs) == 0 || !slices.Equal(hs, e.Hotspots()) {
+		t.Errorf("stage hotspots %+v, want elevation.New's (seed 42 draws some)", hs)
+	}
 	if !slices.Equal(variants, []string{"2 layout/", "3 elevation/"}) {
 		t.Errorf("renders %q, want the layout and elevation renders", variants)
 	}

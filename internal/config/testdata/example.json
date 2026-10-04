@@ -152,7 +152,13 @@
     }
   },
   "volcanic": {
-    "hotspots_per_mkm2": 2
+    "hotspots_per_mkm2": 2,
+    "cone_peak_min_m": 1500,
+    "cone_peak_max_m": 3000,
+    "cone_radius_min_km": 15,
+    "cone_radius_max_km": 30,
+    "swell_m": 300,
+    "swell_radius_km": 100
   },
   "basin": {
     "min_depth_m": 50,

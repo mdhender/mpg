@@ -2,9 +2,9 @@
 
 // Package elevation synthesizes the bedrock heightmap (DESIGN.md, pipeline
 // stage 3): the layout's continental bias, fBm, a periodic domain warp, and
-// ridged mountain chains combined into meters, then the polar falloff to deep
-// ocean. Volcanic hotspots (S14) will add their cones and swells just before
-// the falloff. This is the one height (DESIGN.md, "Cell statistics and sea
+// ridged mountain chains combined into meters, volcanic hotspots' cones and
+// swells added on top, then the polar falloff to deep ocean. This is the one
+// height (DESIGN.md, "Cell statistics and sea
 // level"): later stages take each cell's median of it.
 //
 // Sea level is not decided here; stage 6 searches for it on cell counts. The
@@ -45,8 +45,10 @@
 //	c ← (c + δ·(1 + b)/2) / (1 + max(δ, 0))
 //
 // where δ in [−datum_max_shift, datum_max_shift] is found by bisection (48
-// steps) so that the land fraction of the samples outside the rim have
-// c > 0. The weight (1 + b)/2 is 0 in the open ocean (b = −1), so the shift
+// steps) so that the land fraction of the samples outside the rim lie above
+// 0 m before the falloff: those with c > 0, and those whose sea floor (see
+// "Meters") a hotspot's rise lifts above 0 m (see "Volcanic hotspots"). The
+// weight (1 + b)/2 is 0 in the open ocean (b = −1), so the shift
 // grows or shrinks the layout's landmasses instead of raising the sea floor,
 // and the division keeps a raised continent's heights in range without
 // moving any coast. A layout whose land is out of reach within the bound
@@ -71,7 +73,46 @@
 // stream. The ridges fade in from the coast, so they never raise sea floor
 // into land, and run only along the belts, so the land between keeps its
 // plains. Every term is non-negative on land and non-positive at sea, so h
-// has the sign of c: the coast at 0 m is the coast of the signal.
+// has the sign of c: the coast at 0 m is the coast of the signal, except
+// where a hotspot lifts the sea floor.
+//
+// # Volcanic hotspots
+//
+// Hotspots (DESIGN.md, "Volcanic hotspots") are drawn by Hotspots from the
+// "volcanic" seed stream (seed.Rand, version VolcanicVersion), independent
+// of the layout and the noise. The count is Poisson with mean
+// volcanic.hotspots_per_mkm2 per million km² of the config's playable area
+// (about 5.4 for the 10,000-cell example), drawn by Knuth's method: multiply
+// uniforms until the product falls to e^−mean, with a mean above 256 drawn
+// as a sum of chunks so e^−mean never underflows. Any count, zero included,
+// is valid. Each hotspot then draws, in order, x uniform in [0, W), y
+// uniform over the playable band outside the rim and the falloff band, its
+// peak height in [cone_peak_min_m, cone_peak_max_m], and its cone radius in
+// [cone_radius_min_km, cone_radius_max_km]; the swell is swell_m over
+// swell_radius_km for all. At distance d (wrapped east–west, so a hotspot on
+// the seam is whole) a hotspot adds
+//
+//	rise = P·smoothstep(1 − d/R) + S·smoothstep(1 − (d/Rs)²)
+//
+// in meters: a cone of peak P and radius R with a rounded summit and a foot
+// that meets the ground without a kink, on a flat-topped swell of height S
+// and radius Rs, the plateau around the volcano. Rises add in list order.
+//
+// They are added to h in meters, after the datum's shift and rescale, in
+// land or sea alike: a hotspot in the open ocean (−4000 m) stays a seamount,
+// one on a shelf becomes a volcanic island, one on land a volcano on a
+// plateau. Adding them in meters keeps the configured heights exact; adding
+// them to the signal instead would rescale them by the datum and the ridges.
+// The datum search counts the land they raise, so it shrinks the continents
+// by about that much and the land fraction still lies above 0 m (at the
+// defaults, hotspot land is about 0.4% of the band, up to 1%). They go on
+// before the falloff, and their peaks lie outside the falloff band, so the
+// falloff holds any cone or swell reaching into the band under its ceiling
+// like any other ground; a peak inside the falloff's taper is squashed.
+//
+// The hotspot list is the stage's second product (Elevation.Hotspots):
+// classification flags the land cell holding a peak as a volcano and nearby
+// plateaus as volcanic highlands.
 //
 // smoothstep(t) = 3t² − 2t³ for t clamped to [0, 1].
 //
@@ -97,19 +138,23 @@
 //
 // The noise sources are noise.New(world, "elevation"), noise.New(world,
 // "warp") and noise.New(world, "ridges") (DESIGN.md's stage names), each
-// keyed with noise.Version. Version, "elevation/1", names this formula; any
+// keyed with noise.Version; the hotspots come from seed.Rand(world,
+// "volcanic", VolcanicVersion). Version, "elevation/2", names this formula; any
 // change to the field's bits must bump it and re-record the golden hashes.
 //
 // # Determinism
 //
 // Every product that reaches a sum is rounded through package fmath, and the
 // noise is pinned (package noise). Rows are computed concurrently, but each
-// sample depends only on its coordinates and the shift, so the field has the
-// same bits on every machine and at every GOMAXPROCS.
+// sample depends only on its coordinates, the shift, and the hotspots' rises,
+// which are summed in list order on one goroutine, so the field has the same
+// bits on every machine and at every GOMAXPROCS.
 //
 // # Render
 //
 // Render draws the hypsometric map (render.Land, render.Water) split at a sea
-// level, with a northwest hillshade exaggerated by ZFactor; the stage render
-// splits at 0 m.
+// level, with a northwest hillshade exaggerated by ZFactor. The stage render
+// (StageRender) splits at 0 m and marks each hotspot (MarkHotspots): a dark
+// dot at the peak, a red ring at the cone's foot, and a dashed orange ring
+// at the swell's edge, drawn on both sides of the seam.
 package elevation

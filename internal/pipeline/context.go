@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/mdhender/mpg/internal/config"
+	"github.com/mdhender/mpg/internal/elevation"
 	"github.com/mdhender/mpg/internal/field"
 	"github.com/mdhender/mpg/internal/layout"
 	"github.com/mdhender/mpg/internal/render"
@@ -55,6 +56,10 @@ type Products struct {
 	Bias *field.Field
 	// Elevation is the elevation stage's bedrock elevation in meters.
 	Elevation *field.Field
+	// Hotspots is the elevation stage's volcanic hotspots, in draw order;
+	// empty when the world has none. Classification flags the volcano cell
+	// and the volcanic highlands from it.
+	Hotspots []elevation.Hotspot
 }
 
 // NewContext resolves cfg and returns a context for a run writing to

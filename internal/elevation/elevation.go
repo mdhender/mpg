@@ -26,7 +26,7 @@ const (
 
 // Version is the elevation algorithm version. Any change to the bits of the
 // field must bump it (and re-record the golden hashes).
-const Version = "elevation/1"
+const Version = "elevation/2"
 
 // beltHalfWidth is half the width of the belt noise's ramp: ridges fade in
 // from BeltThreshold − beltHalfWidth to BeltThreshold + beltHalfWidth.
@@ -60,6 +60,8 @@ type Elevation struct {
 	useWarp   bool
 
 	landFraction float64
+	// hotspots are the volcanic hotspots, drawn by New.
+	hotspots []Hotspot
 	// pullKm and jitterKm are the falloff's PullKm and JitterKm, scaled
 	// down together when they would reach past a quarter of the playable
 	// band's half height (see the package documentation).
@@ -103,6 +105,7 @@ func New(cfg config.Config, bias *field.Field) (*Elevation, error) {
 		useWarp:   e.Warp.StrengthKm > 0,
 
 		landFraction: cfg.World.LandFraction,
+		hotspots:     Hotspots(cfg),
 	}
 	reach := e.Falloff.PullKm + e.Falloff.JitterKm
 	quarter := (cyl.H() - fmath.Mul(2, cyl.Rim()+cyl.Falloff())) / 8
@@ -120,6 +123,10 @@ func New(cfg config.Config, bias *field.Field) (*Elevation, error) {
 	return el, nil
 }
 
+// Hotspots returns a copy of the volcanic hotspots that Fill adds, in the
+// order they were drawn (see the package function Hotspots).
+func (e *Elevation) Hotspots() []Hotspot { return slices.Clone(e.hotspots) }
+
 // Field returns a new field over the world at the bias field's spacing,
 // filled with the bedrock elevation in meters (see Fill).
 func (e *Elevation) Field() (*field.Field, Stats) {
@@ -133,8 +140,9 @@ type Stats struct {
 	// Shift is the datum shift (see the package documentation): the signal
 	// added at a sample of bias b is Shift·(1 + b)/2.
 	Shift float64
-	// Share is the share of the samples outside the rim whose shifted
-	// signal is positive (land at 0 m before the falloff's ceiling).
+	// Share is the share of the samples outside the rim above 0 m before
+	// the falloff's ceiling: those whose shifted signal is positive, and
+	// those a hotspot lifts out of the sea.
 	Share float64
 	// Clamped reports that the land fraction needed a shift beyond
 	// ±DatumMaxShift, so Share misses it.
@@ -151,7 +159,7 @@ type sample struct {
 // Fill stores the bedrock elevation in meters at every sample of f, which
 // must have the bias field's grid. It runs in two passes: the continental
 // signal at every sample, then the datum shift from all of them, then the
-// heights. Rows are computed concurrently, but every sample depends only on
+// heights, with the hotspots' rises added in meters before the falloff. Rows are computed concurrently, but every sample depends only on
 // its own coordinates and the shift, which is found by counting the samples
 // in storage order, so the result does not depend on scheduling.
 func (e *Elevation) Fill(f *field.Field) Stats {
@@ -167,7 +175,8 @@ func (e *Elevation) Fill(f *field.Field) Stats {
 		}
 	})
 
-	st := e.datum(f, s)
+	rise := rises(f, e.hotspots)
+	st := e.datum(f, s, rise)
 	// A positive shift raises the cores of the continents too; dividing by
 	// 1 + shift keeps their heights in the configured range without moving
 	// any coast.
@@ -178,9 +187,12 @@ func (e *Elevation) Fill(f *field.Field) Stats {
 		for i := range nx {
 			k := j*nx + i
 			h := e.height(fmath.MulAdd(st.Shift, s[k].w, s[k].c)/norm, s[k].q)
-			// Volcanic hotspots (S14) add their cones and swells here,
-			// before the falloff, so the falloff holds them under the
-			// ceiling too.
+			// The hotspots' cones and swells go on before the falloff, so
+			// the falloff holds them under the ceiling too. A sample no
+			// hotspot reaches keeps its bits.
+			if rise != nil && rise[k] != 0 {
+				h += rise[k]
+			}
 			v[k] = e.falloff(h, y)
 		}
 	})
@@ -207,20 +219,38 @@ func rows(ny int, fn func(j int)) {
 const datumSteps = 48
 
 // datum returns the datum shift: the δ in [−DatumMaxShift, DatumMaxShift]
-// that leaves the land fraction of the samples outside the rim with
-// c + δ·w > 0, found by bisection (the count only grows with δ, since w ≥ 0).
-func (e *Elevation) datum(f *field.Field, s []sample) Stats {
+// that leaves the land fraction of the samples outside the rim above 0 m
+// before the falloff, found by bisection. A sample is land when its shifted
+// signal c' = (c + δ·w)/(1 + max(δ, 0)) is positive, or when its hotspot
+// rise (rise, nil for none) lifts its sea floor, −OceanDepthM ·
+// smoothstep(−c'), above 0 m: exactly the samples Fill puts above 0 m. The
+// count only grows with δ, since w ≥ 0 and a negative c' only rises toward
+// 0 as δ grows.
+func (e *Elevation) datum(f *field.Field, s []sample, rise []float64) Stats {
 	nx := f.NX()
-	var pts []sample
+	type point struct {
+		sample
+		rise float64
+	}
+	var pts []point
 	for j := range f.NY() {
-		if !e.cyl.InRim(f.Y(j)) {
-			pts = append(pts, s[j*nx:(j+1)*nx]...)
+		if e.cyl.InRim(f.Y(j)) {
+			continue
+		}
+		for k := j * nx; k < (j+1)*nx; k++ {
+			p := point{sample: s[k]}
+			if rise != nil {
+				p.rise = rise[k]
+			}
+			pts = append(pts, p)
 		}
 	}
 	share := func(d float64) float64 {
+		norm := 1 + max(d, 0)
 		n := 0
 		for _, p := range pts {
-			if fmath.MulAdd(d, p.w, p.c) > 0 {
+			c := fmath.MulAdd(d, p.w, p.c) / norm
+			if c > 0 || p.rise > 0 && p.rise > fmath.Mul(e.cfg.OceanDepthM, smoothstep(-c)) {
 				n++
 			}
 		}

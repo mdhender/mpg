@@ -92,11 +92,66 @@ type Raster struct {
 	SpacingKm float64 `json:"spacing_km"`
 }
 
-// Volcanic sets the volcanic hotspots.
+// Volcanic sets the volcanic hotspots (DESIGN.md, "Volcanic hotspots"):
+// each adds a cone on a broad, low swell to the bedrock. See package
+// elevation for the shapes.
 type Volcanic struct {
 	// HotspotsPerMkm2 is the mean hotspot count per million km² of playable
-	// area (DESIGN.md: volcanic_hotspots_per_mkm2).
+	// area (DESIGN.md: volcanic_hotspots_per_mkm2), in [0, 1000]. The count
+	// is a Poisson draw, so any count, including zero, can occur.
 	HotspotsPerMkm2 float64 `json:"hotspots_per_mkm2"`
+	// ConePeakMinM and ConePeakMaxM bound a cone's peak height in meters
+	// above the ground it stands on; each hotspot draws its own, uniformly.
+	ConePeakMinM float64 `json:"cone_peak_min_m"`
+	ConePeakMaxM float64 `json:"cone_peak_max_m"`
+	// ConeRadiusMinKm and ConeRadiusMaxKm bound a cone's radius in km;
+	// each hotspot draws its own, uniformly.
+	ConeRadiusMinKm float64 `json:"cone_radius_min_km"`
+	ConeRadiusMaxKm float64 `json:"cone_radius_max_km"`
+	// SwellM is the height of the broad swell under every cone, in meters,
+	// and SwellRadiusKm its radius in km. The swell makes the plateau
+	// around a volcano.
+	SwellM        float64 `json:"swell_m"`
+	SwellRadiusKm float64 `json:"swell_radius_km"`
+}
+
+// MaxHotspotsPerMkm2 bounds Volcanic.HotspotsPerMkm2. Hotspots are meant to
+// be rare; the bound only rejects requests that would bury the map in cones.
+const MaxHotspotsPerMkm2 = 1000
+
+// DefaultVolcanic returns the default volcanic hotspot inputs.
+func DefaultVolcanic() Volcanic {
+	return Volcanic{
+		HotspotsPerMkm2: 2,
+		ConePeakMinM:    1500, ConePeakMaxM: 3000,
+		ConeRadiusMinKm: 15, ConeRadiusMaxKm: 30,
+		SwellM: 300, SwellRadiusKm: 100,
+	}
+}
+
+// validate appends the problems with the volcanic inputs through bad.
+func (v *Volcanic) validate(bad func(format string, args ...any)) {
+	if x := v.HotspotsPerMkm2; !(x >= 0 && x <= MaxHotspotsPerMkm2) {
+		bad("volcanic.hotspots_per_mkm2 %v must be in [0, %d]", x, MaxHotspotsPerMkm2)
+	}
+	if x := v.ConePeakMinM; !(x >= 0 && x <= 20_000) {
+		bad("volcanic.cone_peak_min_m %v must be in [0, 20000]", x)
+	}
+	if x := v.ConePeakMaxM; !(x >= v.ConePeakMinM && x <= 20_000) {
+		bad("volcanic.cone_peak_max_m %v must be in [cone_peak_min_m %v, 20000]", x, v.ConePeakMinM)
+	}
+	if x := v.ConeRadiusMinKm; !(x > 0 && x <= 1000) {
+		bad("volcanic.cone_radius_min_km %v must be in (0, 1000]", x)
+	}
+	if x := v.ConeRadiusMaxKm; !(x >= v.ConeRadiusMinKm && x <= 1000) {
+		bad("volcanic.cone_radius_max_km %v must be in [cone_radius_min_km %v, 1000]", x, v.ConeRadiusMinKm)
+	}
+	if x := v.SwellM; !(x >= 0 && x <= 20_000) {
+		bad("volcanic.swell_m %v must be in [0, 20000]", x)
+	}
+	if x := v.SwellRadiusKm; !(x > 0 && x <= 10_000) {
+		bad("volcanic.swell_radius_km %v must be in (0, 10000]", x)
+	}
 }
 
 // Basin sets closed basins and lakes.
@@ -132,7 +187,7 @@ func Default() Config {
 		Raster:    Raster{SpacingKm: 2},
 		Layout:    DefaultLayout(),
 		Elevation: DefaultElevation(),
-		Volcanic:  Volcanic{HotspotsPerMkm2: 2},
+		Volcanic:  DefaultVolcanic(),
 		Basin:     Basin{MinDepthM: 50, InlandSeaMinCells: 20},
 		River:     River{ThresholdKm2: 500},
 	}
@@ -184,9 +239,7 @@ func (c *Config) Validate() error {
 	}
 	c.Layout.validate(bad)
 	c.Elevation.validate(bad)
-	if v := c.Volcanic.HotspotsPerMkm2; !nonNegative(v) {
-		bad("volcanic.hotspots_per_mkm2 %v must be non-negative and finite", v)
-	}
+	c.Volcanic.validate(bad)
 	if v := c.Basin.MinDepthM; !nonNegative(v) {
 		bad("basin.min_depth_m %v must be non-negative and finite", v)
 	}
