@@ -61,3 +61,25 @@ func ReliefRender(f *field.Field, m *mesh.Mesh, s *Stats) *image.RGBA {
 		return ReliefRamp.At(s.Relief[i])
 	})
 }
+
+// BasinColor fills a dry basin floor in the sea level render: a playable
+// cell at or below sea level that the ocean does not reach. It is land
+// until the basin stage decides it, and the orange keeps it apart from
+// both the green lowlands and the blue sea.
+var BasinColor = color.RGBA{0xe0, 0x70, 0x20, 0xff}
+
+// SeaLevelRender draws the sea level stage render: land cells by
+// AltitudeColor against the sea level (render.Land at their height above
+// it), ocean cells by render.Water at their depth below it, dry basin
+// floors in BasinColor, and the rim as the ice sheet, over mesh.CellRender.
+func SeaLevelRender(f *field.Field, m *mesh.Mesh, s *Stats, sl *SeaLevel) *image.RGBA {
+	return mesh.CellRender(f, m, func(i int) color.RGBA {
+		switch {
+		case m.Cells[i].Rim:
+			return mesh.IceColor
+		case sl.Basin[i]:
+			return BasinColor
+		}
+		return AltitudeColor(s.Altitude[i], sl.Level)
+	})
+}

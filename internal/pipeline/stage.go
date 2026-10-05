@@ -35,7 +35,7 @@ func Stages() []Stage {
 		{Number: 3, Name: "elevation", Run: runElevation},
 		{Number: 4, Name: "mesh", Run: runMesh},
 		{Number: 5, Name: "cells", Run: runCells},
-		{Number: 6, Name: "sea-level"},
+		{Number: 6, Name: "sea-level", Run: runSeaLevel},
 		{Number: 7, Name: "climate"},
 		{Number: 8, Name: "basins"},
 		{Number: 9, Name: "land-target"},

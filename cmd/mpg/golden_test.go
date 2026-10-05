@@ -203,3 +203,65 @@ func TestGoldenCells(t *testing.T) {
 		})
 	}
 }
+
+// TestGoldenSeaLevel pins the sea level stage across architectures (see
+// package golden for how to record a hash): the pipeline run through stage
+// 6, sea-level. Each case hashes, in order, the resolved config.json bytes
+// (golden.Hasher.Bytes, length-prefixed), then the search result's
+// canonical encoding (cells.SeaLevel.AppendBinary: target, tolerance and
+// budget; the policy; the initial estimate and the chosen level; the
+// playable, land, ocean and dry basin counts; the land area; the reason and
+// whether the target was met; every probe's method, candidate index, level
+// and counts; and each cell's land, ocean and basin flags; integers and
+// float bits little-endian).
+func TestGoldenSeaLevel(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		seed   config.Seed
+		aspect string
+		preset string
+		want   string
+	}{
+		{"seed42-cinematic", 42, "cinematic", "continents", "02cbe609d4a8169005e60eb8825655ea23ca320ac13ed9aac35c688c7c9ade16"},
+		{"seed42-square", 42, "square", "continents", "b463d27abe851d5d5af81b10c7f355384605a2a2a1254879f090787109a32474"},
+		{"seed7-cinematic", 7, "cinematic", "continents", "cc66be8f2777a4b5fd5ca62592d5c1e9c025534bf4d46cfde437e1b94fd2dacb"},
+		{"seed7-portrait", 7, "portrait", "continents", "2491223c655a40920996680080197fe2570f979d5d666e1158e7d2481d554e6f"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "b744eda64585bd8d0e58bc10623b339799d924e85d0c8bbb98cd3f25020efd0a"},
+		{"seed6-cinematic-pangaea", 6, "cinematic", "pangaea", "bf61c21f1c7fcf256be06a19e37deb5a75dfc3fff68f3231edbf0ea9d938ad0c"}, // gallops
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := config.Default()
+			cfg.Seed = tc.seed
+			cfg.World.Aspect = tc.aspect
+			cfg.Layout.Preset = tc.preset
+			if err := cfg.Resolve(); err != nil {
+				t.Fatal(err)
+			}
+			cfgBytes, err := cfg.Bytes()
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, err := pipeline.NewContext(cfg, t.TempDir(), "", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			stages := pipeline.Stages()
+			last, err := pipeline.Lookup(stages, "sea-level")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := pipeline.Run(ctx, stages, last); err != nil {
+				t.Fatal(err)
+			}
+			enc, err := ctx.Products.SeaLevel.AppendBinary(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			h := golden.New()
+			h.Bytes(cfgBytes)
+			h.Write(enc)
+			golden.Check(t, "sea-level/"+tc.name, h.Sum(), tc.want)
+		})
+	}
+}

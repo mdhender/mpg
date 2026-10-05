@@ -51,12 +51,12 @@ func TestGenerateSeed42(t *testing.T) {
 	if !bytes.Equal(got, want) {
 		t.Errorf("config.json differs from testdata/example.json:\n%s", got)
 	}
-	if !strings.Contains(stderr, "stopped: stage 6 sea-level not implemented yet") {
+	if !strings.Contains(stderr, "stopped: stage 7 climate not implemented yet") {
 		t.Errorf("stderr = %q, want a not-implemented stop", stderr)
 	}
 	cfg, _ := readConfig(t, out)
 	hash, _ := cfg.Hash()
-	for _, s := range []string{hash, "stages  config, layout, elevation, mesh, cells\n", "33333 playable"} {
+	for _, s := range []string{hash, "stages  config, layout, elevation, mesh, cells, sea-level\n", "33333 playable"} {
 		if !strings.Contains(stdout, s) {
 			t.Errorf("stdout = %q, want it to contain %q", stdout, s)
 		}
@@ -191,9 +191,9 @@ func TestGenerateStopAfter(t *testing.T) {
 	}
 
 	// Stopping after a later stage still stops at the first unimplemented one.
-	code, _, stderr := generate(t, "--stop-after", "climate", "--output", t.TempDir())
-	if code != 0 || !strings.Contains(stderr, "stage 6 sea-level not implemented yet") {
-		t.Errorf("--stop-after climate: exit %d, stderr %q", code, stderr)
+	code, _, stderr := generate(t, "--stop-after", "basins", "--output", t.TempDir())
+	if code != 0 || !strings.Contains(stderr, "stage 7 climate not implemented yet") {
+		t.Errorf("--stop-after basins: exit %d, stderr %q", code, stderr)
 	}
 }
 
@@ -233,7 +233,7 @@ func TestGenerateRendersDir(t *testing.T) {
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	if !slices.Equal(names, []string{"02-layout.png", "03-elevation.png", "04-mesh-area.png", "04-mesh-short.png", "04-mesh.png", "05-cells-relief.png", "05-cells.png"}) {
-		t.Errorf("renders = %q, want the layout, elevation, mesh area, mesh short-edge, mesh, cell relief and cell altitude renders", names)
+	if !slices.Equal(names, []string{"02-layout.png", "03-elevation.png", "04-mesh-area.png", "04-mesh-short.png", "04-mesh.png", "05-cells-relief.png", "05-cells.png", "06-sea-level.png"}) {
+		t.Errorf("renders = %q, want the layout, elevation, mesh area, mesh short-edge, mesh, cell relief, cell altitude and sea level renders", names)
 	}
 }

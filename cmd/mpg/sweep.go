@@ -34,7 +34,11 @@ const (
 
 // runSweep builds a contact sheet: one row per aspect, preset, and seed
 // (aspects outermost, seeds innermost), one column per requested stage, each tile a stage render shrunk to
-// --tile pixels wide. Rows run one after another, so the sheet does not
+// --tile pixels wide. When the run reaches the sea level stage, each row's
+// label shows the land count achieved against N (and UNMET when it misses
+// the 1% tolerance), and
+// each sea-level tile's caption the count against N, the deviation, and the
+// search's reason. Rows run one after another, so the sheet does not
 // depend on scheduling. Exit codes: 0 on success, 1 on a config error, an
 // unimplemented stage, or a run error, 2 on a usage error.
 func runSweep(args []string, stdout, stderr io.Writer) int {
@@ -192,8 +196,17 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 			if tiles[k].Image != nil {
 				tiles[k].Caption[1] += fmt.Sprintf(", %dx%d px", size[k].X, size[k].Y)
 			}
+			if sl := ctx.Products.SeaLevel; sl != nil && registry[c.index].Name == "sea-level" {
+				tiles[k].Caption[1] = fmt.Sprintf("land %d/%d %+.2f%% %s", sl.LandCells, sl.Target, sl.DeviationPercent(), sl.Reason)
+			}
 		}
 		label := []string{fmt.Sprintf("seed %d", uint64(row.cfg.Seed)), w.Aspect, row.cfg.Layout.Preset, fmt.Sprintf("%d land", w.LandCells)}
+		if sl := ctx.Products.SeaLevel; sl != nil {
+			label[3] = fmt.Sprintf("land %d/%d", sl.LandCells, sl.Target)
+			if !sl.Met {
+				label[3] += " UNMET"
+			}
+		}
 		for _, l := range label {
 			sheet.LabelChars = min(max(sheet.LabelChars, len(l)), maxLabelChars)
 		}

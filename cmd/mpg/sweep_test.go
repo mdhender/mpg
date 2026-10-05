@@ -84,13 +84,13 @@ func TestParseSweepStages(t *testing.T) {
 		t.Errorf("unknown-stage error %q does not list the stages", err)
 	}
 
-	// Config through cells are implemented; sea-level is not, nor is
+	// Config through sea-level are implemented; climate is not, nor is
 	// anything after it.
 	for _, tc := range []struct {
 		in   string
 		last int
 		ok   bool
-	}{{"config", 0, true}, {"layout,config", 1, true}, {"config,elevation", 2, true}, {"elevation,mesh", 3, true}, {"mesh,cells", 4, true}, {"cells:relief", 4, true}, {"cells,sea-level", -1, false}, {"sea-level", -1, false}} {
+	}{{"config", 0, true}, {"layout,config", 1, true}, {"config,elevation", 2, true}, {"elevation,mesh", 3, true}, {"mesh,cells", 4, true}, {"cells:relief", 4, true}, {"cells,sea-level", 5, true}, {"sea-level", 5, true}, {"sea-level,climate", -1, false}, {"climate", -1, false}} {
 		cols, err := parseSweepStages(tc.in, registry)
 		if err != nil {
 			t.Fatal(err)
@@ -117,7 +117,7 @@ func TestSweepErrors(t *testing.T) {
 		{[]string{"--seeds", "1", "--stage", "layout", "--tile", "8", "--output", out}, 2, "--tile"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--aspect", "square,", "--output", out}, 2, "--aspect"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--output", out, "extra"}, 2, "unexpected"},
-		{[]string{"--seeds", "1", "--stage", "elevation,sea-level", "--output", out}, 1, "stage 6 sea-level is not implemented"},
+		{[]string{"--seeds", "1", "--stage", "elevation,climate", "--output", out}, 1, "stage 7 climate is not implemented"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--aspect", "squarish", "--output", out}, 1, "world.aspect"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--config", "no-such-file.json", "--output", out}, 1, "no-such-file"},
 	} {
@@ -261,5 +261,27 @@ func TestSweepPresets(t *testing.T) {
 	}
 	if code, _, stderr := sweep(t, "--seeds", "1", "--stage", "layout", "--preset", "islands,islands", "--output", out); code != 2 || !strings.Contains(stderr, "--preset") {
 		t.Errorf("repeated preset: exit %d, stderr %q", code, stderr)
+	}
+}
+
+// TestSweepSeaLevel checks that a sweep runs through the sea level stage
+// and gives the same sheet twice.
+func TestSweepSeaLevel(t *testing.T) {
+	dir := t.TempDir()
+	var hashes []string
+	for _, name := range []string{"a.png", "b.png"} {
+		code, stdout, stderr := sweep(t, "--seeds", "1,2", "--stage", "cells,sea-level", "--land-cells", "600",
+			"--tile", "64", "--output", filepath.Join(dir, name))
+		if code != 0 {
+			t.Fatalf("exit %d; stderr %q", code, stderr)
+		}
+		if !strings.Contains(stdout, "stages  cells, sea-level") || !strings.Contains(stderr, "sea-level: level ") {
+			t.Errorf("stdout %q, stderr %q", stdout, stderr)
+		}
+		_, h, _ := strings.Cut(stdout, "pixels  ")
+		hashes = append(hashes, h)
+	}
+	if hashes[0] != hashes[1] {
+		t.Errorf("two sweeps differ: %q, %q", hashes[0], hashes[1])
 	}
 }

@@ -67,6 +67,9 @@ type Products struct {
 	// Cells is the cell statistics stage's per-cell altitude, relief,
 	// latitude and sample counts, and each raster sample's cell.
 	Cells *cells.Stats
+	// SeaLevel is the sea level stage's level, its land, ocean and dry
+	// basin cells, and the search's trace and outcome.
+	SeaLevel *cells.SeaLevel
 }
 
 // NewContext resolves cfg and returns a context for a run writing to

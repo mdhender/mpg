@@ -5,6 +5,7 @@ package pipeline
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"image"
 	"os"
 	"path/filepath"
@@ -210,8 +211,8 @@ func TestConfigStage(t *testing.T) {
 
 	// The full registry stops at the first unimplemented stage.
 	res, err = Run(newTestContext(t, false), Stages(), -1)
-	if err != nil || res.NotImplemented == nil || res.NotImplemented.Name != "sea-level" {
-		t.Errorf("full run = %+v, %v; want a stop at sea-level", res, err)
+	if err != nil || res.NotImplemented == nil || res.NotImplemented.Name != "climate" {
+		t.Errorf("full run = %+v, %v; want a stop at climate", res, err)
 	}
 }
 
@@ -433,6 +434,100 @@ func TestCellsStage(t *testing.T) {
 	for _, name := range []string{"05-cells.png", "05-cells-relief.png"} {
 		if _, err := os.Stat(filepath.Join(c.RendersDir, name)); err != nil {
 			t.Error(err)
+		}
+	}
+}
+
+// TestSeaLevelStage runs the pipeline through the sea level stage and
+// checks its product against cells.Search, its render, and its log.
+func TestSeaLevelStage(t *testing.T) {
+	c := newTestContext(t, true)
+	var log bytes.Buffer
+	c.Log = &log
+	var variants []string
+	c.Sink = func(st Stage, variant string, img image.Image) error {
+		variants = append(variants, st.String()+"/"+variant)
+		return nil
+	}
+	last, err := Lookup(Stages(), "sea-level")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Run(c, Stages(), last)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level"}) {
+		t.Errorf("ran %q", names(res.Ran))
+	}
+	sl := c.Products.SeaLevel
+	if sl == nil {
+		t.Fatal("sea level stage left its product empty")
+	}
+	want, err := cells.Search(c.Products.Mesh, c.Products.Cells.Altitude, c.Config.World.LandCells)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := sl.AppendBinary(nil)
+	b, _ := want.AppendBinary(nil)
+	if !bytes.Equal(a, b) {
+		t.Error("stage product differs from cells.Search")
+	}
+	if !sl.Met || sl.Target != 10_000 {
+		t.Errorf("seed 42: %d land of %d, reason %s", sl.LandCells, sl.Target, sl.Reason)
+	}
+	if got := variants[len(variants)-1]; got != "6 sea-level/" {
+		t.Errorf("renders %q, want the sea level render last", variants)
+	}
+	if _, err := os.Stat(filepath.Join(c.RendersDir, "06-sea-level.png")); err != nil {
+		t.Error(err)
+	}
+	for _, s := range []string{"sea-level: target 10000 land cells ± 100", string(sl.Reason), "dry basin"} {
+		if !strings.Contains(log.String(), s) {
+			t.Errorf("log lacks %q:\n%s", s, log.String())
+		}
+	}
+}
+
+// TestSeaLevelMeetsTarget runs the sea-level search on default worlds
+// (smaller ones with -short) for seeds 1 to 8 at the cinematic and square
+// aspects, and archipelago and pangaea at cinematic: every one meets the
+// land target within 1% of N.
+func TestSeaLevelMeetsTarget(t *testing.T) {
+	type row struct {
+		aspect, preset string
+	}
+	rows := []row{{"cinematic", "continents"}, {"square", "continents"}, {"cinematic", "archipelago"}, {"cinematic", "pangaea"}}
+	land := 0 // default
+	if testing.Short() {
+		land = 2_000
+	}
+	for _, r := range rows {
+		for seed := range uint64(8) {
+			t.Run(fmt.Sprintf("%s-%s-%d", r.aspect, r.preset, seed+1), func(t *testing.T) {
+				t.Parallel()
+				cfg := config.Default()
+				cfg.Seed = config.Seed(seed + 1)
+				cfg.World.Aspect = r.aspect
+				cfg.Layout.Preset = r.preset
+				if land > 0 {
+					cfg.World.LandCells = land
+				}
+				c, err := NewContext(cfg, t.TempDir(), "", nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				last, _ := Lookup(Stages(), "sea-level")
+				if _, err := Run(c, Stages(), last); err != nil {
+					t.Fatal(err)
+				}
+				sl := c.Products.SeaLevel
+				if !sl.Met || 100*max(sl.Deviation(), -sl.Deviation()) > sl.Target {
+					t.Errorf("land %d of %d (%+.2f%%), reason %s, %d probes", sl.LandCells, sl.Target, sl.DeviationPercent(), sl.Reason, len(sl.Trace))
+				}
+				t.Logf("land %d of %d (%+.2f%%), %d dry basin cells, level %.2f m, %s in %d probes",
+					sl.LandCells, sl.Target, sl.DeviationPercent(), sl.BasinCells, sl.Level, sl.Reason, len(sl.Trace))
+			})
 		}
 	}
 }
