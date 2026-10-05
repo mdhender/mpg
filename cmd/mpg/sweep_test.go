@@ -94,7 +94,7 @@ func TestParseSweepStages(t *testing.T) {
 		in   string
 		last int
 		ok   bool
-	}{{"config", 0, true}, {"layout,config", 1, true}, {"config,elevation", 2, true}, {"elevation,mesh", 3, true}, {"mesh,cells", 4, true}, {"cells:relief", 4, true}, {"cells,sea-level", 5, true}, {"sea-level", 5, true}, {"sea-level,climate", 6, true}, {"climate", 6, true}, {"climate:mask", 6, true}, {"climate:precip,climate:moisture,climate:pet,climate:runoff,climate:aridity", 6, true}, {"climate,basins", 7, true}, {"basins:depth", 7, true}, {"basins,land-target", -1, false},
+	}{{"config", 0, true}, {"layout,config", 1, true}, {"config,elevation", 2, true}, {"elevation,mesh", 3, true}, {"mesh,cells", 4, true}, {"cells:relief", 4, true}, {"cells,sea-level", 5, true}, {"sea-level", 5, true}, {"sea-level,climate", 6, true}, {"climate", 6, true}, {"climate:mask", 6, true}, {"climate:precip,climate:moisture,climate:pet,climate:runoff,climate:aridity", 6, true}, {"climate,basins", 7, true}, {"basins:depth", 7, true}, {"basins:lakes", 7, true}, {"basins,land-target", -1, false},
 		{"classify", 10, true}, {"sea-level,classify", 10, true}, {"rivers,classify", -1, false}, {"classify,edges", 11, true}, {"edges:passability", 11, true}, {"edges,measures", -1, false}} {
 		cols, err := parseSweepStages(tc.in, registry)
 		if err != nil {
@@ -277,12 +277,12 @@ func TestSweepSeaLevel(t *testing.T) {
 	dir := t.TempDir()
 	var hashes []string
 	for _, name := range []string{"a.png", "b.png"} {
-		code, stdout, stderr := sweep(t, "--seeds", "1,2", "--stage", "cells,sea-level,climate,climate:mask,climate:precip,climate:aridity,basins,basins:depth,classify,edges,edges:passability", "--land-cells", "600",
+		code, stdout, stderr := sweep(t, "--seeds", "1,2", "--stage", "cells,sea-level,climate,climate:mask,climate:precip,climate:aridity,basins,basins:depth,basins:lakes,classify,edges,edges:passability", "--land-cells", "600",
 			"--tile", "64", "--output", filepath.Join(dir, name))
 		if code != 0 {
 			t.Fatalf("exit %d; stderr %q", code, stderr)
 		}
-		if !strings.Contains(stdout, "stages  cells, sea-level, climate, climate:mask, climate:precip, climate:aridity, basins, basins:depth, classify, edges, edges:passability") || !strings.Contains(stderr, "basins: ") || !strings.Contains(stderr, "climate: rim temperature ") || !strings.Contains(stderr, "sea-level: level ") ||
+		if !strings.Contains(stdout, "stages  cells, sea-level, climate, climate:mask, climate:precip, climate:aridity, basins, basins:depth, basins:lakes, classify, edges, edges:passability") || !strings.Contains(stderr, "basins: ") || !strings.Contains(stderr, " lake cells; ") || !strings.Contains(stderr, "climate: rim temperature ") || !strings.Contains(stderr, "sea-level: level ") ||
 			!strings.Contains(stderr, "classify: land: ") || !strings.Contains(stderr, "edges: direction error ") {
 			t.Errorf("stdout %q, stderr %q", stdout, stderr)
 		}
@@ -319,6 +319,19 @@ func TestClimateCaption(t *testing.T) {
 		if got := climateCaption(cells, r, tc.variant); got != tc.want {
 			t.Errorf("variant %q: caption %q, want %q", tc.variant, got, tc.want)
 		}
+	}
+}
+
+// TestLakesCaption checks the basins:lakes tile caption on a hand-made
+// water balance: a lake, a salt inland sea, a playa, and a full basin.
+func TestLakesCaption(t *testing.T) {
+	l := &basin.Lakes{
+		Water:  []basin.Water{{State: basin.Full}, {State: basin.Partial}, {State: basin.Dry}},
+		Lakes:  []basin.Lake{{Cells: []int{1, 2}}, {Cells: make([]int, 20), Kind: basin.KindInlandSea, Salt: true}},
+		Playas: []basin.Playa{{Basin: 2}},
+	}
+	if got, want := lakesCaption(l), "lk 1 sea 1 salt 1 pl 1 full 1 cells 22"; got != want {
+		t.Errorf("caption %q, want %q", got, want)
 	}
 }
 

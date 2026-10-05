@@ -256,9 +256,20 @@ func checkWorld(t *testing.T, m *mesh.Mesh, alt []float64, seed []bool, r *basin
 		if r.Of[c] != want {
 			t.Errorf("cell %d: basin %d, want %d", c, r.Of[c], want)
 		}
+		// A cell whose innermost depression is shallow routes at the spill
+		// of its outermost shallow depression: the flood level for one in
+		// no basin.
+		shallow := basin.None
+		for d := r.Depression[c]; d != basin.None && r.BasinOf[d] == basin.None; d = r.Depressions[d].Parent {
+			shallow = d
+		}
 		if want == basin.None && r.Depression[c] != basin.None {
 			if r.RouteM[c] != fill[c] {
 				t.Errorf("cell %d: RouteM %v, want the flood level %v", c, r.RouteM[c], fill[c])
+			}
+		} else if shallow != basin.None {
+			if r.RouteM[c] != r.Depressions[shallow].SpillM {
+				t.Errorf("cell %d: RouteM %v, want its shallow depression %d's spill %v", c, r.RouteM[c], shallow, r.Depressions[shallow].SpillM)
 			}
 		} else if r.RouteM[c] != alt[c] {
 			t.Errorf("cell %d: RouteM %v, want its altitude %v", c, r.RouteM[c], alt[c])
@@ -377,5 +388,235 @@ func TestRenumbering(t *testing.T) {
 	}
 	if len(ka) == 0 {
 		t.Error("no depressions to compare")
+	}
+}
+
+// lakesWorld runs the pipeline through the basins stage and returns its
+// context.
+func lakesWorld(t *testing.T, seed uint64, aspect, preset string, land int) *pipeline.Context {
+	t.Helper()
+	c := config.Default()
+	c.Seed = config.Seed(seed)
+	c.World.Aspect = aspect
+	c.Layout.Preset = preset
+	c.World.LandCells = land
+	if land < 1000 {
+		c.Rim.FalloffCells = 4
+	}
+	ctx, err := pipeline.NewContext(c, t.TempDir(), "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stages := pipeline.Stages()
+	last, err := pipeline.Lookup(stages, "basins")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pipeline.Run(ctx, stages, last); err != nil {
+		t.Fatal(err)
+	}
+	return ctx
+}
+
+// TestWorldLakes checks the water balance on real worlds:
+//   - water is conserved within basin.ConservationTolerance, over the map
+//     and per lake;
+//   - every lake is one connected set of cells in its basin with one
+//     surface level: no cell above it, the highest cell at it (or the
+//     spill level for a full lake), and no two lakes touching;
+//   - lake kinds follow inland_sea_min_cells, salt follows the rule;
+//   - each playa is the bottom of a dry basin with no children, its sink a
+//     corner of the bottom cell;
+//   - every cell's sink is the basin of its descent's pit;
+//   - altitudes are unchanged and two runs agree byte for byte.
+func TestWorldLakes(t *testing.T) {
+	for _, tc := range []struct {
+		seed           uint64
+		aspect, preset string
+		land           int
+	}{
+		{42, "cinematic", "continents", 10_000},
+		{7, "square", "pangaea", 10_000},
+		{3, "cinematic", "archipelago", 2_000},
+		{5, "portrait", "pangaea", 800},
+	} {
+		t.Run(fmt.Sprintf("seed%d-%s-%s-%d", tc.seed, tc.aspect, tc.preset, tc.land), func(t *testing.T) {
+			if testing.Short() && tc.land > 2_000 {
+				t.Skip("large world")
+			}
+			t.Parallel()
+			ctx := lakesWorld(t, tc.seed, tc.aspect, tc.preset, tc.land)
+			m, alt, r, l := ctx.Products.Mesh, ctx.Products.Cells.Altitude, ctx.Products.Basins, ctx.Products.Lakes
+			cl := ctx.Products.Climate
+			p := pipeline.BasinParams(&ctx.Config)
+			if math.Abs(l.Residual) > basin.ConservationTolerance {
+				t.Errorf("residual %v", l.Residual)
+			}
+			for k := range l.Lakes {
+				if res := l.Lakes[k].Residual(); math.Abs(res) > basin.ConservationTolerance {
+					t.Errorf("lake %d: residual %v", k, res)
+				}
+			}
+			if l.Stray != 0 {
+				t.Errorf("%d stray cells", l.Stray)
+			}
+			for k, lk := range l.Lakes {
+				in := map[int]bool{}
+				top := math.Inf(-1)
+				for _, c := range lk.Cells {
+					in[c] = true
+					top = max(top, alt[c])
+					if l.Lake[c] != k {
+						t.Errorf("lake %d lists cell %d of lake %d", k, c, l.Lake[c])
+					}
+					if b := r.Of[c]; b == basin.None || !holds(r, lk.Basin, b) {
+						t.Errorf("lake %d: cell %d outside basin %d", k, c, lk.Basin)
+					}
+					if alt[c] > lk.SurfaceM {
+						t.Errorf("lake %d: cell %d at %v m above the surface %v m", k, c, alt[c], lk.SurfaceM)
+					}
+					for _, y := range m.Cells[c].Neighbors {
+						if o := l.Lake[y]; o != basin.None && o != k {
+							t.Errorf("lakes %d and %d touch at cells %d, %d", k, o, c, y)
+						}
+					}
+				}
+				if want := top; lk.Full {
+					if lk.SurfaceM != r.Basins[lk.Basin].SpillM {
+						t.Errorf("lake %d full at %v m, spill %v m", k, lk.SurfaceM, r.Basins[lk.Basin].SpillM)
+					}
+				} else if lk.SurfaceM != want {
+					t.Errorf("lake %d: surface %v m, highest cell %v m", k, lk.SurfaceM, want)
+				}
+				// Connected.
+				seen := map[int]bool{lk.Cells[0]: true}
+				q := []int{lk.Cells[0]}
+				for i := 0; i < len(q); i++ {
+					for _, y := range m.Cells[q[i]].Neighbors {
+						if in[y] && !seen[y] {
+							seen[y] = true
+							q = append(q, y)
+						}
+					}
+				}
+				if len(seen) != len(lk.Cells) {
+					t.Errorf("lake %d: %d of %d cells connected", k, len(seen), len(lk.Cells))
+				}
+				if sea := len(lk.Cells) >= p.InlandSeaMinCells; sea != (lk.Kind == basin.KindInlandSea) {
+					t.Errorf("lake %d: %d cells, kind %v", k, len(lk.Cells), lk.Kind)
+				}
+				if salt := lk.Overflow == 0 && lk.Evaporation > 0 && lk.Evaporation >= p.SaltEvapShare*(lk.Evaporation+lk.Seepage); salt != lk.Salt {
+					t.Errorf("lake %d: salt %v: %+v", k, lk.Salt, lk)
+				}
+			}
+			for _, pl := range l.Playas {
+				b := r.Basins[pl.Basin]
+				if pl.Cell != b.Bottom || len(b.Children) != 0 || l.Water[pl.Basin].State != basin.Dry || l.Lake[pl.Cell] != basin.None ||
+					!slices.Contains(m.Cells[pl.Cell].Corners, pl.Corner) {
+					t.Errorf("playa %+v: basin %+v, state %v", pl, b, l.Water[pl.Basin].State)
+				}
+			}
+			for c := range m.Cells {
+				x := c
+				for x != basin.None && l.Down[x] != basin.None {
+					x = l.Down[x]
+				}
+				want := basin.None
+				if !ctx.Products.SeaLevel.Ocean[c] && !m.Cells[c].Rim && !m.Cells[x].Rim && !ctx.Products.SeaLevel.Ocean[x] {
+					want = r.Of[x]
+				}
+				if l.Sink[c] != want {
+					t.Errorf("cell %d: sink %d, want %d (pit %d)", c, l.Sink[c], want, x)
+				}
+			}
+			seed := pipeline.BasinSeed(m, &ctx.Products.SeaLevel.Flood)
+			before := slices.Clone(alt)
+			again, err := basin.Balance(m, alt, seed, pipeline.CellAreas(m), r,
+				basin.Climate{Precipitation: cl.Precipitation, PET: cl.PET, Runoff: cl.Runoff}, p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			a, _ := l.AppendBinary(nil)
+			b, _ := again.AppendBinary(nil)
+			if !bytes.Equal(a, b) {
+				t.Error("two runs differ")
+			}
+			if !slices.Equal(alt, before) {
+				t.Error("altitudes changed")
+			}
+			nl, ns, salt, full := l.Counts()
+			t.Logf("%d lakes, %d inland seas, %d salt, %d playas, %d of %d basins full, %d lake cells, residual %.1e",
+				nl, ns, salt, len(l.Playas), full, len(r.Basins), l.Cells(), l.Residual)
+		})
+	}
+}
+
+// holds reports whether basin a is b or holds it.
+func holds(r *basin.Result, a, b int) bool {
+	for ; b != basin.None; b = r.Basins[b].Parent {
+		if b == a {
+			return true
+		}
+	}
+	return false
+}
+
+// TestBalanceRenumbering checks that the water balance does not depend on
+// cell ids: with the cells of a real world numbered in reverse, the lakes
+// are the same sets of cells with the same surfaces, kinds and salinity,
+// and the playas the same cells. Only choices among equals could differ,
+// and this world has none that matter.
+func TestBalanceRenumbering(t *testing.T) {
+	ctx := lakesWorld(t, 3, "cinematic", "archipelago", 2_000)
+	m, alt, cl := ctx.Products.Mesh, ctx.Products.Cells.Altitude, ctx.Products.Climate
+	seed := pipeline.BasinSeed(m, &ctx.Products.SeaLevel.Flood)
+	area := pipeline.CellAreas(m)
+	n := len(m.Cells)
+	perm, inverse := make([]int, n), make([]int, n)
+	for i := range perm {
+		perm[i] = n - 1 - i
+		inverse[perm[i]] = i
+	}
+	pm, palt, pseed := permuted(m, alt, seed, perm)
+	move := func(v []float64) []float64 {
+		out := make([]float64, n)
+		for i, x := range v {
+			out[perm[i]] = x
+		}
+		return out
+	}
+	p := pipeline.BasinParams(&ctx.Config)
+	describe := func(m *mesh.Mesh, alt []float64, seed []bool, area []float64, c basin.Climate, f func(int) int) []string {
+		r, err := basin.Find(m, alt, seed, 50)
+		if err != nil {
+			t.Fatal(err)
+		}
+		l, err := basin.Balance(m, alt, seed, area, r, c, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var keys []string
+		for _, k := range l.Lakes {
+			cs := make([]int, len(k.Cells))
+			for i, x := range k.Cells {
+				cs[i] = f(x)
+			}
+			slices.Sort(cs)
+			keys = append(keys, fmt.Sprint("lake ", cs, k.SurfaceM, k.Kind, k.Salt, k.Full))
+		}
+		for _, pl := range l.Playas {
+			keys = append(keys, fmt.Sprint("playa ", f(pl.Cell)))
+		}
+		slices.Sort(keys)
+		return keys
+	}
+	ka := describe(m, alt, seed, area, basin.Climate{Precipitation: cl.Precipitation, PET: cl.PET, Runoff: cl.Runoff}, func(c int) int { return c })
+	kb := describe(pm, palt, pseed, move(area), basin.Climate{Precipitation: move(cl.Precipitation), PET: move(cl.PET), Runoff: move(cl.Runoff)},
+		func(c int) int { return inverse[c] })
+	if !slices.Equal(ka, kb) {
+		t.Errorf("renumbered lakes differ:\n%v\n%v", ka, kb)
+	}
+	if len(ka) == 0 {
+		t.Error("no lakes to compare")
 	}
 }

@@ -127,3 +127,93 @@ func drawSpills(img *image.RGBA, f *field.Field, m *mesh.Mesh, r *Result) {
 		mesh.Mark(img, f, m, p, 0.2, 2, SpillInk)
 	}
 }
+
+// The lakes render's palette: lakes by kind and salinity, playas, the land
+// of basins that holds no water, and the marks.
+var (
+	FreshLakeColor = color.RGBA{0x3b, 0x82, 0xd6, 0xff}
+	SaltLakeColor  = color.RGBA{0x4f, 0xc1, 0xa6, 0xff}
+	FreshSeaColor  = color.RGBA{0x1c, 0x4c, 0x96, 0xff}
+	SaltSeaColor   = color.RGBA{0x1f, 0x80, 0x70, 0xff}
+	PlayaColor     = color.RGBA{0xf3, 0xd0, 0x5a, 0xff}
+	DryBasinColor  = color.RGBA{0xe4, 0xd8, 0xc0, 0xff}
+	SinkInk        = color.RGBA{0x7a, 0x3e, 0x0c, 0xff}
+)
+
+// LakeColor returns the lakes render's fill for lake k: FreshLakeColor or
+// SaltLakeColor for a lake, FreshSeaColor or SaltSeaColor for an inland
+// sea.
+func LakeColor(k *Lake) color.RGBA {
+	switch {
+	case k.Kind == KindInlandSea && k.Salt:
+		return SaltSeaColor
+	case k.Kind == KindInlandSea:
+		return FreshSeaColor
+	case k.Salt:
+		return SaltLakeColor
+	}
+	return FreshLakeColor
+}
+
+// LakesRender draws the basins stage's "lakes" variant over
+// mesh.CellRender: lake cells by LakeColor, playa cells in PlayaColor,
+// other basin cells in DryBasinColor, other land by LandRamp at its
+// altitude above level, the sea in OceanColor and the rim as the ice sheet.
+// It then marks each dry sink corner with a SinkInk disc in a white ring,
+// draws the spill edge of every overflowing lake in SpillInk with its spill
+// corner (the outlet) marked, and dots in SpillInk the path, cell by cell
+// down the descent, by which a top-level basin's overflow reaches the basin
+// downstream of it.
+func LakesRender(f *field.Field, m *mesh.Mesh, alt []float64, seed []bool, level float64, r *Result, l *Lakes) *image.RGBA {
+	playa := make([]bool, len(m.Cells))
+	for _, p := range l.Playas {
+		playa[p.Cell] = true
+	}
+	img := mesh.CellRender(f, m, func(i int) color.RGBA {
+		switch {
+		case m.Cells[i].Rim:
+			return mesh.IceColor
+		case seed[i]:
+			return OceanColor
+		case l.Lake[i] != None:
+			return LakeColor(&l.Lakes[l.Lake[i]])
+		case playa[i]:
+			return PlayaColor
+		case r.Of[i] != None:
+			return DryBasinColor
+		}
+		return LandRamp.At(alt[i] - level)
+	})
+	spill := make([]bool, len(m.Edges))
+	for _, k := range l.Lakes {
+		if k.Outlet != None {
+			spill[r.Basins[k.Basin].SpillEdge] = true
+		}
+	}
+	w := max(2, float64(mesh.RenderScale(f, m)))
+	mesh.DrawEdges(img, f, m, w, func(e int) (color.RGBA, bool) { return SpillInk, spill[e] })
+	for _, x := range l.Water {
+		if x.Overflow <= 0 || x.OverflowTo == None || x.OverflowVia == None {
+			continue
+		}
+		for c := x.OverflowVia; c != None && !seed[c]; c = l.Down[c] {
+			mesh.Mark(img, f, m, m.Cells[c].Site, 0.12, 1.5, SpillInk)
+			if l.Lake[c] != None {
+				break
+			}
+		}
+	}
+	for _, k := range l.Lakes {
+		if k.Outlet != None {
+			p := m.Corners[k.Outlet].Point
+			mesh.Mark(img, f, m, p, 0.3, 3, ringInk)
+			mesh.Mark(img, f, m, p, 0.2, 2, SpillInk)
+		}
+	}
+	for _, p := range l.Playas {
+		q := m.Corners[p.Corner].Point
+		mesh.Mark(img, f, m, q, 0.3, 3, ringInk)
+		mesh.Mark(img, f, m, q, 0.2, 2, SinkInk)
+	}
+	return img
+}

@@ -345,7 +345,9 @@
   },
   "basin": {
     "min_depth_m": 50,
-    "inland_sea_min_cells": 20
+    "inland_sea_min_cells": 20,
+    "seepage_mm": 50,
+    "salt_evap_share": 0.5
   },
   "river": {
     "threshold_km2": 500

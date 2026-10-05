@@ -623,12 +623,29 @@ func TestBasinsStage(t *testing.T) {
 	if len(p.Basins.Basins) == 0 {
 		t.Error("no basins in the default world")
 	}
-	for _, name := range []string{"08-basins.png", "08-basins-depth.png"} {
+	if p.Lakes == nil {
+		t.Fatal("basins stage left its lakes empty")
+	}
+	cl := p.Climate
+	wantLakes, err := basin.Balance(p.Mesh, p.Cells.Altitude, BasinSeed(p.Mesh, &p.SeaLevel.Flood), CellAreas(p.Mesh), p.Basins,
+		basin.Climate{Precipitation: cl.Precipitation, PET: cl.PET, Runoff: cl.Runoff}, BasinParams(&c.Config))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ = p.Lakes.AppendBinary(nil)
+	b, _ = wantLakes.AppendBinary(nil)
+	if !bytes.Equal(a, b) {
+		t.Error("stage lakes differ from basin.Balance")
+	}
+	if pp := p.Lakes.Params; pp.SeepageMM != c.Config.Basin.SeepageMM || pp.SaltEvapShare != c.Config.Basin.SaltEvapShare || pp.InlandSeaMinCells != c.Config.Basin.InlandSeaMinCells {
+		t.Errorf("params %+v do not follow the config", pp)
+	}
+	for _, name := range []string{"08-basins.png", "08-basins-depth.png", "08-basins-lakes.png"} {
 		if _, err := os.Stat(filepath.Join(c.RendersDir, name)); err != nil {
 			t.Error(err)
 		}
 	}
-	for _, s := range []string{"basins: ", " depressions; depth 0–10 m ", " basins at least 50 m deep ("} {
+	for _, s := range []string{"basins: ", " depressions; depth 0–10 m ", " basins at least 50 m deep (", " lake cells; ", " playas (", " basins full; residual "} {
 		if !strings.Contains(log.String(), s) {
 			t.Errorf("log lacks %q:\n%s", s, log.String())
 		}

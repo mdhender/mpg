@@ -206,7 +206,7 @@ func TestHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = "a94d88cd17f4c88ac481456ea950c621d3a2a274446397056770cee7dddbe1e3"
+	const want = "e387cee7ad7895aba3897ae84a88be6a733d6f240c4ecef6c32bb4d3cc55ace5"
 	if h != want {
 		t.Errorf("Hash = %s, want %s", h, want)
 	}
@@ -358,6 +358,12 @@ func TestValidate(t *testing.T) {
 		{"swell radius zero", func(c *Config) { c.Volcanic.SwellRadiusKm = 0 }, "volcanic.swell_radius_km"},
 		{"basin depth NaN", func(c *Config) { c.Basin.MinDepthM = math.NaN() }, "basin.min_depth_m"},
 		{"inland sea 1", func(c *Config) { c.Basin.InlandSeaMinCells = 1 }, "basin.inland_sea_min_cells"},
+		{"seepage negative", func(c *Config) { c.Basin.SeepageMM = -1 }, "basin.seepage_mm"},
+		{"seepage NaN", func(c *Config) { c.Basin.SeepageMM = math.NaN() }, "basin.seepage_mm"},
+		{"seepage Inf", func(c *Config) { c.Basin.SeepageMM = math.Inf(1) }, "basin.seepage_mm"},
+		{"salt share negative", func(c *Config) { c.Basin.SaltEvapShare = -0.1 }, "basin.salt_evap_share"},
+		{"salt share above 1", func(c *Config) { c.Basin.SaltEvapShare = 1.5 }, "basin.salt_evap_share"},
+		{"salt share NaN", func(c *Config) { c.Basin.SaltEvapShare = math.NaN() }, "basin.salt_evap_share"},
 		{"river zero", func(c *Config) { c.River.ThresholdKm2 = 0 }, "river.threshold_km2"},
 		{"classify flats negative", func(c *Config) { c.Classify.FlatsBelowM = -1 }, "classify.flats_below_m"},
 		{"classify breaks decrease", func(c *Config) { c.Classify.HillsBelowM = 100 }, "classify.hills_below_m 100 must be in [150"},

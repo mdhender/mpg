@@ -81,11 +81,13 @@ type Result struct {
 	// Depression and Of give each cell's innermost depression and innermost
 	// basin, or None.
 	Depression, Of []int
-	// RouteM is each cell's height for routing: for a cell in a top-level
-	// depression shallower than the minimum (in no basin), that
-	// depression's spill level, so the depression routes as flat ground;
-	// for every other cell its altitude. Altitudes themselves are never
-	// changed.
+	// RouteM is each cell's height for routing: for a cell whose
+	// innermost depression is shallower than the minimum, the spill level
+	// of the outermost depression around it that is shallower too (the
+	// top-level one, for a cell in no basin; the one merged into a basin,
+	// for a cell of a basin), so every shallow depression routes as flat
+	// ground at its spill level; for every other cell its altitude.
+	// Altitudes themselves are never changed.
 	RouteM []float64
 }
 
@@ -401,17 +403,24 @@ func (f *flood) result(minDepthM float64) *Result {
 		}
 	}
 	// owner is the basin a depression's own cells belong to: its own, or
-	// its nearest kept ancestor's; top the top-level depression above it.
-	// Parents come after children, so walk down from the end.
+	// its nearest kept ancestor's; shallow, for a depression shallower than
+	// the minimum, its outermost ancestor that is shallower too (itself
+	// when its parent is kept or it is top-level). Parents come after
+	// children, so walk down from the end.
 	owner := make([]int, len(r.Depressions))
-	top := make([]int, len(r.Depressions))
+	shallow := make([]int, len(r.Depressions))
 	for d := len(r.Depressions) - 1; d >= 0; d-- {
 		dep := r.Depressions[d]
-		owner[d], top[d] = r.BasinOf[d], d
+		owner[d], shallow[d] = r.BasinOf[d], None
+		if owner[d] == None {
+			shallow[d] = d
+		}
 		if p := dep.Parent; p != None {
-			top[d] = top[p]
 			if owner[d] == None {
 				owner[d] = owner[p]
+				if r.BasinOf[p] == None {
+					shallow[d] = shallow[p]
+				}
 			}
 		}
 	}
@@ -432,8 +441,9 @@ func (f *flood) result(minDepthM float64) *Result {
 		if b := owner[d]; b != None {
 			r.Of[c] = b
 			r.Basins[b].Cells = append(r.Basins[b].Cells, c)
-		} else {
-			r.RouteM[c] = r.Depressions[top[d]].SpillM
+		}
+		if s := shallow[d]; s != None {
+			r.RouteM[c] = r.Depressions[s].SpillM
 		}
 	}
 	return r

@@ -243,12 +243,20 @@ Stage 7 computes climate on the raster with the cell mask drawn onto it: each ra
   1. Sort each basin's cells by altitude.
   2. Fill them in that order.
   3. Stop when evaporation from the lake area plus seepage balances catchment runoff, or when the spill level is reached.
+  - **Catchment:** every cell drains by steepest descent on its routing height (altitude, with each depression shallower than the minimum raised to the spill of its outermost shallow ancestor; sea lowest; ties by id; flats resolved from their exits). A basin's catchment is the cells whose descent ends in it, typically 6–11× its own area. Rivers (S30) may differ near ridges; the balance is self-consistent either way.
+  - **Costs:** a lake cell evaporates its PET and receives its own precipitation instead of its runoff, and loses `basin.seepage_mm` (default 50 mm/yr). Turning cell c into lake costs d_c = area_c·(PET_c − AET_c + seepage) ≥ 0, with AET = P − R (Budyko), so the fill is a prefix of the fill order.
+  - **Fill:** from the basin's bottom, a priority flood over its cells by (altitude, id); a cell is filled only if the remaining budget is at least its d_c. The surface is the highest filled altitude, or the spill level when full.
+  - **Order:** top-level basin trees by descending spill level (ties by id); within a tree, children before parents. A full child's surplus goes to its non-full sibling with the lowest surface (ties by id), or, once all children are full, the parent continues the flood as one surface over them. A full top-level basin overflows through its spill corner and runs down to the sea or to a lower basin, which receives it as inflow (passing on through basins already full).
+  - **Conservation** is checked in real cell area × mm/yr: runoff + lake precipitation = evaporation + seepage + overflow to the sea + unplaced water (playa inflow and partial-fill remainders), to a relative 10⁻⁹ (measured ≈ 3·10⁻¹⁵).
 - **Surplus at the spill** overflows through **one spill corner**, which became a wgvc rule for good reason, and continues downstream.
 - **No stable level** means the basin stays dry land with surface `playa` and is a **dry sink** for rivers.
+  - That is a leaf basin whose inflow is less than d of its bottom cell. Only the bottom cell is `playa`; its lowest corner by corner height (ties by id) is the dry sink. A partly filled basin is a lake plus ordinary land; a dry parent whose children hold lakes is plain land.
 - **Classification:**
   - lake: 1 to `inland_sea_min_cells` − 1 cells (one-cell lakes are fine);
   - inland sea: `inland_sea_min_cells` or more (**default 20**);
-  - each is marked salt if endorheic and evaporation-dominated (a salinity proxy, not chemistry).
+  - each is marked salt if endorheic and evaporation-dominated (a salinity proxy, not chemistry): no overflow, and evaporation / (evaporation + seepage) ≥ `basin.salt_evap_share` (default 0.5). Frozen lakes (PET 0) are fresh.
+  - Measured on 8 default-size worlds: 15–47 lakes, 4–13 inland seas, 2–17 salt, 1–12 playas; lake cells 2.7–12.8% of N, which the land-target search (S29) must absorb.
+  - world.json (from S29): a `salt` cell flag (landform lake or inland sea by size), a `playa` cell flag, a `sink` corner flag, and lake, inland-sea, playa and salt counts in the outcomes.
 - A lake is one connected set of cells with one surface level.
 - **Minimum depth.** A depression counts as a basin only if its spill level is at least `basin_min_depth_m` above its lowest cell's altitude. **Default: 50 m.**
   - Shallower depressions are treated as flat ground at their spill level for routing only: no lake, no playa, no dry sink, and altitudes are not changed. Nested sub-basins shallower than the minimum below their own spill merge into their parent.

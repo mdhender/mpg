@@ -174,6 +174,16 @@ func TestBelowMinimum(t *testing.T) {
 		if r.Of[c] != 1 || r.Depression[c] != 1 {
 			t.Errorf("B cell %d: basin %d, depression %d; want 1, 1", c, r.Of[c], r.Depression[c])
 		}
+		// B is shallow, merged into P: it routes as flat ground at its
+		// spill, the 400 m pass.
+		if r.RouteM[c] != 400 || g.alt[c] != 380 {
+			t.Errorf("B cell %d: RouteM %v, altitude %v; want 400, 380", c, r.RouteM[c], g.alt[c])
+		}
+	}
+	for _, c := range a {
+		if r.RouteM[c] != g.alt[c] {
+			t.Errorf("A cell %d: RouteM %v, want its altitude %v", c, r.RouteM[c], g.alt[c])
+		}
 	}
 	if r.Of[pit] != None || r.Depression[pit] != 3 || r.RouteM[pit] != 500 || g.alt[pit] != 480 {
 		t.Errorf("pit: basin %d, depression %d, RouteM %v, altitude %v; want none, 3, 500, 480", r.Of[pit], r.Depression[pit], r.RouteM[pit], g.alt[pit])

@@ -9,9 +9,11 @@
 // A stage marked Deferred is the exception: it is not implemented, but the
 // implemented stages after it do not need it yet, so the runner passes over
 // it and lists it in Result.Skipped. Stages 9 and 10 (the land-target
-// check, rivers) are deferred, and the basins stage (8) finds the basin
-// hierarchy but no lakes yet, so classification (11) runs on the sea level
-// stage's land and water until they exist. Stage 13 (measures) is deferred
+// check, rivers) are deferred. The basins stage (8) finds the basin
+// hierarchy and balances its water into lakes, inland seas and playas
+// (Products.Lakes), but nothing reads them yet: classification (11), edges
+// and export run on the sea level stage's land and water until the
+// land-target search (S29) counts land after lakes. Stage 13 (measures) is deferred
 // too, so a full run reaches export (14), which writes world.json
 // and records the stages passed over in its outcomes; its render is the
 // player-style map (package playermap), drawn from the world alone.

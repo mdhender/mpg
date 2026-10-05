@@ -166,6 +166,15 @@ type Basin struct {
 	// InlandSeaMinCells is the smallest inland sea; smaller water bodies are
 	// lakes (DESIGN.md: inland_sea_min_cells).
 	InlandSeaMinCells int `json:"inland_sea_min_cells"`
+	// SeepageMM is the water every lake cell loses to seepage, in mm per
+	// year, on top of its evaporation (S28: 50 mm, small beside a lake's
+	// PET of about 1,270 mm, so it trims lakes only slightly and keeps
+	// frozen lakes, with no evaporation, from being free).
+	SeepageMM float64 `json:"seepage_mm"`
+	// SaltEvapShare is the least share of a closed lake's losses
+	// (evaporation plus seepage) that evaporation must take for the lake
+	// to be salt (S28: 0.5).
+	SaltEvapShare float64 `json:"salt_evap_share"`
 }
 
 // River sets river selection.
@@ -193,7 +202,7 @@ func Default() Config {
 		Volcanic:  DefaultVolcanic(),
 		Mesh:      DefaultMesh(),
 		Climate:   DefaultClimate(),
-		Basin:     Basin{MinDepthM: 50, InlandSeaMinCells: 20},
+		Basin:     Basin{MinDepthM: 50, InlandSeaMinCells: 20, SeepageMM: 50, SaltEvapShare: 0.5},
 		River:     River{ThresholdKm2: 500},
 		Classify:  DefaultClassify(),
 	}
@@ -254,6 +263,12 @@ func (c *Config) Validate() error {
 	}
 	if v := c.Basin.InlandSeaMinCells; v < 2 {
 		bad("basin.inland_sea_min_cells %d must be at least 2 (smaller water bodies are lakes of 1 or more cells)", v)
+	}
+	if v := c.Basin.SeepageMM; !nonNegative(v) {
+		bad("basin.seepage_mm %v must be non-negative and finite", v)
+	}
+	if v := c.Basin.SaltEvapShare; !(v >= 0 && v <= 1) {
+		bad("basin.salt_evap_share %v must be in [0, 1]", v)
 	}
 	if v := c.River.ThresholdKm2; !positive(v) {
 		bad("river.threshold_km2 %v must be positive and finite", v)

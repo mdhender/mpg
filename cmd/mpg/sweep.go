@@ -50,7 +50,10 @@ const (
 // shares in percent (fl, pl, rp, hi, mt, pt, vh: flats to volcanic
 // highlands) and the volcanoes on land (v). Each basins tile's caption gives
 // the depressions found (dep), the basins at least the minimum deep (bas),
-// the deepest nesting (nest), and the cells in basins (cells). Each edges tile's caption gives
+// the deepest nesting (nest), and the cells in basins (cells); a
+// basins:lakes tile's gives the lakes (lk), inland seas (sea), the salt ones
+// among both (salt), the playas (pl), the full basins (full), and the lake
+// cells (cells). Each edges tile's caption gives
 // the direction error's mean, p95 and max in degrees (err), the share of
 // edges whose reverse direction is not the opposite point (rev), and the
 // coast edges per land cell (coast). Rows run one after another, so the sheet does not
@@ -219,6 +222,9 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 			}
 			if br := ctx.Products.Basins; br != nil && registry[c.index].Name == "basins" {
 				tiles[k].Caption[1] = basinsCaption(br)
+				if lk := ctx.Products.Lakes; lk != nil && c.variant == "lakes" {
+					tiles[k].Caption[1] = lakesCaption(lk)
+				}
 			}
 			if cl := ctx.Products.Classes; cl != nil && registry[c.index].Name == "classify" {
 				tiles[k].Caption[1] = fmt.Sprintf("%s v%d", strings.Join(cl.LandShares(true), " "), cl.Volcanoes())
@@ -467,6 +473,14 @@ func climateCaption(cells []mesh.Cell, r *climate.Result, variant string) string
 		s += fmt.Sprintf(" land %.0f..%.0f ~%.0f", temps[0], temps[len(temps)-1], temps[len(temps)/2])
 	}
 	return s + " C"
+}
+
+// lakesCaption summarizes a water balance for a basins:lakes sweep tile:
+// lakes (lk), inland seas (sea), the salt ones among both (salt), playas
+// (pl), full basins (full), and lake cells (cells).
+func lakesCaption(l *basin.Lakes) string {
+	lakes, seas, salt, full := l.Counts()
+	return fmt.Sprintf("lk %d sea %d salt %d pl %d full %d cells %d", lakes, seas, salt, len(l.Playas), full, l.Cells())
 }
 
 // basinsCaption summarizes a basin hierarchy for a sweep tile: depressions,

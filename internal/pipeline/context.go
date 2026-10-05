@@ -85,6 +85,12 @@ type Products struct {
 	// graph below its spill level, and the basins at least
 	// basin.min_depth_m deep, with their spill cells, edges and corners.
 	Basins *basin.Result
+	// Lakes is the basins stage's water balance: each basin's water, the
+	// lakes and inland seas, the playas, and the catchments. The later
+	// stages do not read it yet: classification, edges and export stay on
+	// the sea level stage's land and water until the land-target search
+	// (S29) counts land after lakes.
+	Lakes *basin.Lakes
 	// Classes is the classification stage's landforms, depth bands, and
 	// volcano flags.
 	Classes *classify.Result
