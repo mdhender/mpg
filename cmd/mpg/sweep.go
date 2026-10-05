@@ -39,9 +39,13 @@ const (
 // (aspects outermost, seeds innermost), one column per requested stage, each tile a stage render shrunk to
 // --tile pixels wide. When the run reaches the sea level stage, each row's
 // label shows the land count achieved against N (and UNMET when it misses
-// the 1% tolerance), and
-// each sea-level tile's caption the count against N, the deviation, and the
-// search's reason. Each climate tile's caption depends on its variant: for
+// the 1% tolerance): after lakes once the run reaches the land-target
+// stage, and the sea level stage's otherwise. Each sea-level tile's caption
+// gives the count against its target (N plus the pre-pass's lake cells),
+// the deviation, and the search's reason; each land-target tile's the land
+// after lakes against N, the deviation, the reason, the probes (p) and the
+// lake cells (lk), its "lakes" variant the lakes caption below, and its
+// "precip" and "aridity" variants the final climate's, as for climate. Each climate tile's caption depends on its variant: for
 // the temperature and the mask, the temperature range in °C of the rim,
 // the land, and the land's median (land lo..hi ~median); for precip, pet
 // and runoff, the land's p5/p50/p95 in mm; for moisture, the land's
@@ -226,6 +230,15 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 					tiles[k].Caption[1] = lakesCaption(lk)
 				}
 			}
+			if lt := ctx.Products.Target; lt != nil && registry[c.index].Name == "land-target" {
+				tiles[k].Caption[1] = targetCaption(lt)
+				switch c.variant {
+				case "lakes":
+					tiles[k].Caption[1] = lakesCaption(lt.Lakes)
+				case "precip", "aridity":
+					tiles[k].Caption[1] = climateCaption(ctx.Products.Mesh.Cells, lt.Climate, c.variant)
+				}
+			}
 			if cl := ctx.Products.Classes; cl != nil && registry[c.index].Name == "classify" {
 				tiles[k].Caption[1] = fmt.Sprintf("%s v%d", strings.Join(cl.LandShares(true), " "), cl.Volcanoes())
 			}
@@ -238,7 +251,12 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 			}
 		}
 		label := []string{fmt.Sprintf("seed %d", uint64(row.cfg.Seed)), w.Aspect, row.cfg.Layout.Preset, fmt.Sprintf("%d land", w.LandCells)}
-		if sl := ctx.Products.SeaLevel; sl != nil {
+		if lt := ctx.Products.Target; lt != nil {
+			label[3] = fmt.Sprintf("land %d/%d", lt.LandCells, lt.Search.Target)
+			if !lt.Met() {
+				label[3] += " UNMET"
+			}
+		} else if sl := ctx.Products.SeaLevel; sl != nil {
 			label[3] = fmt.Sprintf("land %d/%d", sl.LandCells, sl.Target)
 			if !sl.Met {
 				label[3] += " UNMET"
@@ -473,6 +491,14 @@ func climateCaption(cells []mesh.Cell, r *climate.Result, variant string) string
 		s += fmt.Sprintf(" land %.0f..%.0f ~%.0f", temps[0], temps[len(temps)-1], temps[len(temps)/2])
 	}
 	return s + " C"
+}
+
+// targetCaption summarizes a land-target search for a land-target sweep
+// tile: land after lakes against N, the deviation, the reason, the probes
+// (p), and the lake cells (lk).
+func targetCaption(t *pipeline.LandTarget) string {
+	r := t.Search
+	return fmt.Sprintf("land %d/%d %+.2f%% %s p%d lk %d", t.LandCells, r.Target, r.DeviationPercent(), r.Reason, len(r.Trace), t.LakeCells)
 }
 
 // lakesCaption summarizes a water balance for a basins:lakes sweep tile:

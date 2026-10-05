@@ -70,9 +70,10 @@
 //     a collapsed short edge do at its 4-way corner, are not neighbors, so
 //     water that meets only at a corner is not connected.
 //   - Water candidates the flood does not reach are basin floors. The basin
-//     stage (8) decides them; until it exists each is a dry basin and counts
-//     as land. So land is every playable cell that is not ocean; rim cells
-//     are never land.
+//     stages (8, and 9 inside its search) decide which hold lakes; to
+//     Classify each is a dry basin and counts as land. So a Flood's land is
+//     every playable cell that is not ocean, lakes included; rim cells are
+//     never land.
 //
 // Search chooses the level for the land target N (world.land_cells):
 //
@@ -83,8 +84,9 @@
 //     (math.Nextafter). Either way it is finite and exact, with no
 //     arithmetic.
 //   - The first probe is the quantile estimate: the lowest candidate that
-//     leaves at most N playable cells above it (N + expected lake cells,
-//     and there are no lakes yet). It is high on land by the dry basins.
+//     leaves at most N + E playable cells above it, E being the lake cells
+//     the caller expects (SearchLevels' expected; 0 for Search). It is high
+//     on land by the dry basins.
 //   - Then a bracketed search over the candidate indexes, keeping the open
 //     bracket between the highest level measured with too much land and the
 //     lowest with too little (initially all of them). The next probe is a
@@ -115,6 +117,16 @@
 // land, ocean and dry basin cells and counts, the measured land area (the
 // land cells' areas summed in id order), every probe, and the reason.
 //
+// Search measures each level with Classify alone: no lakes, so a basin
+// floor is land. The pipeline's sea level stage (6) runs it for N plus the
+// elevation pre-pass's lake cells, so its ocean is about the final one.
+// SearchLevels is the same search with any land count: the land-target
+// stage (9) passes a measure that runs the basin hierarchy and water
+// balance at every probe and counts land after lakes (Probe.Lake holds the
+// lake cells), and the first probe expects the basins stage's lake cells.
+// Its Record keeps the settings, the expected lake cells, every probe, the
+// best one, the reason, and whether the target was met.
+//
 // # Renders
 //
 // AltitudeRender, the stage render, fills each playable cell with the
@@ -128,6 +140,11 @@
 // ReliefRamp. SeaLevelRender, the sea level stage render, colors land by
 // its height above the chosen level, ocean by its depth below it, dry basin
 // floors in BasinColor, and the rim as ice.
+//
+// TraceRender, the land-target stage render, draws a search's Record as a
+// chart: probe number across, land up, the tolerance band N ± 1% shaded
+// with N as a line, each probe a disc colored by its method and labeled
+// with its level (and lake cells, when measured), the best ringed in red.
 //
 // # Determinism
 //

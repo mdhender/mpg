@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 
+	"github.com/mdhender/mpg/internal/basin"
 	"github.com/mdhender/mpg/internal/cells"
 	"github.com/mdhender/mpg/internal/classify"
 	"github.com/mdhender/mpg/internal/config"
@@ -33,9 +34,21 @@ type Input struct {
 	ConfigHash string
 	Mesh       *mesh.Mesh
 	Cells      *cells.Stats
-	SeaLevel   *cells.SeaLevel
-	Classes    *classify.Result
-	Edges      *edges.Data
+	// Search, Flood and Lakes are the land-target stage's: the sea-level
+	// search with the basins inside it, the land and water at the level
+	// it chose (before lakes), and the lakes there.
+	Search *cells.Record
+	Flood  *cells.Flood
+	Lakes  *basin.Lakes
+	// ClimatePasses is the number of climate passes the run made.
+	ClimatePasses int
+	// PrePassLakeCells and DatumLandShare are the elevation stage's lake
+	// allowance: the pre-pass's lake cells and the land share the datum
+	// put above 0 m.
+	PrePassLakeCells int
+	DatumLandShare   float64
+	Classes          *classify.Result
+	Edges            *edges.Data
 	// Deferred names the pipeline stages the run passed over, in order.
 	Deferred []string
 }
@@ -44,16 +57,20 @@ type Input struct {
 // package documentation for the rules.
 func Build(in Input) (*world.World, error) {
 	m := in.Mesh
-	if m == nil || in.Cells == nil || in.SeaLevel == nil || in.Classes == nil || in.Edges == nil {
+	if m == nil || in.Cells == nil || in.Search == nil || in.Flood == nil || in.Lakes == nil || in.Classes == nil || in.Edges == nil {
 		return nil, errors.New("export: missing a stage product")
 	}
 	n := len(m.Cells)
-	if in.Cells.Len() != n || len(in.SeaLevel.Land) != n || len(in.Classes.Landform) != n ||
+	if in.Cells.Len() != n || len(in.Flood.Land) != n || len(in.Lakes.Lake) != n || len(in.Classes.Landform) != n ||
 		len(in.Edges.Cells) != n || len(in.Edges.Edges) != len(m.Edges) {
 		return nil, errors.New("export: stage products disagree on the mesh size")
 	}
 	cyl := m.Cylinder()
-	b := &builder{in: in, m: m, cyl: cyl}
+	b := &builder{in: in, m: m, cyl: cyl, sink: make([]bool, len(m.Corners)), playa: make([]bool, n)}
+	for _, p := range in.Lakes.Playas {
+		b.playa[p.Cell] = true
+		b.sink[p.Corner] = true
+	}
 	b.corners()
 	b.cells()
 	b.edges()
@@ -78,7 +95,7 @@ func Build(in Input) (*world.World, error) {
 		Units:                 world.DefaultUnits(),
 	}
 	b.w.Codebooks = world.DefaultCodebooks()
-	b.w.Outcomes = outcomes(in.SeaLevel, in.Deferred)
+	b.w.Outcomes = b.outcomes()
 	b.w.Rivers = []world.RiverPath{}
 	return &b.w, nil
 }
@@ -88,6 +105,8 @@ type builder struct {
 	m   *mesh.Mesh
 	cyl topo.Cylinder
 	w   world.World
+	// sink marks the dry-sink corners and playa the playa cells.
+	sink, playa []bool
 }
 
 // scale is 1 / world.PrecisionKm.
@@ -134,7 +153,29 @@ func (b *builder) point(p topo.Point) world.Point {
 	return world.Point{X: b.wrapX(p.X), Y: y}
 }
 
-func (b *builder) isLand(c int) bool { return c != mesh.Boundary && b.in.SeaLevel.Land[c] }
+// isLand reports whether cell c is land after lakes: the flood's land
+// that is not a lake cell.
+func (b *builder) isLand(c int) bool {
+	return c != mesh.Boundary && b.in.Flood.Land[c] && b.in.Lakes.Lake[c] == basin.None
+}
+
+// water returns cell c's water kind: ocean, lake or inland sea by the
+// lake's kind, or none for land and rim cells.
+func (b *builder) water(c int) world.Water {
+	switch {
+	case b.m.Cells[c].Rim:
+		return world.WaterNone
+	case b.in.Flood.Ocean[c]:
+		return world.Ocean
+	}
+	if k := b.in.Lakes.Lake[c]; k != basin.None {
+		if b.in.Lakes.Lakes[k].Kind == basin.KindInlandSea {
+			return world.InlandSea
+		}
+		return world.Lake
+	}
+	return world.WaterNone
+}
 
 func (b *builder) corners() {
 	m, alt := b.m, b.in.Cells.Altitude
@@ -154,8 +195,11 @@ func (b *builder) corners() {
 		if k.Boundary {
 			flags = append(flags, world.FlagBoundary)
 		}
-		if land && wet {
+		if land && wet || b.sink[i] {
 			flags = append(flags, world.FlagTerminal)
+		}
+		if b.sink[i] {
+			flags = append(flags, world.FlagSink)
 		}
 		b.w.Corners[i] = world.Corner{
 			ID:      i,
@@ -202,10 +246,13 @@ func (b *builder) cells() {
 		if coast {
 			flags = append(flags, world.FlagCoast)
 		}
-		var water world.Water
-		if !c.Rim && in.SeaLevel.Ocean[i] {
-			water = world.Ocean
+		if k := in.Lakes.Lake[i]; k != basin.None && in.Lakes.Lakes[k].Salt {
+			flags = append(flags, world.FlagSalt)
 		}
+		if b.playa[i] {
+			flags = append(flags, world.FlagPlaya)
+		}
+		water := b.water(i)
 		hs := in.Edges.Cells[i]
 		exits := make([]world.Exit, len(hs))
 		for k, h := range hs {
@@ -368,28 +415,65 @@ func (b *builder) nextCoast(c, k int) (int, error) {
 	return 0, fmt.Errorf("no way round corner %d", k)
 }
 
-// outcomes returns the sea level search's outcomes.
-func outcomes(sl *cells.SeaLevel, deferred []string) world.Outcomes {
-	trace := make([]world.Probe, len(sl.Trace))
-	for k, p := range sl.Trace {
-		trace[k] = world.Probe{Method: p.Method.String(), LevelM: p.Level, Land: p.Land, Ocean: p.Ocean, DryBasin: p.Basin}
+// outcomes returns the land-target search's outcomes, with the land and
+// water counted after lakes.
+func (b *builder) outcomes() world.Outcomes {
+	in, rec := b.in, b.in.Search
+	trace := make([]world.Probe, len(rec.Trace))
+	for k, p := range rec.Trace {
+		trace[k] = world.Probe{Method: p.Method.String(), LevelM: p.Level, Land: p.Land, Ocean: p.Ocean, DryBasin: p.Basin, Lake: p.Lake}
 	}
-	return world.Outcomes{
-		SeaLevelM:        sl.Level,
-		InitialEstimateM: sl.Initial,
-		TargetLandCells:  sl.Target,
-		ToleranceCells:   sl.Tolerance,
-		TolerancePercent: cells.TolerancePercent,
-		PlayableCells:    sl.Playable,
-		LandCells:        sl.LandCells,
-		OceanCells:       sl.OceanCells,
-		DryBasinCells:    sl.BasinCells,
-		LandAreaKm2:      sl.LandAreaKm2,
-		Met:              sl.Met,
-		Reason:           string(sl.Reason),
-		Policy:           sl.Policy,
-		Budget:           sl.Budget,
-		Trace:            trace,
-		Deferred:         append([]string{}, deferred...),
+	o := world.Outcomes{
+		SeaLevelM:         in.Flood.Level,
+		InitialEstimateM:  rec.Initial,
+		TargetLandCells:   rec.Target,
+		ToleranceCells:    rec.Tolerance,
+		TolerancePercent:  cells.TolerancePercent,
+		PlayableCells:     in.Flood.Playable,
+		OceanCells:        in.Flood.OceanCells,
+		Playas:            len(in.Lakes.Playas),
+		Met:               rec.Met,
+		Reason:            string(rec.Reason),
+		Policy:            rec.Policy,
+		Budget:            rec.Budget,
+		ExpectedLakeCells: rec.Expected,
+		PrePassLakeCells:  in.PrePassLakeCells,
+		DatumLandShare:    in.DatumLandShare,
+		Trace:             trace,
+		ClimatePasses:     in.ClimatePasses,
+		Deferred:          append([]string{}, in.Deferred...),
 	}
+	for i := range b.m.Cells {
+		switch b.water(i) {
+		case world.Lake:
+			o.LakeCells++
+		case world.InlandSea:
+			o.InlandSeaCells++
+		}
+		if b.isLand(i) {
+			o.LandCells++
+			o.LandAreaKm2 += b.m.Area(i)
+			if in.Cells.Altitude[i] <= in.Flood.Level {
+				o.DryBasinCells++
+			}
+		}
+	}
+	for _, k := range in.Lakes.Lakes {
+		switch {
+		case k.Kind == basin.KindInlandSea:
+			o.InlandSeas++
+			o.SaltInlandSeas += btoi(k.Salt)
+		default:
+			o.Lakes++
+			o.SaltLakes += btoi(k.Salt)
+		}
+	}
+	return o
+}
+
+func btoi(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }

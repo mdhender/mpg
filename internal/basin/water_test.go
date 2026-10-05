@@ -410,3 +410,53 @@ func TestBalanceDeterministic(t *testing.T) {
 		t.Error("names")
 	}
 }
+
+// tieMap is the same-level overflow fixture (S29): two top-level basins, A
+// (one cell at 200 m, row 3, column 2) and B (one cell at 300 m, row 3,
+// column 5), close at one pass flat at 600 m (row 3, columns 3 and 4),
+// which also touches a 500 m slope (row 2, column 4) running by a 400 m
+// cell (row 1, column 4) to the rim. Across the flat each basin's lowest
+// outside neighbor is the other basin, so with both full their overflow
+// would pass back and forth for ever (the S28 balance recursed until the
+// stack overflowed). The water must leave the flat for the sea instead.
+const tieMap = `
+~   ~   ~   ~   ~   ~   ~   ~
+900 900 900 900 400 900 900 900
+900 900 900 900 500 900 900 900
+900 900 200 600 600 300 900 900
+900 900 900 900 900 900 900 900
+900 900 900 900 900 900 900 900
+~   ~   ~   ~   ~   ~   ~   ~
+`
+
+// TestSameLevelOverflow is the same-level overflow fixture: A fills and
+// overflows into B across their shared pass; B, once full, sends its
+// overflow (A's included) to the sea down the slope, not back to A.
+func TestSameLevelOverflow(t *testing.T) {
+	g := newGrid(t, tieMap)
+	n := len(g.m.Cells)
+	p := Params{SeepageMM: 100, SaltEvapShare: 0.5, InlandSeaMinCells: 20}
+	r := g.find(t, 50)
+	a, b := r.Of[g.id(3, 2)], r.Of[g.id(3, 5)]
+	if len(r.Basins) != 2 || a == None || b == None || a == b ||
+		r.Basins[a].Parent != None || r.Basins[b].Parent != None || r.Basins[a].SpillM != 600 || r.Basins[b].SpillM != 600 {
+		t.Fatalf("basins %+v: want two top-level basins spilling at 600 m", r.Basins)
+	}
+	_, l := g.balance(t, humid(n, func(int) float64 { return 1000 }), p)
+	if l.Water[a].State != Full || l.Water[b].State != Full {
+		t.Fatalf("A %v, B %v: want both full", l.Water[a].State, l.Water[b].State)
+	}
+	first, second := a, b // the lower id settles first and overflows into the other
+	if b < a {
+		first, second = b, a
+	}
+	if l.Water[first].OverflowTo != second {
+		t.Errorf("first basin overflows to %d, want the other basin %d", l.Water[first].OverflowTo, second)
+	}
+	if l.Water[second].OverflowTo != None || l.Water[second].OverflowVia != g.id(2, 4) {
+		t.Errorf("second basin overflows to %d via %d, want the sea via the slope %d", l.Water[second].OverflowTo, l.Water[second].OverflowVia, g.id(2, 4))
+	}
+	if len(l.Lakes) != 2 || l.ToSea <= 0 || !near(l.ToSea, l.Water[second].Overflow) {
+		t.Errorf("lakes %d, to sea %v, second basin's overflow %v", len(l.Lakes), l.ToSea, l.Water[second].Overflow)
+	}
+}

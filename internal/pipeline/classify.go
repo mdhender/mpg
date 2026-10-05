@@ -12,15 +12,16 @@ import (
 
 // runClassify assigns every cell its landform and every salt-water cell its
 // depth band, flags the volcano cells, logs the land landform and depth
-// histograms and the volcano count, and renders the landforms. Until the
-// basin stage exists the land and water are the sea level stage's.
+// histograms and the volcano count, and renders the landforms. The land and
+// water are the land-target stage's: its flood and lakes at the level it
+// chose.
 func runClassify(c *Context) error {
-	m, s, sl := c.Products.Mesh, c.Products.Cells, c.Products.SeaLevel
+	m, s, t := c.Products.Mesh, c.Products.Cells, c.Products.Target
 	peaks := make([]topo.Point, len(c.Products.Hotspots))
 	for k, h := range c.Products.Hotspots {
 		peaks[k] = h.Point()
 	}
-	res, err := classify.Classify(m, s.Altitude, s.Relief, &sl.Flood, peaks, classify.RulesOf(c.Config))
+	res, err := classify.Classify(m, s.Altitude, s.Relief, t.Flood, t.Lakes, peaks, classify.RulesOf(c.Config))
 	if err != nil {
 		return err
 	}
@@ -35,7 +36,7 @@ func runClassify(c *Context) error {
 		}
 		depth = append(depth, fmt.Sprintf("%s %d", d, n))
 	}
-	c.Logf("salt water: %s", strings.Join(depth, ", "))
+	c.Logf("salt water: %s; %d fresh-water (lake) cells", strings.Join(depth, ", "), res.Count(m, classify.FreshWater, true))
 	c.Logf("%d volcanic hotspots, %d volcanoes on land", len(peaks), res.Volcanoes())
 	if err := c.Render("", classify.LandformRender(c.Products.Elevation, m, res)); err != nil {
 		return err

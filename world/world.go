@@ -270,14 +270,27 @@ type Outcomes struct {
 	ToleranceCells   int `json:"tolerance_cells"`
 	TolerancePercent int `json:"tolerance_percent"`
 	// PlayableCells counts the non-rim cells; LandCells, OceanCells and
-	// DryBasinCells the land (dry basin floors included), ocean, and dry
-	// basin floor cells among them.
-	PlayableCells int `json:"playable_cells"`
-	LandCells     int `json:"land_cells"`
-	OceanCells    int `json:"ocean_cells"`
-	DryBasinCells int `json:"dry_basin_cells"`
+	// DryBasinCells the land after lakes (playas and dry basin floors
+	// included), ocean, and land at or below the sea level (basin floors
+	// left dry) among them; LakeCells and InlandSeaCells the cells of
+	// water kind lake and inland sea.
+	PlayableCells  int `json:"playable_cells"`
+	LandCells      int `json:"land_cells"`
+	OceanCells     int `json:"ocean_cells"`
+	DryBasinCells  int `json:"dry_basin_cells"`
+	LakeCells      int `json:"lake_cells"`
+	InlandSeaCells int `json:"inland_sea_cells"`
 	// LandAreaKm2 is the land cells' summed area.
 	LandAreaKm2 float64 `json:"land_area_km2"`
+	// Lakes and InlandSeas count the lakes and inland seas (connected sets
+	// of cells of that water kind); SaltLakes and SaltInlandSeas those of
+	// them with the salt flag; Playas the playa cells. Possible, not
+	// forced: any of them may be 0.
+	Lakes          int `json:"lakes"`
+	InlandSeas     int `json:"inland_seas"`
+	SaltLakes      int `json:"salt_lakes"`
+	SaltInlandSeas int `json:"salt_inland_seas"`
+	Playas         int `json:"playas"`
 	// Met reports whether LandCells is within ToleranceCells of
 	// TargetLandCells. An unmet target is reported, not an error.
 	Met bool `json:"met"`
@@ -287,23 +300,41 @@ type Outcomes struct {
 	// Policy and Budget name the search and its probe limit.
 	Policy string `json:"policy"`
 	Budget int    `json:"budget"`
+	// ExpectedLakeCells is the lake cells the search's first probe
+	// expected to lose to lakes (the basins stage's, at the first sea
+	// level): the quantile estimate leaves TargetLandCells +
+	// ExpectedLakeCells land candidates.
+	ExpectedLakeCells int `json:"expected_lake_cells"`
+	// PrePassLakeCells is the lake cells of the elevation stage's
+	// pre-pass (stages 3 to 8 run once with no lake allowance), and
+	// DatumLandShare the share of the raster outside the rim the final
+	// elevation datum puts above 0 m to allow for them: the land fraction
+	// times (N + PrePassLakeCells)/N.
+	PrePassLakeCells int     `json:"prepass_lake_cells"`
+	DatumLandShare   float64 `json:"datum_land_share"`
 	// Trace lists the search's probes in the order made.
 	Trace []Probe `json:"trace"`
+	// ClimatePasses counts the climate passes: one with the ocean of the
+	// first sea level, one with the final lakes.
+	ClimatePasses int `json:"climate_passes"`
 	// Deferred lists the pipeline stages not implemented yet, which the
 	// run passed over, in pipeline order.
 	Deferred []string `json:"deferred"`
 }
 
-// Probe is one level the sea-level search measured.
+// Probe is one level the sea-level search measured, with the basins and
+// lakes at that level.
 type Probe struct {
 	// Method is how the level was chosen: "estimate", "newton",
 	// "bisect", or "gallop".
 	Method string `json:"method"`
 	// LevelM is the level in meters.
 	LevelM float64 `json:"level_m"`
-	// Land, Ocean, and DryBasin count the playable cells of each kind at
-	// the level.
+	// Land, Ocean, DryBasin and Lake count the playable cells of each
+	// kind at the level: land after lakes, ocean, basin floors left dry,
+	// and lake and inland-sea cells.
 	Land     int `json:"land"`
 	Ocean    int `json:"ocean"`
 	DryBasin int `json:"dry_basin"`
+	Lake     int `json:"lake"`
 }

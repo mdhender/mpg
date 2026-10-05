@@ -69,8 +69,47 @@ type Elevation struct {
 }
 
 // New returns the elevation builder for the resolved config, reading the
-// layout's bias field (which must lie on the config's world).
+// layout's bias field (which must lie on the config's world). Its datum
+// puts the land fraction world.land_fraction above 0 m.
 func New(cfg config.Config, bias *field.Field) (*Elevation, error) {
+	return NewWithLakes(cfg, bias, 0)
+}
+
+// NewWithLakes is New with an allowance for lakes (DESIGN.md, "Climate
+// coupling"): the datum puts LandShareWithLakes(cfg, lakeCells) of the
+// samples above 0 m, the land fraction scaled by (N + lakeCells)/N, so that
+// the land left after lakeCells cells become lakes is about N. lakeCells
+// must not be negative, and the share must stay below 1.
+func NewWithLakes(cfg config.Config, bias *field.Field, lakeCells int) (*Elevation, error) {
+	share := LandShareWithLakes(cfg, lakeCells)
+	if lakeCells < 0 || !(share > 0 && share < 1) {
+		return nil, fmt.Errorf("elevation: lake allowance of %d cells gives a land share %v outside (0, 1)", lakeCells, share)
+	}
+	el, err := newElevation(cfg, bias)
+	if err != nil {
+		return nil, err
+	}
+	el.landFraction = share
+	return el, nil
+}
+
+// LandShareWithLakes returns the share of the samples outside the rim the
+// datum puts above 0 m with an allowance of lakeCells lake cells: the land
+// fraction f times (N + lakeCells)/N, which is (N + lakeCells) over the
+// playable cells N/f.
+func LandShareWithLakes(cfg config.Config, lakeCells int) float64 {
+	n := cfg.World.LandCells
+	if lakeCells == 0 || n <= 0 {
+		return cfg.World.LandFraction
+	}
+	return fmath.Mul(cfg.World.LandFraction, float64(n+lakeCells)) / float64(n)
+}
+
+// LandShare returns the share of the samples outside the rim the datum puts
+// above 0 m.
+func (e *Elevation) LandShare() float64 { return e.landFraction }
+
+func newElevation(cfg config.Config, bias *field.Field) (*Elevation, error) {
 	cyl, err := topo.New(cfg.World.WidthKm, cfg.World.HeightKm, cfg.Rim.Km, cfg.Rim.FalloffKm)
 	if err != nil {
 		return nil, fmt.Errorf("elevation: %w", err)
@@ -219,11 +258,13 @@ func rows(ny int, fn func(j int)) {
 const datumSteps = 48
 
 // datum returns the datum shift: the δ in [−DatumMaxShift, DatumMaxShift]
-// that leaves the land fraction of the samples outside the rim above 0 m
+// that leaves the land share of the samples outside the rim above 0 m
 // before the falloff, found by bisection. A sample is land when its shifted
 // signal c' = (c + δ·w)/(1 + max(δ, 0)) is positive, or when its hotspot
 // rise (rise, nil for none) lifts its sea floor, −OceanDepthM ·
-// smoothstep(−c'), above 0 m: exactly the samples Fill puts above 0 m. The
+// smoothstep(−c'), above 0 m: the samples Fill puts above 0 m before the
+// falloff. Samples in the falloff band never count when the falloff's
+// ceiling is below 0 m: the falloff drowns them whatever their signal. The
 // count only grows with δ, since w ≥ 0 and a negative c' only rises toward
 // 0 as δ grows.
 func (e *Elevation) datum(f *field.Field, s []sample, rise []float64) Stats {
@@ -231,14 +272,18 @@ func (e *Elevation) datum(f *field.Field, s []sample, rise []float64) Stats {
 	type point struct {
 		sample
 		rise float64
+		sunk bool
 	}
 	var pts []point
 	for j := range f.NY() {
 		if e.cyl.InRim(f.Y(j)) {
 			continue
 		}
+		// In the falloff band the ceiling is below 0 m, so no sample
+		// there is land whatever its signal.
+		sunk := e.cfg.Falloff.CeilingM < 0 && e.cyl.RimDistance(f.Y(j)) < e.cyl.Falloff()
 		for k := j * nx; k < (j+1)*nx; k++ {
-			p := point{sample: s[k]}
+			p := point{sample: s[k], sunk: sunk}
 			if rise != nil {
 				p.rise = rise[k]
 			}
@@ -250,7 +295,7 @@ func (e *Elevation) datum(f *field.Field, s []sample, rise []float64) Stats {
 		n := 0
 		for _, p := range pts {
 			c := fmath.MulAdd(d, p.w, p.c) / norm
-			if c > 0 || p.rise > 0 && p.rise > fmath.Mul(e.cfg.OceanDepthM, smoothstep(-c)) {
+			if !p.sunk && (c > 0 || p.rise > 0 && p.rise > fmath.Mul(e.cfg.OceanDepthM, smoothstep(-c))) {
 				n++
 			}
 		}

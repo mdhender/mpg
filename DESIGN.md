@@ -143,6 +143,16 @@ The rim solves several problems:
 3. Compute climate once more with the final lakes, for biomes.
 4. Save the pass count.
 
+How this is built (S29):
+- **Lake allowance in the datum.** Lakes take 3–17% of N, and on pangaea replacing them at the coast lowered the sea by 200–500 m, lifting whole continents into plateau. So stage 3 first runs a **pre-pass** of stages 3–8 once, privately (no allowance, renders, logs or outputs; the mesh is reused), and counts its lake cells L. The final elevation puts the 0 m datum at a land share of f·(N + L)/N. Exactly one pre-pass; generation takes about 1.3–1.6× as long.
+  - `elevation.datum_max_shift` defaults to 8 (validation limit 16), since pangaea needs shifts of about 2.6–4.7. The larger shift squeezes lowland relief, so pangaea interiors are flatter (flats up to ~50% of land; the landform test bound is 60%). Accepted.
+  - The datum does not count samples in the polar falloff band as land when the falloff ceiling is below 0 m, since the falloff drowns them.
+- **Stage 6** aims for N + L land cells before lakes, so the first climate pass sees roughly the final ocean.
+- **Stage 9** runs the sea-level search (first probe: the quantile for N + stage 8's lake cells), re-running the sea-level flood, basin hierarchy and water balance at each probe against the fixed first climate. Land is counted after lakes: lake and inland-sea cells are water; playas and dry basin floors are land. Measured on 48 worlds: all met (45 exact), 2–7 probes, final sea level within 25 m of 0 except pangaea outliers (−81 m where lakes grew past the pre-pass estimate).
+- **Final climate pass:** inland seas recharge the air like the ocean (open-water precipitation; a trace stops at them and leaves at their height); lakes are traced like land. Lake and inland-sea cells take temperature from their altitude above the sea level, like land. The pass count (normally 2) is saved.
+- **world.json** (schema 0): cell flags `salt` (lakes and inland seas only; the ocean and rim are salt by definition) and `playa`; corner flag `sink` (also `terminal`; a sink touches a playa, and each playa's lowest corner is a sink); outcomes `lake_cells`, `inland_sea_cells`, `lakes`, `inland_seas`, `salt_lakes`, `salt_inland_seas`, `playas`, `expected_lake_cells`, `prepass_lake_cells`, `datum_land_share`, `climate_passes`, and a `lake` count per probe. Landform stays by size: lakes `fresh-water`, inland seas `salt-water`. The validator checks inland water never touches the ocean, neighboring inland-water cells share kind and salt, and outcome counts match the cells.
+- **Overflow:** a full basin whose target is full and spills no lower sends its overflow to the lowest neighbor of the spill flat that drains to the sea or a strictly lower basin (two basins closing at one flat had looped).
+
 ### Layout
 
 Noise alone produces either one featureless block or lace. wgvc needed attractors and a rival ramp to control islands. Here that control is added to the continental bias field, before the noise:
@@ -230,7 +240,9 @@ Stage 7 computes climate on the raster with the cell mask drawn onto it: each ra
 - Windward coasts get ≈ 0.93–0.98 of W at their latitude; lee sides and interiors ≈ 0.33–0.49.
 - Renders: temperature, mask, precip, moisture, pet, runoff, aridity.
 
-**Open (deferred).** In the final climate pass with lakes (S29), inland seas are expected to recharge the air like the ocean and lakes not to. hmz2bio's biome rules use warmest and coldest month (1 + 0.33·|lat| °C split about the mean), which must be reconciled with "no seasons" before M8.
+**Final pass with lakes (S29).** Inland seas recharge the air like the ocean; lakes do not (see "Climate coupling").
+
+**Open (deferred).** hmz2bio's biome rules use warmest and coldest month (1 + 0.33·|lat| °C split about the mean), which must be reconciled with "no seasons" before M8.
 
 ### Basins and lakes
 

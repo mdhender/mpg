@@ -633,12 +633,18 @@ func (w *water) route(b int, v float64) {
 		return
 	}
 	t := w.target(b)
+	if t != None && w.bs[t].full && w.r.Basins[w.top(t)].SpillM >= w.r.Basins[b].SpillM {
+		// A tie: b and t's basin closed at one flat, at the same spill
+		// level, and t is full, so passing through it would bring the water
+		// back to b. It leaves the flat for the sea or a lower basin.
+		t = w.below(b)
+	}
 	if t == None {
 		w.toSea[b] += v
 		return
 	}
 	if w.bs[t].full {
-		// Pass through a full basin (a tie in spill level).
+		// Pass through a full basin.
 		w.moves = append(w.moves, move{b, t, v})
 		w.route(t, v)
 		return
@@ -646,15 +652,39 @@ func (w *water) route(b int, v float64) {
 	w.give(t, v, b)
 }
 
-// target returns where top-level basin b's overflow goes: across the flat
-// of its spill cell (outside b) to the lowest lower cell next to it, the
-// sea first, and down that cell's descent. None is the sea.
-func (w *water) target(b int) int {
-	x := &w.bs[b]
-	if x.targeted {
-		return x.target
+// top returns the top-level basin holding basin b.
+func (w *water) top(b int) int {
+	for w.r.Basins[b].Parent != None {
+		b = w.r.Basins[b].Parent
 	}
-	x.targeted = true
+	return b
+}
+
+// below returns where top-level basin b's overflow goes when its target
+// (target) is a full basin that closed at b's own spill level: as target,
+// but only to the sea or to cells draining to a basin whose top-level
+// basin spills strictly lower. It records the choice as b's OverflowTo
+// and OverflowVia. The flat at the spill joined the sea when b closed, so
+// a cell next to it drains to the sea; None is the sea.
+func (w *water) below(b int) int {
+	a := w.r.Basins[b].SpillM
+	best := w.exit(b, func(y int) bool {
+		s := w.res.Sink[y]
+		return w.seed[y] || s == None || w.r.Basins[w.top(s)].SpillM < a
+	})
+	t := None
+	if best != None && !w.seed[best] {
+		t = w.res.Sink[best]
+	}
+	w.res.Water[b].OverflowTo = t
+	w.res.Water[b].OverflowVia = best
+	return t
+}
+
+// exit returns the lowest cell (the sea first, then by routing height and
+// id) outside top-level basin b, below its spill level and accepted by ok,
+// next to the flat at the spill level around its spill cell, or None.
+func (w *water) exit(b int, ok func(y int) bool) int {
 	bs := &w.r.Basins[b]
 	h := w.r.RouteM
 	a := bs.SpillM
@@ -668,7 +698,7 @@ func (w *water) target(b int) int {
 			}
 			switch {
 			case w.seed[y] || h[y] < a:
-				if best == None || w.lower(y, best) {
+				if ok(y) && (best == None || w.lower(y, best)) {
 					best = y
 				}
 			case h[y] == a:
@@ -677,6 +707,19 @@ func (w *water) target(b int) int {
 			}
 		}
 	}
+	return best
+}
+
+// target returns where top-level basin b's overflow goes: across the flat
+// of its spill cell (outside b) to the lowest lower cell next to it, the
+// sea first, and down that cell's descent. None is the sea.
+func (w *water) target(b int) int {
+	x := &w.bs[b]
+	if x.targeted {
+		return x.target
+	}
+	x.targeted = true
+	best := w.exit(b, func(int) bool { return true })
 	x.target = None
 	if best != None && !w.seed[best] {
 		x.target = w.res.Sink[best]

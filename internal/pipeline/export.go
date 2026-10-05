@@ -24,14 +24,19 @@ func runExport(c *Context) error {
 		deferred[k] = st.Name
 	}
 	w, err := export.Build(export.Input{
-		Config:     c.Config,
-		ConfigHash: c.ConfigHash,
-		Mesh:       p.Mesh,
-		Cells:      p.Cells,
-		SeaLevel:   p.SeaLevel,
-		Classes:    p.Classes,
-		Edges:      p.Edges,
-		Deferred:   deferred,
+		Config:           c.Config,
+		ConfigHash:       c.ConfigHash,
+		Mesh:             p.Mesh,
+		Cells:            p.Cells,
+		Search:           p.Target.Search,
+		Flood:            p.Target.Flood,
+		Lakes:            p.Target.Lakes,
+		ClimatePasses:    p.Target.ClimatePasses,
+		PrePassLakeCells: p.PrePass.LakeCells,
+		DatumLandShare:   p.PrePass.LandShare,
+		Classes:          p.Classes,
+		Edges:            p.Edges,
+		Deferred:         deferred,
 	})
 	if err != nil {
 		return err

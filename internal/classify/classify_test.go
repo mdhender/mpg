@@ -134,7 +134,7 @@ func newWorld(m *mesh.Mesh, alt, rel float64) *world {
 
 func (w *world) classify(t *testing.T, level float64, peaks []topo.Point, r Rules) *Result {
 	t.Helper()
-	res, err := Classify(w.m, w.alt, w.rel, cells.Classify(w.m, w.alt, level), peaks, r)
+	res, err := Classify(w.m, w.alt, w.rel, cells.Classify(w.m, w.alt, level), nil, peaks, r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +235,7 @@ func TestVolcanoFlag(t *testing.T) {
 	peakLand := m.Cells[land].Site
 	peakLand.X += 0.3 // off the site, still nearest to it
 	peakSea := m.Cells[sea].Site
-	res, err := Classify(m, w.alt, w.rel, oceanAt(m, sea), []topo.Point{peakLand, peakSea}, hm)
+	res, err := Classify(m, w.alt, w.rel, oceanAt(m, sea), nil, []topo.Point{peakLand, peakSea}, hm)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +306,7 @@ func TestVolcanicHighlandsSeam(t *testing.T) {
 
 	// The same peak in the sea: no volcano, no highlands.
 	w.alt[res.VolcanoCell[0]] = -100
-	res2, err := Classify(m, w.alt, w.rel, oceanAt(m, res.VolcanoCell[0]), []topo.Point{peak}, r)
+	res2, err := Classify(m, w.alt, w.rel, oceanAt(m, res.VolcanoCell[0]), nil, []topo.Point{peak}, r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -458,15 +458,15 @@ func TestClassifyErrors(t *testing.T) {
 	m, _ := smallWorld(t, 1, "square", 600)
 	w := newWorld(m, 100, 10)
 	f := cells.Classify(m, w.alt, 0)
-	if _, err := Classify(m, w.alt[1:], w.rel, f, nil, hm); err == nil {
+	if _, err := Classify(m, w.alt[1:], w.rel, f, nil, nil, hm); err == nil {
 		t.Error("short altitudes accepted")
 	}
 	w.rel[3] = math.NaN()
-	if _, err := Classify(m, w.alt, w.rel, f, nil, hm); err == nil {
+	if _, err := Classify(m, w.alt, w.rel, f, nil, nil, hm); err == nil {
 		t.Error("NaN relief accepted")
 	}
 	w.rel[3] = -1
-	if _, err := Classify(m, w.alt, w.rel, f, nil, hm); err == nil {
+	if _, err := Classify(m, w.alt, w.rel, f, nil, nil, hm); err == nil {
 		t.Error("negative relief accepted")
 	}
 }

@@ -38,10 +38,17 @@
 //     the bounding box of the unwrapped polygon in world km (x may leave
 //     [0, W)); and its exits: one half-edge per neighbor in compass order
 //     (N first, so clockwise), with direction, neighbor, edge id, signed
-//     incline, bearing, and direction error.
+//     incline, bearing, and direction error. Lakes and inland seas are
+//     water cells: a lake has the fresh-water landform and water kind lake,
+//     an inland sea (basin.inland_sea_min_cells cells or more) salt-water
+//     and inland-sea, by size alone; the salt flag marks a salt lake or
+//     inland sea (closed and evaporation-dominated), and only those (the
+//     ocean and rim are salt by definition). A playa's cell, the bottom of
+//     a dry basin, is land with the playa flag.
 //   - A Corner has its position, height (the mean altitude of the 3–4 cells
 //     that meet there, as DESIGN.md's rivers define it), flags (boundary,
-//     terminal, and later mouth), and its cells and edges.
+//     terminal, sink for a playa's dry sink, and later mouth), and its
+//     cells and edges.
 //   - An Edge has its two cells (Cells[1] = Boundary, −1, on the map's
 //     north or south edge), its corners in Cells[0]'s clockwise order,
 //     length, noise seed, passability, coast flag and water kind, river
@@ -49,9 +56,13 @@
 //   - A Coastline is a chain of coast edges walked with land on the right:
 //     clockwise around islands, counterclockwise around enclosed water.
 //   - Rivers are river polylines; none until milestone 7.
-//   - Outcomes hold the sea level, the land, ocean and dry basin counts, the
-//     target and tolerance, whether it was met and why the search ended, its
-//     policy, budget, and trace, and the deferred pipeline stages. Outcomes
+//   - Outcomes hold the sea level, the land (after lakes), ocean, dry
+//     basin, lake and inland-sea cell counts, the lake, inland-sea, salt
+//     and playa counts, the target and tolerance, whether it was met and
+//     why the land-target search ended, its policy, budget, expected lake
+//     cells and trace (each probe with its lake cells), the climate passes,
+//     the elevation pre-pass's lake cells and datum land share, and the
+//     deferred pipeline stages. Outcomes
 //     never go in config.json.
 //
 // # Units and precision
@@ -69,11 +80,11 @@
 //
 // # Omitted until later milestones
 //
-// Version 0 is the first playable export (milestone 4). Surface and biome
-// come with milestone 8, lakes and inland seas (fresh-water landform, lake
-// and inland-sea water kinds) with milestone 6, and rivers (edge classes,
-// river polylines, corner mouths) with milestone 7; the codebooks already
-// list the values. The schema is frozen as version 1 in milestone 9; until
+// Version 0 is the first playable export (milestone 4); lakes, inland
+// seas, the salt and playa cell flags, the sink corner flag and the lake
+// outcomes came with milestone 6 (S29). Surface and biome come with
+// milestone 8, and rivers (edge classes, river polylines, corner mouths)
+// with milestone 7; the codebooks already list the values. The schema is frozen as version 1 in milestone 9; until
 // then it may change without migration.
 //
 // # Determinism

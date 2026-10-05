@@ -99,8 +99,9 @@
 //
 // An edge is a coast when exactly one side is water and neither side is a
 // rim cell; Edge.Water is the water side's kind (ocean, lake, or inland
-// sea; milestone 4 has only the ocean, from the sea level stage, and dry
-// basin floors are land). The rim is the impassable ice sheet, which the
+// sea; the pipeline passes the land-target stage's: its ocean, and its
+// lakes by kind, while dry basin floors and playas are land). A lake never
+// touches the ocean, so no edge joins two kinds of water. The rim is the impassable ice sheet, which the
 // generator counts as deep salt water: an ocean–rim edge is not a coast,
 // and a land–rim edge, which the rim falloff should prevent, is not a coast
 // either; Stats.LandRim counts those (0 in every world seen).

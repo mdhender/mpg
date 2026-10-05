@@ -100,7 +100,13 @@ type Probe struct {
 	Level float64
 	// Land, Ocean, and Basin count the playable land cells (dry basin
 	// floors included), ocean cells, and dry basin floor cells at Level.
+	// When the search measures lakes (SearchLevels with the basin stage
+	// inside it), Land and Basin count after the lakes: lake and
+	// inland-sea cells are water, and Basin is the basin floors left dry.
 	Land, Ocean, Basin int
+	// Lake counts the lake and inland-sea cells at Level; 0 when the
+	// search does not measure lakes (Search).
+	Lake int
 }
 
 // Flood is the land and water of the playable cells at one sea level.
@@ -114,7 +120,8 @@ type Flood struct {
 	// are not connected).
 	Ocean []bool
 	// Basin marks the water candidates not connected to the rim: basin
-	// floors. Until the basin stage decides them they are dry, and land.
+	// floors. The basin stage decides which hold lakes; here they are dry,
+	// and land.
 	Basin []bool
 	// Land marks the playable cells that are not ocean: the land
 	// candidates and the basin floors. Rim cells are never land.
@@ -261,9 +268,16 @@ func (c candidates) atRank(r int) int {
 // documentation for the policy. eval may be any land count, monotonic or
 // not; only the bracket's speed assumes the count falls as the level rises.
 func search(cand candidates, target, tol, budget int, eval func(j int) Probe) (trace []Probe, best int, reason Reason) {
+	return searchFrom(cand, target, target, tol, budget, eval)
+}
+
+// searchFrom is search with the first probe the quantile estimate for first
+// land candidates instead of target: the lowest candidate that leaves at
+// most first playable cells above it.
+func searchFrom(cand candidates, target, first, tol, budget int, eval func(j int) Probe) (trace []Probe, best int, reason Reason) {
 	k := len(cand.levels)
 	lo, hi := -2, k // the open bracket: candidates lo+1 … hi−1 are untried
-	j := cand.atRank(cand.rank(k-1) - target)
+	j := cand.atRank(cand.rank(k-1) - first)
 	method := MethodEstimate
 	var bisectNext bool
 	gallop := 1
@@ -327,17 +341,64 @@ func search(cand candidates, target, tol, budget int, eval func(j int) Probe) (t
 	return trace, best, reason
 }
 
-// Search finds the sea level of m's cells with altitudes alt that leaves
-// target land cells (N), and returns it with the land and water there. No
-// basins yet: a basin floor stays dry land. It fails when m has no playable
-// cell, alt does not match m, an altitude is not finite, or target is not
-// positive; an unmet target is not an error but a result with Met false.
-func Search(m *mesh.Mesh, alt []float64, target int) (*SeaLevel, error) {
+// Record is a sea-level search's record, whatever land count it measured:
+// its settings, every probe, the best one, and why it ended.
+type Record struct {
+	// Target is N, and Tolerance the largest |land − N| that meets the
+	// land contract: ⌊TolerancePercent·N/100⌋.
+	Target, Tolerance int
+	// Policy and Budget are SearchPolicy and SearchBudget.
+	Policy string
+	Budget int
+	// Expected is the number of cells the first probe expects to lose to
+	// lakes: the quantile estimate leaves Target + Expected land
+	// candidates. It is 0 for Search.
+	Expected int
+	// Initial is the first probe's level: the quantile estimate.
+	Initial float64
+	// Trace lists the probes in the order made, and Best is the index in
+	// it of the result: the least |land − N|, ties to the lower level.
+	Trace []Probe
+	Best  int
+	// Reason is why the search ended.
+	Reason Reason
+	// Met reports whether the best probe's land is within Tolerance of
+	// Target.
+	Met bool
+}
+
+// Result returns the best probe.
+func (r *Record) Result() Probe { return r.Trace[r.Best] }
+
+// Deviation returns the best probe's land − Target.
+func (r *Record) Deviation() int { return r.Result().Land - r.Target }
+
+// DeviationPercent returns the deviation as a percentage of Target.
+func (r *Record) DeviationPercent() float64 {
+	return 100 * float64(r.Deviation()) / float64(r.Target)
+}
+
+// SearchLevels runs the sea-level search over the playable altitudes of
+// m's cells alt for target land cells (N), measuring the land at each
+// level it probes with eval, and returns its record. The first probe is
+// the quantile estimate for target + expected land candidates, expected
+// being the cells the caller expects to lose to lakes; every probe after it
+// follows the package documentation's policy on eval's counts. eval must
+// return the counts at the level it is given (its Method and Index are
+// set by the search) and must be deterministic; nothing assumes its land
+// count falls as the level rises. It fails when m has no playable cell,
+// alt does not match m, an altitude is not finite, target is not positive,
+// or expected is negative; an unmet target is not an error but a record
+// with Met false.
+func SearchLevels(m *mesh.Mesh, alt []float64, target, expected int, eval func(level float64) Probe) (*Record, error) {
 	if len(alt) != len(m.Cells) {
 		return nil, fmt.Errorf("cells: %d altitudes for %d cells", len(alt), len(m.Cells))
 	}
 	if target < 1 {
 		return nil, fmt.Errorf("cells: land target %d is not positive", target)
+	}
+	if expected < 0 {
+		return nil, fmt.Errorf("cells: expected lake cells %d is negative", expected)
 	}
 	var playable []float64
 	for i, c := range m.Cells {
@@ -352,24 +413,48 @@ func Search(m *mesh.Mesh, alt []float64, target int) (*SeaLevel, error) {
 		return nil, errors.New("cells: no playable cells")
 	}
 	cand := newCandidates(playable)
-	eval := func(j int) Probe {
-		f := Classify(m, alt, cand.level(j))
-		return Probe{Level: f.Level, Land: f.LandCells, Ocean: f.OceanCells, Basin: f.BasinCells}
-	}
 	tol := TolerancePercent * target / 100
-	trace, best, reason := search(cand, target, tol, SearchBudget, eval)
-	s := &SeaLevel{
-		Flood:   *Classify(m, alt, trace[best].Level),
-		Target:  target,
-		Policy:  SearchPolicy,
-		Budget:  SearchBudget,
-		Initial: trace[0].Level,
-		Trace:   trace,
-		Reason:  reason,
+	trace, best, reason := searchFrom(cand, target, target+expected, tol, SearchBudget,
+		func(j int) Probe { return eval(cand.level(j)) })
+	d := trace[best].Land - target
+	return &Record{
+		Target:    target,
+		Tolerance: tol,
+		Policy:    SearchPolicy,
+		Budget:    SearchBudget,
+		Expected:  expected,
+		Initial:   trace[0].Level,
+		Trace:     trace,
+		Best:      best,
+		Reason:    reason,
+		Met:       d <= tol && -d <= tol,
+	}, nil
+}
+
+// Search finds the sea level of m's cells with altitudes alt that leaves
+// target land cells (N), and returns it with the land and water there. No
+// basins: a basin floor stays dry land (the land-target stage runs
+// SearchLevels with the basins inside it). It fails as SearchLevels does;
+// an unmet target is not an error but a result with Met false.
+func Search(m *mesh.Mesh, alt []float64, target int) (*SeaLevel, error) {
+	rec, err := SearchLevels(m, alt, target, 0, func(level float64) Probe {
+		f := Classify(m, alt, level)
+		return Probe{Level: f.Level, Land: f.LandCells, Ocean: f.OceanCells, Basin: f.BasinCells}
+	})
+	if err != nil {
+		return nil, err
 	}
-	s.Tolerance = tol
-	d := s.Deviation()
-	s.Met = d <= tol && -d <= tol
+	s := &SeaLevel{
+		Flood:   *Classify(m, alt, rec.Result().Level),
+		Target:  target,
+		Policy:  rec.Policy,
+		Budget:  rec.Budget,
+		Initial: rec.Initial,
+		Trace:   rec.Trace,
+		Reason:  rec.Reason,
+	}
+	s.Tolerance = rec.Tolerance
+	s.Met = rec.Met
 	for i, land := range s.Land {
 		if land {
 			s.LandAreaKm2 += m.Area(i)

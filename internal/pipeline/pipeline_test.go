@@ -249,7 +249,7 @@ func TestConfigStage(t *testing.T) {
 	if err != nil || res.NotImplemented != nil || res.Ran[len(res.Ran)-1].Name != "export" {
 		t.Errorf("full run = %+v, %v; want a run through export", res, err)
 	}
-	if want := []string{"land-target", "rivers", "measures"}; !slices.Equal(names(res.Skipped), want) {
+	if want := []string{"rivers", "measures"}; !slices.Equal(names(res.Skipped), want) {
 		t.Errorf("full run skipped %q, want %q", names(res.Skipped), want)
 	}
 }
@@ -379,16 +379,20 @@ func TestElevationStage(t *testing.T) {
 	if f == nil {
 		t.Fatal("elevation stage left its product empty")
 	}
-	e, err := elevation.New(c.Config, c.Products.Bias)
+	pp := c.Products.PrePass
+	if pp == nil || pp.LakeCells == 0 {
+		t.Fatalf("pre-pass %+v: want the lake cells it allows for", pp)
+	}
+	e, err := elevation.NewWithLakes(c.Config, c.Products.Bias, pp.LakeCells)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want, _ := e.Field()
 	if !slices.Equal(f.Values(), want.Values()) {
-		t.Error("stage product differs from elevation.New")
+		t.Error("stage product differs from elevation.NewWithLakes with the pre-pass's lake cells")
 	}
 	if hs := c.Products.Hotspots; len(hs) == 0 || !slices.Equal(hs, e.Hotspots()) {
-		t.Errorf("stage hotspots %+v, want elevation.New's (seed 42 draws some)", hs)
+		t.Errorf("stage hotspots %+v, want elevation.NewWithLakes's (seed 42 draws some)", hs)
 	}
 	if !slices.Equal(variants, []string{"2 layout/", "3 elevation/"}) {
 		t.Errorf("renders %q, want the layout and elevation renders", variants)
@@ -502,7 +506,9 @@ func TestSeaLevelStage(t *testing.T) {
 	if sl == nil {
 		t.Fatal("sea level stage left its product empty")
 	}
-	want, err := cells.Search(c.Products.Mesh, c.Products.Cells.Altitude, c.Config.World.LandCells)
+	// The first sea level is for N plus the pre-pass's lake cells.
+	target := c.Config.World.LandCells + c.Products.PrePass.LakeCells
+	want, err := cells.Search(c.Products.Mesh, c.Products.Cells.Altitude, target)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -511,7 +517,7 @@ func TestSeaLevelStage(t *testing.T) {
 	if !bytes.Equal(a, b) {
 		t.Error("stage product differs from cells.Search")
 	}
-	if !sl.Met || sl.Target != 10_000 {
+	if !sl.Met || sl.Target != target || target <= 10_000 {
 		t.Errorf("seed 42: %d land of %d, reason %s", sl.LandCells, sl.Target, sl.Reason)
 	}
 	if got := variants[len(variants)-1]; got != "6 sea-level/" {
@@ -520,7 +526,7 @@ func TestSeaLevelStage(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(c.RendersDir, "06-sea-level.png")); err != nil {
 		t.Error(err)
 	}
-	for _, s := range []string{"sea-level: target 10000 land cells ± 100", string(sl.Reason), "dry basin"} {
+	for _, s := range []string{fmt.Sprintf("sea-level: target %d land cells ± %d", target, sl.Tolerance), string(sl.Reason), "dry basin"} {
 		if !strings.Contains(log.String(), s) {
 			t.Errorf("log lacks %q:\n%s", s, log.String())
 		}
@@ -667,8 +673,8 @@ func TestClassifyStage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "climate", "basins", "classify"}) ||
-		!slices.Equal(names(res.Skipped), []string{"land-target", "rivers"}) || res.NotImplemented != nil {
+	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "climate", "basins", "land-target", "classify"}) ||
+		!slices.Equal(names(res.Skipped), []string{"rivers"}) || res.NotImplemented != nil {
 		t.Errorf("ran %q, skipped %q, stopped at %v", names(res.Ran), names(res.Skipped), res.NotImplemented)
 	}
 	p := c.Products
@@ -679,7 +685,7 @@ func TestClassifyStage(t *testing.T) {
 	for k, h := range p.Hotspots {
 		peaks[k] = h.Point()
 	}
-	want, err := classify.Classify(p.Mesh, p.Cells.Altitude, p.Cells.Relief, &p.SeaLevel.Flood, peaks, classify.RulesOf(c.Config))
+	want, err := classify.Classify(p.Mesh, p.Cells.Altitude, p.Cells.Relief, p.Target.Flood, p.Target.Lakes, peaks, classify.RulesOf(c.Config))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -712,7 +718,7 @@ func TestEdgesStage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "climate", "basins", "classify", "edges"}) ||
+	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "climate", "basins", "land-target", "classify", "edges"}) ||
 		res.NotImplemented != nil {
 		t.Errorf("ran %q, stopped at %v", names(res.Ran), res.NotImplemented)
 	}
@@ -721,9 +727,14 @@ func TestEdgesStage(t *testing.T) {
 		t.Fatal("edge stage left its product empty")
 	}
 	water := make([]edges.Water, len(p.Mesh.Cells))
-	for i, o := range p.SeaLevel.Flood.Ocean {
-		if o {
+	for i, o := range p.Target.Flood.Ocean {
+		switch k := p.Target.Lakes.Lake[i]; {
+		case o:
 			water[i] = edges.Ocean
+		case k != basin.None && p.Target.Lakes.Lakes[k].Kind == basin.KindInlandSea:
+			water[i] = edges.InlandSea
+		case k != basin.None:
+			water[i] = edges.Lake
 		}
 	}
 	want, err := edges.Build(p.Mesh, p.Cells.Altitude, water, nil)

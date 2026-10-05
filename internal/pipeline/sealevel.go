@@ -9,13 +9,21 @@ import (
 	"github.com/mdhender/mpg/internal/cells"
 )
 
-// runSeaLevel searches for the sea level that leaves world.land_cells (N)
-// land cells, floods the ocean from the rim, logs the target, the achieved
-// count and its deviation, the reason the search ended and its trace, and
-// renders the land and water. An unmet target is reported, not an error.
+// runSeaLevel searches for the first sea level: the level that leaves
+// world.land_cells (N) plus the elevation pre-pass's lake cells land cells
+// before lakes (N alone in the pre-pass), so that its ocean, which the
+// first climate pass reads, is about the final one. It floods the ocean
+// from the rim, logs the target, the achieved count and its deviation, the
+// reason the search ended and its trace, and renders the land and water.
+// The land contract (N after lakes) is the land-target stage's; an unmet
+// target here is reported, not an error.
 func runSeaLevel(c *Context) error {
 	m, s := c.Products.Mesh, c.Products.Cells
-	sl, err := cells.Search(m, s.Altitude, c.Config.World.LandCells)
+	target := c.Config.World.LandCells
+	if pp := c.Products.PrePass; pp != nil {
+		target += pp.LakeCells
+	}
+	sl, err := cells.Search(m, s.Altitude, target)
 	if err != nil {
 		return err
 	}

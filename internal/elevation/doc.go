@@ -7,10 +7,11 @@
 // height (DESIGN.md, "Cell statistics and sea
 // level"): later stages take each cell's median of it.
 //
-// Sea level is not decided here; stage 6 searches for it on cell counts. The
-// field is built so that 0 m is a good first guess: about the land fraction
-// of the raster outside the rim lies above 0 m (see "Datum"), and 0 m is the
-// layout's nominal coast, moved by the noise.
+// Sea level is not decided here; stages 6 and 9 search for it on cell
+// counts. The field is built so that 0 m is a good first guess: about the
+// land share of the raster outside the rim, the land fraction plus an
+// allowance for lakes, lies above 0 m (see "Datum"), and 0 m is the layout's
+// nominal coast, moved by the noise.
 //
 // # Signal
 //
@@ -45,9 +46,17 @@
 //	c ← (c + δ·(1 + b)/2) / (1 + max(δ, 0))
 //
 // where δ in [−datum_max_shift, datum_max_shift] is found by bisection (48
-// steps) so that the land fraction of the samples outside the rim lie above
+// steps) so that the land share of the samples outside the rim lie above
 // 0 m before the falloff: those with c > 0, and those whose sea floor (see
-// "Meters") a hotspot's rise lifts above 0 m (see "Volcanic hotspots"). The
+// "Meters") a hotspot's rise lifts above 0 m (see "Volcanic hotspots"),
+// except in the falloff band, whose ceiling (falloff.ceiling_m, below 0 m)
+// drowns every sample whatever its signal, so none there counts as land.
+// The land share is the land fraction f with New, and with NewWithLakes
+// (the pipeline's) f·(N + L)/N for an allowance of L lake cells
+// (LandShareWithLakes): the pipeline's elevation stage counts L in a
+// pre-pass of stages 3 to 8 with no allowance, so the land left once the
+// land-target stage has turned the lakes into water is about N at about
+// 0 m, and the land's heights above the sea keep their range. The
 // weight (1 + b)/2 is 0 in the open ocean (b = −1), so the shift
 // grows or shrinks the layout's landmasses instead of raising the sea floor,
 // and the division keeps a raised continent's heights in range without

@@ -3,7 +3,9 @@
 package pipeline
 
 import (
+	"github.com/mdhender/mpg/internal/basin"
 	"github.com/mdhender/mpg/internal/edges"
+	"github.com/mdhender/mpg/internal/mesh"
 )
 
 // runEdges builds the edge data (bearings, compass directions, neighbors,
@@ -12,17 +14,12 @@ import (
 // naive nearest-point collisions, the incline histograms, coast and
 // passability counts), and renders the land–land inclines, as variant
 // "passability" the impassable and coast edges, and as variant "compass" a
-// zoomed crop of the compass directions. Until the basin and river stages
-// exist the only water is the sea level stage's ocean, and there are no
-// rivers.
+// zoomed crop of the compass directions. The water is the land-target
+// stage's (Water): the ocean, the lakes and the inland seas. There are no
+// rivers until the river stage exists.
 func runEdges(c *Context) error {
-	m, s, sl := c.Products.Mesh, c.Products.Cells, c.Products.SeaLevel
-	water := make([]edges.Water, len(m.Cells))
-	for i, ocean := range sl.Flood.Ocean {
-		if ocean {
-			water[i] = edges.Ocean
-		}
-	}
+	m, s := c.Products.Mesh, c.Products.Cells
+	water := Water(m, c.Products.Target)
 	d, err := edges.Build(m, s.Altitude, water, nil)
 	if err != nil {
 		return err
@@ -44,4 +41,24 @@ func runEdges(c *Context) error {
 	c.Products.Edges = d
 	c.Products.EdgeStats = &st
 	return nil
+}
+
+// Water returns each cell's water kind at the land target t: ocean for the
+// ocean flood, lake or inland sea for a lake cell by its kind, and none for
+// land and rim cells.
+func Water(m *mesh.Mesh, t *LandTarget) []edges.Water {
+	water := make([]edges.Water, len(m.Cells))
+	for i, c := range m.Cells {
+		switch {
+		case c.Rim:
+		case t.Flood.Ocean[i]:
+			water[i] = edges.Ocean
+		case t.Lakes.Lake[i] != basin.None:
+			water[i] = edges.Lake
+			if t.Lakes.Lakes[t.Lakes.Lake[i]].Kind == basin.KindInlandSea {
+				water[i] = edges.InlandSea
+			}
+		}
+	}
+	return water
 }

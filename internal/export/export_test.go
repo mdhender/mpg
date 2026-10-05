@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mdhender/mpg/internal/basin"
 	"github.com/mdhender/mpg/internal/config"
 	"github.com/mdhender/mpg/internal/export"
 	"github.com/mdhender/mpg/internal/pipeline"
@@ -80,14 +81,14 @@ func TestWorlds(t *testing.T) {
 		if again, err := back.Bytes(); err != nil || !bytes.Equal(again, b) {
 			t.Errorf("decode and re-encode changed the bytes (%v)", err)
 		}
-		m, sl := ctx.Products.Mesh, ctx.Products.SeaLevel
+		m, lt := ctx.Products.Mesh, ctx.Products.Target
 		if len(w.Cells) != len(m.Cells) || len(w.Corners) != len(m.Corners) || len(w.Edges) != len(m.Edges) {
 			t.Fatal("world and mesh sizes differ")
 		}
-		if w.Outcomes.LandCells != sl.LandCells || w.Outcomes.SeaLevelM != sl.Level || len(w.Outcomes.Trace) != len(sl.Trace) {
-			t.Error("outcomes differ from the sea level stage")
+		if w.Outcomes.LandCells != lt.LandCells || w.Outcomes.SeaLevelM != lt.Flood.Level || len(w.Outcomes.Trace) != len(lt.Search.Trace) {
+			t.Error("outcomes differ from the land-target stage")
 		}
-		if want := []string{"land-target", "rivers", "measures"}; !slices.Equal(w.Outcomes.Deferred, want) {
+		if want := []string{"rivers", "measures"}; !slices.Equal(w.Outcomes.Deferred, want) {
 			t.Errorf("deferred %q, want %q", w.Outcomes.Deferred, want)
 		}
 		hash, _ := ctx.Config.Hash()
@@ -298,6 +299,159 @@ func noFMA(t *testing.T, pkg string) {
 			}
 			if m := fusedOp.FindAllString(string(out), -1); len(m) != 0 {
 				t.Errorf("%s: %d fused multiply-add instructions in %s", tg.arch, len(m), pkg)
+			}
+		})
+	}
+}
+
+// TestWorldLakes checks a default-size world, which has lakes, inland seas,
+// salt water and playas: it validates, round-trips through its bytes, and
+// its lake cells, flags, sink corners and outcome counts follow the land
+// target's lakes.
+func TestWorldLakes(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a default-size world")
+	}
+	ctx := generate(t, 42, "cinematic", "continents", 10_000)
+	w, b := ctx.Products.World, ctx.Products.WorldBytes
+	if err := world.Validate(w); err != nil {
+		t.Fatal(err)
+	}
+	back, err := world.DecodeBytes(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again, err := back.Bytes(); err != nil || !bytes.Equal(again, b) {
+		t.Fatalf("decode and re-encode changed the bytes (%v)", err)
+	}
+	if err := world.Validate(back); err != nil {
+		t.Fatal(err)
+	}
+	lt := ctx.Products.Target
+	o := back.Outcomes
+	if o.Lakes == 0 || o.InlandSeas == 0 || o.SaltLakes+o.SaltInlandSeas == 0 || o.Playas == 0 {
+		t.Fatalf("outcomes %+v: the fixture needs lakes, inland seas, salt water and playas", o)
+	}
+	nl, ns, salt, _ := lt.Lakes.Counts()
+	if o.Lakes != nl || o.InlandSeas != ns || o.SaltLakes+o.SaltInlandSeas != salt || o.Playas != len(lt.Lakes.Playas) ||
+		o.LakeCells+o.InlandSeaCells != lt.LakeCells || o.LandCells != lt.LandCells || o.ClimatePasses != 2 {
+		t.Errorf("outcomes %+v disagree with the land target", o)
+	}
+	sinks := 0
+	for i := range back.Corners {
+		if k := &back.Corners[i]; k.HasFlag(world.FlagSink) {
+			sinks++
+			if !k.HasFlag(world.FlagTerminal) {
+				t.Errorf("sink corner %d is not terminal", i)
+			}
+		}
+	}
+	for _, p := range lt.Lakes.Playas {
+		if !back.Cells[p.Cell].HasFlag(world.FlagPlaya) || !back.Corners[p.Corner].HasFlag(world.FlagSink) || !back.Cells[p.Cell].Landform.IsLand() {
+			t.Errorf("playa %+v: cell or sink corner not flagged", p)
+		}
+	}
+	if sinks == 0 || sinks > len(lt.Lakes.Playas) {
+		t.Errorf("%d sink corners for %d playas", sinks, len(lt.Lakes.Playas))
+	}
+	for i := range back.Cells {
+		c := &back.Cells[i]
+		k := lt.Lakes.Lake[i]
+		switch {
+		case k == basin.None && (c.Water == world.Lake || c.Water == world.InlandSea || c.HasFlag(world.FlagSalt)):
+			t.Fatalf("cell %d: %s %s salt %v, but no lake", i, c.Landform, c.Water, c.HasFlag(world.FlagSalt))
+		case k >= 0:
+			lk := &lt.Lakes.Lakes[k]
+			want, form := world.Lake, world.FreshWater
+			if lk.Kind == basin.KindInlandSea {
+				want, form = world.InlandSea, world.SaltWater
+			}
+			if c.Water != want || c.Landform != form || c.HasFlag(world.FlagSalt) != lk.Salt {
+				t.Fatalf("cell %d: %s %s salt %v, lake %+v", i, c.Landform, c.Water, c.HasFlag(world.FlagSalt), lk.Kind)
+			}
+		}
+	}
+	t.Logf("%d lakes, %d inland seas, %d+%d salt, %d playas, %d sink corners; %d lake and %d inland-sea cells",
+		o.Lakes, o.InlandSeas, o.SaltLakes, o.SaltInlandSeas, o.Playas, sinks, o.LakeCells, o.InlandSeaCells)
+
+	// Corruptions of the lake rules, one at a time.
+	fresh := func() *world.World {
+		w, err := world.DecodeBytes(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return w
+	}
+	land, rim, ocean, lakeCell, lakeMate := -1, -1, -1, -1, -1
+	for i := range back.Cells {
+		c := &back.Cells[i]
+		switch {
+		case c.HasFlag(world.FlagRim) && rim < 0:
+			rim = i
+		case c.Landform.IsLand() && !c.HasFlag(world.FlagPlaya) && land < 0:
+			land = i
+		case c.Water == world.Ocean && ocean < 0:
+			ocean = i
+		case c.Water == world.InlandSea && lakeCell < 0:
+			lakeCell = i
+		}
+	}
+	for _, x := range back.Cells[lakeCell].Exits {
+		if back.Cells[x.Neighbor].Water == world.InlandSea {
+			lakeMate = x.Neighbor
+		}
+	}
+	sink := slices.IndexFunc(back.Corners, func(k world.Corner) bool { return k.HasFlag(world.FlagSink) })
+	noPlaya := slices.IndexFunc(back.Corners, func(k world.Corner) bool { return !k.HasFlag(world.FlagTerminal) && !k.HasFlag(world.FlagBoundary) })
+	addFlag := func(fs []world.CellFlag, f world.CellFlag) []world.CellFlag {
+		fs = append(fs, f)
+		slices.SortFunc(fs, func(a, b world.CellFlag) int {
+			return slices.Index(world.CellFlags, a) - slices.Index(world.CellFlags, b)
+		})
+		return fs
+	}
+	dropFlag := func(fs []world.CellFlag, f world.CellFlag) []world.CellFlag {
+		return slices.DeleteFunc(fs, func(g world.CellFlag) bool { return g == f })
+	}
+	toggleSalt := func(c *world.Cell) {
+		if c.HasFlag(world.FlagSalt) {
+			c.Flags = dropFlag(c.Flags, world.FlagSalt)
+		} else {
+			c.Flags = addFlag(c.Flags, world.FlagSalt)
+		}
+	}
+	for _, tc := range []struct {
+		name string
+		f    func(w *world.World)
+		msg  string
+	}{
+		{"salt land", func(w *world.World) { w.Cells[land].Flags = addFlag(w.Cells[land].Flags, world.FlagSalt) }, "salt flag on"},
+		{"salt rim", func(w *world.World) { w.Cells[rim].Flags = addFlag(w.Cells[rim].Flags, world.FlagSalt) }, "rim cell"},
+		{"playa at sea", func(w *world.World) { w.Cells[ocean].Flags = addFlag(w.Cells[ocean].Flags, world.FlagPlaya) }, "playa on"},
+		{"one lake, two salinities", func(w *world.World) { toggleSalt(&w.Cells[lakeMate]) }, "of the same lake"},
+		{"lost sink", func(w *world.World) {
+			k := &w.Corners[sink]
+			k.Flags = slices.DeleteFunc(k.Flags, func(f world.CornerFlag) bool { return f == world.FlagSink })
+		}, "is not a sink"},
+		{"sink without playa", func(w *world.World) {
+			k := &w.Corners[noPlaya]
+			k.Flags = append(k.Flags, world.FlagTerminal, world.FlagSink)
+		}, "touches no playa"},
+		{"lake count", func(w *world.World) { w.Outcomes.Lakes++ }, "lakes"},
+		{"lake cells", func(w *world.World) { w.Outcomes.LakeCells-- }, "lake"},
+		{"climate passes", func(w *world.World) { w.Outcomes.ClimatePasses = 0 }, "climate passes"},
+		{"datum share", func(w *world.World) { w.Outcomes.DatumLandShare = 1.5 }, "datum land share"},
+		{"probe lake", func(w *world.World) { w.Outcomes.Trace[0].Lake = -1 }, "probe 0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := fresh()
+			tc.f(w)
+			err := world.Validate(w)
+			if _, ok := errors.AsType[*world.Invalid](err); !ok {
+				t.Fatalf("Validate = %v, want an *Invalid", err)
+			}
+			if !strings.Contains(err.Error(), tc.msg) {
+				t.Errorf("Validate = %v\nwant a problem mentioning %q", err, tc.msg)
 			}
 		})
 	}

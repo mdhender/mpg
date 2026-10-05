@@ -14,8 +14,8 @@
 // Every height rule uses the cell's altitude (package cells: the median of
 // its samples) measured from the chosen sea level, where hmz2ter used a
 // hex's median elevation above 0 m; relief is the cell's p95 − p5. A land
-// cell (sea level stage Flood.Land: the land candidates and, until the
-// basin stage decides them, the dry basin floors) is
+// cell (the land-target stage's: its flood's land, the land candidates and
+// the basin floors, less the lake cells of its water balance) is
 //
 //   - plateaus, when it is at least plateau_min_altitude_m above sea level
 //     and its relief is below plateau_below_m, whatever its relief class;
@@ -26,11 +26,13 @@
 // A dry basin floor below sea level is classified like any other land; its
 // negative height only keeps it off the plateaus.
 //
-// Every other playable cell is salt water: in milestone 4 there are no
-// lakes, so the ocean is the only water, and fresh water waits for the
-// basin stage. Rim cells are salt water too, as the generator treats them
-// (DESIGN.md, "Rim"), with depth deep; their rim and impassable flags
-// override this for the game.
+// A lake cell is water by its lake's size (DESIGN.md, "Classification"):
+// fresh water for a lake (fewer than basin.inland_sea_min_cells cells),
+// salt water for an inland sea; salinity is world.json's salt flag, not the
+// landform. Classify without lakes (nil) leaves every basin floor land.
+// Every other playable cell is salt water: the ocean. Rim cells are salt
+// water too, as the generator treats them (DESIGN.md, "Rim"), with depth
+// deep; their rim and impassable flags override this for the game.
 //
 // # Volcanoes
 //
@@ -46,8 +48,8 @@
 // # Depth
 //
 // A salt-water cell's sea steps are its breadth-first distance in cell
-// steps from the nearest cell that is not salt water (land, and later fresh
-// water), through playable salt water, over cell adjacency (mesh
+// steps from the nearest cell that is not salt water (land and lakes),
+// through playable salt water (the ocean and the inland seas), over cell adjacency (mesh
 // Cell.Neighbors). Two cells that meet only at the 4-way corner of a
 // collapsed short edge are not neighbors, so a step never crosses a
 // corner. The search does not enter rim cells: they are impassable, and a

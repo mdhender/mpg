@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"fmt"
 	"image"
+	"image/color"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -244,6 +245,33 @@ func TestPaletteMatchesClassify(t *testing.T) {
 	rim := world.Cell{Landform: world.SaltWater, Depth: world.Deep, Flags: []world.CellFlag{world.FlagRim, world.FlagImpassable}}
 	if got := playermap.CellColor(&rim); got != playermap.IceColor {
 		t.Errorf("rim cell: %v, want ice", got)
+	}
+}
+
+// TestInlandWaterColors checks the flags' colors: playas, salt lakes, and
+// salt inland seas tinted over their depth band; fresh lakes and inland
+// seas keep the landform's colors.
+func TestInlandWaterColors(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		c    world.Cell
+		want color.RGBA
+	}{
+		{"playa", world.Cell{Landform: world.Flats, Flags: []world.CellFlag{world.FlagPlaya}}, playermap.PlayaColor},
+		{"fresh lake", world.Cell{Landform: world.FreshWater, Water: world.Lake}, classify.LandformColor(classify.FreshWater, classify.DepthNone)},
+		{"salt lake", world.Cell{Landform: world.FreshWater, Water: world.Lake, Flags: []world.CellFlag{world.FlagSalt}}, playermap.SaltLakeColor},
+		{"fresh inland sea", world.Cell{Landform: world.SaltWater, Depth: world.Shallow, Water: world.InlandSea}, classify.LandformColor(classify.SaltWater, classify.Shallow)},
+	} {
+		if got := playermap.CellColor(&tc.c); got != tc.want {
+			t.Errorf("%s: %v, want %v", tc.name, got, tc.want)
+		}
+	}
+	fresh := world.Cell{Landform: world.SaltWater, Depth: world.Open, Water: world.InlandSea}
+	salt := fresh
+	salt.Flags = []world.CellFlag{world.FlagSalt}
+	f, s := playermap.CellColor(&fresh), playermap.CellColor(&salt)
+	if f == s || s.A != 0xff {
+		t.Errorf("salt inland sea %v, fresh %v: want a distinct opaque tint", s, f)
 	}
 }
 

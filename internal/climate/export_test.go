@@ -5,12 +5,15 @@ package climate
 import (
 	"github.com/mdhender/mpg/internal/cells"
 	"github.com/mdhender/mpg/internal/field"
+	"github.com/mdhender/mpg/internal/mesh"
 	"github.com/mdhender/mpg/internal/noise"
 	"github.com/mdhender/mpg/internal/seed"
 )
 
 // ComputeWorkers is Compute with an explicit worker count.
-var ComputeWorkers = compute
+func ComputeWorkers(f *field.Field, m *mesh.Mesh, s *cells.Stats, fl *cells.Flood, model Model, world uint64, workers int) (*Result, error) {
+	return compute(f, m, s, fl, nil, model, world, workers)
+}
 
 // WindsAt returns the winds at signed latitude lat degrees (north
 // positive), before any jitter: the bearings they blow from and their

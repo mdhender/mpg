@@ -16,11 +16,15 @@ import (
 // cell-area heatmap, and as variant "short" the short-edge collapse's 4-way
 // corners and stretched edges. A mesh that fails a check is still rendered,
 // so it can be inspected, but the stage then fails and leaves no product: a
-// bad mesh never reaches the later stages.
+// bad mesh never reaches the later stages. The mesh depends only on the
+// config, so the stage reuses the one the elevation stage's pre-pass built.
 func runMesh(c *Context) error {
-	m, err := mesh.New(c.Config)
-	if err != nil {
-		return err
+	m := c.preMesh // the elevation stage's pre-pass built it from the same config
+	if m == nil {
+		var err error
+		if m, err = mesh.New(c.Config); err != nil {
+			return err
+		}
 	}
 	a := c.Config.Province.AreaKm2
 	rep := m.Check(mesh.LimitsOf(c.Config))

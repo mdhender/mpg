@@ -22,17 +22,20 @@
 //     site + offset, the centroid package mesh's rounded, and an edge's
 //     length the rounded wrapped distance between its rounded corners.
 //   - Cells. Landform and depth are classify's names; the water kind is
-//     ocean for the sea level stage's ocean (milestone 4 has no other
-//     water); rim cells have none. Flags: rim, impassable (mesh), volcano
-//     (classify), and coast when any side is a coast edge. Exits are the
+//     the land-target stage's: ocean for its ocean, lake or inland-sea for
+//     a lake cell by its lake's kind; rim cells and land have none. Land is
+//     its flood's land less the lake cells. Flags: rim, impassable (mesh),
+//     volcano (classify), coast when any side is a coast edge, salt on the
+//     cells of a salt lake or inland sea, and playa on a playa's cell. Exits are the
 //     edge stage's half-edges in its compass order, bearing and error
 //     rounded to 0.01°.
 //   - Corner height is the mean altitude of the corner's cells (DESIGN.md,
 //     "Rivers on edges": "the mean altitude of the 3–4 cells that meet at
 //     the corner"), summed in ascending cell id order and divided by the
 //     count. A corner is terminal when it touches a land cell and a water or
-//     rim cell (a shore corner, where a river would end); dry-sink corners
-//     join them in milestone 6, and the mouth flag comes with rivers.
+//     rim cell (a shore corner, where a river would end), or is a playa's
+//     dry sink, which is flagged sink too; the mouth flag comes with
+//     rivers.
 //   - Edge seeds. Each edge's noise seed is a uint32 drawn from the seed
 //     stream "edge-noise" (DESIGN.md, "Determinism") at algorithm version
 //     EdgeNoiseVersion: seed.Rand(world seed, "edge-noise", "1").Uint32(),
@@ -49,8 +52,14 @@
 //     predecessor. Every other chain is closed and starts at its lowest
 //     edge id. Chains are ordered by first edge id. Chains cross the seam
 //     like any other edge: they follow corner ids, not coordinates.
-//   - Outcomes are the sea level stage's, and the deferred stages the run
-//     passed over.
+//   - Outcomes are the land-target stage's: its level, its search record
+//     (target, tolerance, policy, budget, expected lake cells, initial
+//     estimate, reason, met, and every probe with its lake cells), the
+//     playable, land (after lakes), ocean, dry basin (land at or below the
+//     level), lake and inland-sea cell counts, the land area (the land
+//     cells' mesh areas in id order), the lake, inland-sea, salt and playa
+//     counts, the climate passes, the elevation pre-pass's lake cells and
+//     datum land share, and the deferred stages the run passed over.
 //
 // # Determinism
 //

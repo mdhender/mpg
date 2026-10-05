@@ -156,6 +156,14 @@
 // the basin, the sea first (Water.OverflowVia): to the sea, or into the
 // basin that cell drains to (Water.OverflowTo), whose spill is lower, so
 // it is taken later. Overflow reaching a full basin passes on through it.
+// Two top-level basins can close at one flat at the same spill level, and
+// each then sees the other as its lowest way down: the first full one
+// overflows into the other, and the other, once full, would pass it back.
+// So when a top-level basin's target is a full basin whose top-level basin
+// spills no lower, the overflow instead takes the lowest cell next to the
+// flat that drains to the sea or to a basin spilling strictly lower (the
+// flat joined the sea when they closed, so there is one), recorded as its
+// OverflowTo and OverflowVia (S29; TestSameLevelOverflow).
 //
 // Outcomes. A basin is full, partial (water below its spill level), or dry
 // (no water of its own). A lake is the water of a basin with water whose
@@ -187,9 +195,9 @@
 // from 0 only by rounding.
 //
 // Balance is linear in the cells and basins, so the land-target search
-// (S29) can run it at every probe against a fixed climate. The later
-// stages do not read its lakes yet; S29 brings them into classification,
-// the edges and world.json.
+// (stage 9) runs it at every probe against the fixed first climate pass;
+// the lakes at the level it chooses are the ones classification, the edges
+// and world.json read.
 //
 // # Renders
 //

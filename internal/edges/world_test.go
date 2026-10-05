@@ -4,6 +4,7 @@ package edges_test
 
 import (
 	"bytes"
+	"github.com/mdhender/mpg/internal/basin"
 	"image"
 	"slices"
 	"testing"
@@ -44,12 +45,19 @@ func world(t *testing.T, seed uint64, aspect, preset string, land int) *pipeline
 	return ctx
 }
 
-// waterOf returns the cells' water kinds as the edge stage sets them.
+// waterOf returns the cells' water kinds as the edge stage sets them: the
+// land-target stage's ocean, lakes and inland seas.
 func waterOf(ctx *pipeline.Context) []edges.Water {
+	t := ctx.Products.Target
 	water := make([]edges.Water, len(ctx.Products.Mesh.Cells))
-	for i, o := range ctx.Products.SeaLevel.Flood.Ocean {
-		if o {
+	for i, o := range t.Flood.Ocean {
+		switch k := t.Lakes.Lake[i]; {
+		case o:
 			water[i] = edges.Ocean
+		case k != basin.None && t.Lakes.Lakes[k].Kind == basin.KindInlandSea:
+			water[i] = edges.InlandSea
+		case k != basin.None:
+			water[i] = edges.Lake
 		}
 	}
 	return water
@@ -144,7 +152,11 @@ func TestWorlds(t *testing.T) {
 			}
 			rim := m.Cells[a].Rim || m.Cells[b].Rim
 			wantCoast := !rim && (water[a] == edges.WaterNone) != (water[b] == edges.WaterNone)
-			if ed.Coast != wantCoast || (wantCoast && ed.Water != edges.Ocean) {
+			wantWater := edges.WaterNone
+			if wantCoast {
+				wantWater = max(water[a], water[b])
+			}
+			if ed.Coast != wantCoast || ed.Water != wantWater {
 				t.Errorf("seed %d edge %d: coast %v %s, want %v", tc.seed, e, ed.Coast, ed.Water, wantCoast)
 			}
 		}

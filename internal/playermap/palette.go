@@ -5,6 +5,7 @@ package playermap
 import (
 	"image/color"
 
+	"github.com/mdhender/mpg/internal/basin"
 	"github.com/mdhender/mpg/internal/classify"
 	"github.com/mdhender/mpg/internal/mesh"
 	"github.com/mdhender/mpg/world"
@@ -52,13 +53,42 @@ func init() {
 	}
 }
 
-// CellColor returns the fill of a cell: ice for a rim cell, salt water by
-// its depth band, and every other landform by classify.LandformColor.
+// The inland water and playa inks, the basins stage's lakes render's (package
+// basin), so the stage render and the player map read alike.
+var (
+	// SaltLakeColor fills a lake cell with the salt flag; a fresh lake
+	// keeps the fresh-water landform's teal.
+	SaltLakeColor = basin.SaltLakeColor
+	// SaltSeaTint is mixed half and half into the depth band's blue of an
+	// inland-sea cell with the salt flag; a fresh inland sea is drawn as
+	// the ocean is, by depth band.
+	SaltSeaTint = basin.SaltSeaColor
+	// PlayaColor fills a playa cell: a dry lake bed.
+	PlayaColor = basin.PlayaColor
+)
+
+// CellColor returns the fill of a cell: ice for a rim cell, a playa in
+// PlayaColor, a salt lake in SaltLakeColor, a salt inland sea its depth
+// band's blue mixed with SaltSeaTint, other salt water by its depth band,
+// and every other landform by classify.LandformColor.
 func CellColor(c *world.Cell) color.RGBA {
-	if c.HasFlag(world.FlagRim) {
+	switch {
+	case c.HasFlag(world.FlagRim):
 		return IceColor
+	case c.HasFlag(world.FlagPlaya):
+		return PlayaColor
+	case c.Water == world.Lake && c.HasFlag(world.FlagSalt):
+		return SaltLakeColor
+	case c.Water == world.InlandSea && c.HasFlag(world.FlagSalt):
+		return mix(LandformColor(c.Landform, c.Depth), SaltSeaTint)
 	}
 	return LandformColor(c.Landform, c.Depth)
+}
+
+// mix returns the even mix of a and b, rounded down, opaque.
+func mix(a, b color.RGBA) color.RGBA {
+	m := func(x, y uint8) uint8 { return uint8((uint16(x) + uint16(y)) / 2) }
+	return color.RGBA{R: m(a.R, b.R), G: m(a.G, b.G), B: m(a.B, b.B), A: 0xff}
 }
 
 // LandformColor returns the fill for landform l with depth band d (salt

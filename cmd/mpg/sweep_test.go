@@ -87,15 +87,15 @@ func TestParseSweepStages(t *testing.T) {
 		t.Errorf("unknown-stage error %q does not list the stages", err)
 	}
 
-	// Config through basins are implemented, land-target and rivers are
-	// deferred (not implemented, but passed over on the way to classify),
-	// classify and edges are implemented, and measures and later are not.
+	// Config through land-target are implemented, rivers is deferred (not
+	// implemented, but passed over on the way to classify), classify and
+	// edges are implemented, and measures and later are not.
 	for _, tc := range []struct {
 		in   string
 		last int
 		ok   bool
-	}{{"config", 0, true}, {"layout,config", 1, true}, {"config,elevation", 2, true}, {"elevation,mesh", 3, true}, {"mesh,cells", 4, true}, {"cells:relief", 4, true}, {"cells,sea-level", 5, true}, {"sea-level", 5, true}, {"sea-level,climate", 6, true}, {"climate", 6, true}, {"climate:mask", 6, true}, {"climate:precip,climate:moisture,climate:pet,climate:runoff,climate:aridity", 6, true}, {"climate,basins", 7, true}, {"basins:depth", 7, true}, {"basins:lakes", 7, true}, {"basins,land-target", -1, false},
-		{"classify", 10, true}, {"sea-level,classify", 10, true}, {"rivers,classify", -1, false}, {"classify,edges", 11, true}, {"edges:passability", 11, true}, {"edges,measures", -1, false}} {
+	}{{"config", 0, true}, {"layout,config", 1, true}, {"config,elevation", 2, true}, {"elevation,mesh", 3, true}, {"mesh,cells", 4, true}, {"cells:relief", 4, true}, {"cells,sea-level", 5, true}, {"sea-level", 5, true}, {"sea-level,climate", 6, true}, {"climate", 6, true}, {"climate:mask", 6, true}, {"climate:precip,climate:moisture,climate:pet,climate:runoff,climate:aridity", 6, true}, {"climate,basins", 7, true}, {"basins:depth", 7, true}, {"basins:lakes", 7, true}, {"basins,land-target", 8, true}, {"land-target:lakes", 8, true},
+		{"classify", 10, true}, {"sea-level,classify", 10, true}, {"rivers,classify", -1, false}, {"rivers", -1, false}, {"classify,edges", 11, true}, {"edges:passability", 11, true}, {"edges,measures", -1, false}} {
 		cols, err := parseSweepStages(tc.in, registry)
 		if err != nil {
 			t.Fatal(err)
@@ -122,7 +122,7 @@ func TestSweepErrors(t *testing.T) {
 		{[]string{"--seeds", "1", "--stage", "layout", "--tile", "8", "--output", out}, 2, "--tile"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--aspect", "square,", "--output", out}, 2, "--aspect"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--output", out, "extra"}, 2, "unexpected"},
-		{[]string{"--seeds", "1", "--stage", "elevation,land-target", "--output", out}, 1, "stage 9 land-target is not implemented"},
+		{[]string{"--seeds", "1", "--stage", "elevation,rivers", "--output", out}, 1, "stage 10 rivers is not implemented"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--aspect", "squarish", "--output", out}, 1, "world.aspect"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--config", "no-such-file.json", "--output", out}, 1, "no-such-file"},
 	} {
@@ -139,7 +139,7 @@ func TestSweepErrors(t *testing.T) {
 // sweepPixelHash pins the small sweep below: seeds 1 and 7, the elevation
 // render and the (render-less) config stage, cinematic and square, 600 land
 // cells, 64-pixel tiles. Row labels carry the layout preset.
-const sweepPixelHash = "16b16ac50f4f547b2ef9f7d58a2f13313a4c6aedbb5adfdce3c3ed69e2ba0eb5"
+const sweepPixelHash = "b75c1f27c0fd8adbf1c168b641d126061843fc87bd454206fff4bbf05a7bee56"
 
 func TestSweepSheet(t *testing.T) {
 	dir := t.TempDir()

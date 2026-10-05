@@ -9,8 +9,8 @@ type Landform string
 
 // The landforms.
 const (
-	SaltWater         Landform = "salt-water"  // ocean, inland sea, and the rim
-	FreshWater        Landform = "fresh-water" // lakes (from milestone 6)
+	SaltWater         Landform = "salt-water"  // ocean, inland seas (fresh or salt: FlagSalt), and the rim
+	FreshWater        Landform = "fresh-water" // lakes, fresh or salt (FlagSalt)
 	Flats             Landform = "flats"
 	Plains            Landform = "plains"
 	RollingPlains     Landform = "rolling-plains"
@@ -54,8 +54,8 @@ type Water string
 const (
 	WaterNone Water = ""
 	Ocean     Water = "ocean"      // water connected to the rim
-	Lake      Water = "lake"       // inland water of fewer than inland_sea_min_cells cells (from milestone 6)
-	InlandSea Water = "inland-sea" // larger inland water (from milestone 6)
+	Lake      Water = "lake"       // inland water of fewer than basin.inland_sea_min_cells cells
+	InlandSea Water = "inland-sea" // larger inland water
 )
 
 // Waters lists the water kinds.
@@ -116,10 +116,20 @@ const (
 	FlagVolcano CellFlag = "volcano"
 	// FlagCoast marks a cell with at least one coast edge.
 	FlagCoast CellFlag = "coast"
+	// FlagSalt marks a cell of a salt lake or salt inland sea: closed (no
+	// outflow) and evaporation-dominated, a salinity proxy. The water
+	// kind (lake or inland sea, and with it the landform, fresh-water or
+	// salt-water) is set by size; salinity only by this flag. The ocean
+	// and the rim are salt by definition and do not carry it.
+	FlagSalt CellFlag = "salt"
+	// FlagPlaya marks the land cell at the bottom of a basin with no
+	// stable water level: a dry lake bed. Its sink corner is a dry sink
+	// for rivers.
+	FlagPlaya CellFlag = "playa"
 )
 
 // CellFlags lists the cell flags in the order a cell lists them.
-var CellFlags = []CellFlag{FlagRim, FlagImpassable, FlagVolcano, FlagCoast}
+var CellFlags = []CellFlag{FlagRim, FlagImpassable, FlagVolcano, FlagCoast, FlagSalt, FlagPlaya}
 
 // CornerFlag marks a property of a corner.
 type CornerFlag string
@@ -129,18 +139,21 @@ const (
 	// FlagBoundary marks a corner on the north (y = 0) or south (y = H)
 	// edge of the map.
 	FlagBoundary CornerFlag = "boundary"
-	// FlagTerminal marks a shore corner: one that touches both a land
-	// cell and a water or rim cell. Rivers end at terminal corners
-	// (DESIGN.md, "Rivers on edges"); from milestone 6 dry-sink corners
-	// are terminal too.
+	// FlagTerminal marks a corner where rivers end (DESIGN.md, "Rivers on
+	// edges"): a shore corner, one that touches both a land cell and a
+	// water or rim cell, or a dry sink (FlagSink).
 	FlagTerminal CornerFlag = "terminal"
 	// FlagMouth marks a terminal corner where a river ends (from
 	// milestone 7).
 	FlagMouth CornerFlag = "mouth"
+	// FlagSink marks a dry sink: the lowest corner (by height, ties to the
+	// lower id) of a playa cell, where rivers draining into a dry basin
+	// end. A sink corner is terminal too.
+	FlagSink CornerFlag = "sink"
 )
 
 // CornerFlags lists the corner flags in the order a corner lists them.
-var CornerFlags = []CornerFlag{FlagBoundary, FlagTerminal, FlagMouth}
+var CornerFlags = []CornerFlag{FlagBoundary, FlagTerminal, FlagMouth, FlagSink}
 
 // Codebooks lists every value each coded field may take, in a fixed order,
 // so a reader can check a file against them. They are written into the

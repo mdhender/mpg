@@ -68,11 +68,13 @@ func (e *Invalid) Error() string {
 //   - ids: every id equals its index, and every reference is in range;
 //   - every coded value is in its codebook, every number finite, every
 //     position inside the map (x in [0, W), y in [0, H]);
-//   - cells: landform, depth, and water agree (salt water has a depth,
-//     playable water a matching kind, land neither); flags in codebook
-//     order without repeats; rim if and only if impassable; rim cells deep
-//     salt water with no water kind; volcanoes on land; the coast flag
-//     exactly on cells with a coast edge;
+//   - cells: landform, depth, and water agree (salt water has a depth and
+//     is ocean or inland sea, fresh water is lake, land has neither);
+//     flags in codebook order without repeats; rim if and only if
+//     impassable; rim cells deep salt water with no water kind and no
+//     salt flag; volcanoes on land; the coast flag exactly on cells with a
+//     coast edge; the salt flag only on lake and inland-sea cells; the
+//     playa flag only on playable land;
 //   - polygons: at least 3 corners, distinct, starting at the lowest id;
 //     Sides[k] joins Corners[k] to Corners[k+1] in the orientation its
 //     edge records for this cell, so the polygon is closed; each offset
@@ -85,13 +87,17 @@ func (e *Invalid) Error() string {
 //     the cell to its neighbor, its incline is the edge's (negated from
 //     Cells[1]), its bearing matches the sites and its error the bearing;
 //     neighbor symmetry: A lists B through edge e if and only if B lists A
-//     through e, with the negated incline;
+//     through e, with the negated incline; inland water (lake and inland
+//     sea) never neighbors the ocean, and neighboring inland-water cells
+//     (one lake, since two lakes never touch) share the water kind and
+//     salt flag;
 //   - corners: the boundary flag exactly on y = 0 or y = H; 3–4 cells (2–4
 //     on the boundary), ascending, exactly the cells whose polygons list
 //     the corner; edges ascending, exactly the edges that end there; the
-//     height is the mean of its cells' altitudes; terminal exactly on
-//     corners touching both land and water or rim; mouth only on terminal
-//     corners;
+//     height is the mean of its cells' altitudes; sink only on corners of
+//     a playa cell, and every playa cell's lowest corner (height, then id)
+//     a sink; terminal exactly on sink corners and corners touching both
+//     land and water or rim; mouth only on terminal corners;
 //   - edges: cells ordered (Cells[1] == Boundary on the rim boundary, whose
 //     cell is a rim cell and whose corners are boundary corners); each
 //     edge is a side of exactly its cells; the length is the wrapped
@@ -106,11 +112,14 @@ func (e *Invalid) Error() string {
 //     when it returns to its first corner, then starting at its lowest
 //     edge id; chains ordered by first edge id;
 //   - rivers: chains of land–land edges whose classes match the edges';
-//   - outcomes: the playable, land, ocean, and dry basin counts match the
-//     cells; ocean cells lie at or below the sea level and dry basin floors
-//     are the land at or below it; met agrees with the target and
-//     tolerance; the land area is the land polygons' area; the reason,
-//     policy, budget, and trace are well formed.
+//   - outcomes: the playable, land, ocean, dry basin, lake and inland-sea
+//     cell counts match the cells; ocean cells lie at or below the sea
+//     level and dry basin floors are the land at or below it; the lake,
+//     inland-sea, salt and playa counts match the cells (lakes counted as
+//     connected sets of cells); met agrees with the target and tolerance;
+//     the land area is the land polygons' area; the reason, policy,
+//     budget, expected lake cells, climate passes, and trace are well
+//     formed.
 func Validate(w *World) error {
 	v := &validator{w: w}
 	v.run()
@@ -206,6 +215,7 @@ func (v *validator) run() {
 	v.cells()
 	v.exits()
 	v.corners()
+	v.playaSinks()
 	v.edges()
 	v.coastlines()
 	v.rivers()
@@ -318,6 +328,9 @@ func (v *validator) inMap(p Point) bool {
 // sees it: water that is not on the rim.
 func (c *Cell) isWater() bool { return c.Landform.IsWater() && !c.HasFlag(FlagRim) }
 
+// isInland reports whether the cell is inland water: a lake or inland sea.
+func (c *Cell) isInland() bool { return c.Water == Lake || c.Water == InlandSea }
+
 func (v *validator) cells() {
 	w := v.w
 	for i := range w.Cells {
@@ -333,8 +346,9 @@ func (v *validator) cells() {
 		}
 		switch {
 		case rim:
-			if c.Landform != SaltWater || c.Depth != Deep || c.Water != WaterNone {
-				v.bad("cell %d: rim cell is %s, depth %q, water %q: want deep salt water with no water kind", i, c.Landform, c.Depth, c.Water)
+			if c.Landform != SaltWater || c.Depth != Deep || c.Water != WaterNone || c.HasFlag(FlagSalt) {
+				v.bad("cell %d: rim cell is %s, depth %q, water %q, salt flag %v: want deep salt water with no water kind or flag",
+					i, c.Landform, c.Depth, c.Water, c.HasFlag(FlagSalt))
 			}
 		case c.Landform.IsLand() && c.Water != WaterNone:
 			v.bad("cell %d: land with water kind %q", i, c.Water)
@@ -360,6 +374,12 @@ func (v *validator) cells() {
 		}
 		if c.HasFlag(FlagVolcano) && !c.Landform.IsLand() {
 			v.bad("cell %d: volcano on %s", i, c.Landform)
+		}
+		if c.HasFlag(FlagSalt) && !c.isInland() {
+			v.bad("cell %d: salt flag on %s with water %q: want a lake or inland sea", i, c.Landform, c.Water)
+		}
+		if c.HasFlag(FlagPlaya) && (rim || !c.Landform.IsLand()) {
+			v.bad("cell %d: playa on %s (rim %v): want playable land", i, c.Landform, rim)
 		}
 		if !v.inMap(c.Site) || c.Site.Y == 0 || c.Site.Y == v.ht {
 			v.bad("cell %d: site %v off the map", i, c.Site)
@@ -481,6 +501,15 @@ func (v *validator) exits() {
 			if d >= 0 && math.Abs(angleDiff(x.BearingDeg, float64(45*d))-x.ErrorDeg) > AngleToleranceDeg {
 				v.bad("cell %d: exit %s error %v for bearing %v", i, x.Direction, x.ErrorDeg, x.BearingDeg)
 			}
+			if o := &w.Cells[x.Neighbor]; c.isInland() {
+				switch {
+				case o.Water == Ocean:
+					v.bad("cell %d: %s next to ocean cell %d", i, c.Water, x.Neighbor)
+				case o.isInland() && (o.Water != c.Water || o.HasFlag(FlagSalt) != c.HasFlag(FlagSalt)):
+					v.bad("cell %d: %s (salt %v) next to %s cell %d (salt %v) of the same lake",
+						i, c.Water, c.HasFlag(FlagSalt), o.Water, x.Neighbor, o.HasFlag(FlagSalt))
+				}
+			}
 			back := slices.IndexFunc(w.Cells[x.Neighbor].Exits, func(y Exit) bool { return y.Neighbor == i })
 			if back < 0 {
 				v.bad("cell %d lists %d as a neighbor, but %d does not list %d", i, x.Neighbor, x.Neighbor, i)
@@ -550,23 +579,49 @@ func (v *validator) corners() {
 			v.bad("corner %d: edges %v, but the edges ending there are %v", i, k.Edges, edgesOf[i])
 		}
 		var sum float64
-		land, wet := false, false
+		land, wet, playa := false, false, false
 		for _, c := range k.Cells {
 			cell := &w.Cells[c]
 			sum += cell.AltitudeM
 			land = land || (cell.Landform.IsLand() && !cell.HasFlag(FlagRim))
 			wet = wet || cell.Landform.IsWater()
+			playa = playa || cell.HasFlag(FlagPlaya)
+		}
+		sink := k.HasFlag(FlagSink)
+		if sink && !playa {
+			v.bad("corner %d: sink, but touches no playa cell", i)
 		}
 		if len(k.Cells) > 0 {
 			if mean := sum / float64(len(k.Cells)); !finite(k.HeightM) || math.Abs(k.HeightM-mean) > HeightToleranceM {
 				v.bad("corner %d: height %v, its cells' mean altitude %v", i, k.HeightM, mean)
 			}
 		}
-		if terminal := land && wet; terminal != k.HasFlag(FlagTerminal) {
-			v.bad("corner %d: terminal flag %v, but touches land %v and water %v", i, !terminal, land, wet)
+		if terminal := land && wet || sink; terminal != k.HasFlag(FlagTerminal) {
+			v.bad("corner %d: terminal flag %v, but touches land %v and water %v, sink %v", i, !terminal, land, wet, sink)
 		}
 		if k.HasFlag(FlagMouth) && !k.HasFlag(FlagTerminal) {
 			v.bad("corner %d: mouth that is not terminal", i)
+		}
+	}
+}
+
+// playaSinks checks that every playa cell's lowest corner, by height and
+// then id, is a sink.
+func (v *validator) playaSinks() {
+	w := v.w
+	for i := range w.Cells {
+		c := &w.Cells[i]
+		if !c.HasFlag(FlagPlaya) || len(c.Corners) == 0 {
+			continue
+		}
+		low := c.Corners[0]
+		for _, k := range c.Corners {
+			if hk, hl := w.Corners[k].HeightM, w.Corners[low].HeightM; hk < hl || hk == hl && k < low {
+				low = k
+			}
+		}
+		if !w.Corners[low].HasFlag(FlagSink) {
+			v.bad("cell %d: playa whose lowest corner %d is not a sink", i, low)
 		}
 	}
 }
@@ -731,7 +786,7 @@ func (v *validator) rivers() {
 func (v *validator) outcomes() {
 	w := v.w
 	o := &w.Outcomes
-	var playable, land, ocean, basin int
+	var playable, land, ocean, basin, lake, sea, playas int
 	var area float64
 	for i := range w.Cells {
 		c := &w.Cells[i]
@@ -739,6 +794,15 @@ func (v *validator) outcomes() {
 			continue
 		}
 		playable++
+		switch c.Water {
+		case Lake:
+			lake++
+		case InlandSea:
+			sea++
+		}
+		if c.HasFlag(FlagPlaya) {
+			playas++
+		}
 		if c.Water == Ocean {
 			ocean++
 			if c.AltitudeM > o.SeaLevelM {
@@ -753,9 +817,19 @@ func (v *validator) outcomes() {
 			}
 		}
 	}
-	if playable != o.PlayableCells || land != o.LandCells || ocean != o.OceanCells || basin != o.DryBasinCells {
-		v.bad("outcomes: %d playable, %d land, %d ocean, %d dry basin cells; the cells give %d, %d, %d, %d",
-			o.PlayableCells, o.LandCells, o.OceanCells, o.DryBasinCells, playable, land, ocean, basin)
+	if playable != o.PlayableCells || land != o.LandCells || ocean != o.OceanCells || basin != o.DryBasinCells ||
+		lake != o.LakeCells || sea != o.InlandSeaCells {
+		v.bad("outcomes: %d playable, %d land, %d ocean, %d dry basin, %d lake, %d inland-sea cells; the cells give %d, %d, %d, %d, %d, %d",
+			o.PlayableCells, o.LandCells, o.OceanCells, o.DryBasinCells, o.LakeCells, o.InlandSeaCells, playable, land, ocean, basin, lake, sea)
+	}
+	lakes, seas, saltLakes, saltSeas := v.lakes()
+	if lakes != o.Lakes || seas != o.InlandSeas || saltLakes != o.SaltLakes || saltSeas != o.SaltInlandSeas || playas != o.Playas {
+		v.bad("outcomes: %d lakes, %d inland seas, %d and %d salt, %d playas; the cells give %d, %d, %d and %d, %d",
+			o.Lakes, o.InlandSeas, o.SaltLakes, o.SaltInlandSeas, o.Playas, lakes, seas, saltLakes, saltSeas, playas)
+	}
+	if o.ExpectedLakeCells < 0 || o.PrePassLakeCells < 0 || o.ClimatePasses < 1 || !(o.DatumLandShare > 0 && o.DatumLandShare < 1) {
+		v.bad("outcomes: expected lake cells %d, pre-pass lake cells %d, datum land share %v, climate passes %d",
+			o.ExpectedLakeCells, o.PrePassLakeCells, o.DatumLandShare, o.ClimatePasses)
 	}
 	if !finite(o.LandAreaKm2) || math.Abs(o.LandAreaKm2-area) > 1e-6*max(area, 1) {
 		v.bad("outcomes: land area %v km², the land polygons give %v", o.LandAreaKm2, area)
@@ -776,8 +850,42 @@ func (v *validator) outcomes() {
 		v.bad("outcomes: policy %q, budget %d, %d probes", o.Policy, o.Budget, len(o.Trace))
 	}
 	for k, p := range o.Trace {
-		if !slices.Contains(Methods, p.Method) || !finite(p.LevelM) || p.Land < 0 || p.Ocean < 0 || p.DryBasin < 0 {
+		if !slices.Contains(Methods, p.Method) || !finite(p.LevelM) || p.Land < 0 || p.Ocean < 0 || p.DryBasin < 0 || p.Lake < 0 {
 			v.bad("outcomes: probe %d %+v", k, p)
 		}
 	}
+}
+
+// lakes counts the lakes and inland seas, each a connected set of inland
+// water cells through the cells' exits, and the salt ones among each, by
+// the flag of the set's lowest cell.
+func (v *validator) lakes() (lakes, seas, saltLakes, saltSeas int) {
+	w := v.w
+	seen := make([]bool, len(w.Cells))
+	var queue []int
+	for i := range w.Cells {
+		c := &w.Cells[i]
+		if seen[i] || !c.isInland() || c.HasFlag(FlagRim) {
+			continue
+		}
+		seen[i] = true
+		queue = append(queue[:0], i)
+		for k := 0; k < len(queue); k++ {
+			for _, x := range w.Cells[queue[k]].Exits {
+				if o := &w.Cells[x.Neighbor]; !seen[x.Neighbor] && o.Water == c.Water && !o.HasFlag(FlagRim) {
+					seen[x.Neighbor] = true
+					queue = append(queue, x.Neighbor)
+				}
+			}
+		}
+		salt := c.HasFlag(FlagSalt)
+		if c.Water == Lake {
+			lakes++
+			saltLakes += btoi(salt)
+		} else {
+			seas++
+			saltSeas += btoi(salt)
+		}
+	}
+	return
 }

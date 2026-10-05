@@ -16,7 +16,14 @@ import (
 // and pangaea presets, flats, plains and rolling plains together were 53%
 // to 76% of the land, hills 13% to 28%, mountains 6% to 16%, plateaus 1.5%
 // to 6.6%, and flats at least 3.5%. The bounds leave room around those, so
-// they catch a broken rule or a lost retune, not a seed's character.
+// they catch a broken rule or a lost retune, not a seed's character. Land
+// is counted after lakes (S29): with the elevation datum's lake allowance,
+// seed 7's cinematic pangaea has 6.5% plateaus, and the 48 worlds measured
+// in S29 at most 11.8%. The flats bound is 60%, not S21's 50%: the S29
+// datum allowance shifts a pangaea's datum by up to about 4.7 and divides
+// its land signal by 1 + shift, which squeezes the lowland relief, so
+// pangaea flats rose (seed 7 cinematic from 39.8% to 50.0%; seeds 1, 2 and
+// 6 from 16–19% to 28–34%).
 func TestLandformHistogramPlausible(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs default worlds")
@@ -50,8 +57,8 @@ func TestLandformHistogramPlausible(t *testing.T) {
 				t.Fatal(err)
 			}
 			counts, total := ctx.Products.Classes.LandHistogram()
-			if total != ctx.Products.SeaLevel.LandCells {
-				t.Fatalf("%d land landforms for %d land cells", total, ctx.Products.SeaLevel.LandCells)
+			if total != ctx.Products.Target.LandCells {
+				t.Fatalf("%d land landforms for %d land cells after lakes", total, ctx.Products.Target.LandCells)
 			}
 			pct := func(k int) float64 { return 100 * float64(counts[k]) / float64(total) }
 			flats, plains, rolling, hills, mountains, plateaus := pct(0), pct(1), pct(2), pct(3), pct(4), pct(5)
@@ -61,7 +68,7 @@ func TestLandformHistogramPlausible(t *testing.T) {
 				lo, hi float64
 			}{
 				{"flats + plains + rolling plains", flats + plains + rolling, 50, 85},
-				{"flats", flats, 2, 50},
+				{"flats", flats, 2, 60},
 				{"plains", plains, 10, 45},
 				{"rolling plains", rolling, 5, 50},
 				{"hills", hills, 8, 35},

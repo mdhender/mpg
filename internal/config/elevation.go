@@ -21,7 +21,10 @@ type Elevation struct {
 	// sea-level search moves little, and it grows or shrinks the layout's
 	// landmasses rather than raising the open ocean (b = −1). δ is clamped
 	// to ±DatumMaxShift, so a layout that asks for far too much or too
-	// little land is not reshaped; 0 disables the shift.
+	// little land is not reshaped; 0 disables the shift. The default, 8
+	// (2 until S29), leaves room for the lake allowance: a pangaea, whose
+	// one landmass grows slowly with δ, needs about 1.7 for 30% land and up
+	// to about 4.7 for the 33–35% the allowance asks.
 	DatumMaxShift float64 `json:"datum_max_shift"`
 	// BiasFlatten, in [0, 1], flattens the layout bias b near its zero
 	// (the nominal coast) before the noise is added: the bias used is
@@ -129,7 +132,7 @@ func DefaultElevation() Elevation {
 	return Elevation{
 		ReliefScaleM:  500,
 		OceanDepthM:   4000,
-		DatumMaxShift: 2,
+		DatumMaxShift: 8,
 		BiasFlatten:   0.6,
 		Continental: Noise{
 			WavelengthKm: 256, Octaves: 6, Lacunarity: 2, Gain: 0.6, Amplitude: 1.3,
@@ -153,8 +156,8 @@ func (e *Elevation) validate(bad func(format string, args ...any)) {
 	if v := e.OceanDepthM; !positive(v) || v > 20_000 {
 		bad("elevation.ocean_depth_m %v must be in (0, 20000]", v)
 	}
-	if v := e.DatumMaxShift; !nonNegative(v) || v > 2 {
-		bad("elevation.datum_max_shift %v must be in [0, 2]", v)
+	if v := e.DatumMaxShift; !nonNegative(v) || v > 16 {
+		bad("elevation.datum_max_shift %v must be in [0, 16]", v)
 	}
 	if v := e.BiasFlatten; !(v >= 0 && v <= 1) {
 		bad("elevation.bias_flatten %v must be in [0, 1]", v)

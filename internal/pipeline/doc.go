@@ -8,21 +8,42 @@
 // reaches one, so a partly built pipeline still produces its early outputs.
 // A stage marked Deferred is the exception: it is not implemented, but the
 // implemented stages after it do not need it yet, so the runner passes over
-// it and lists it in Result.Skipped. Stages 9 and 10 (the land-target
-// check, rivers) are deferred. The basins stage (8) finds the basin
-// hierarchy and balances its water into lakes, inland seas and playas
-// (Products.Lakes), but nothing reads them yet: classification (11), edges
-// and export run on the sea level stage's land and water until the
-// land-target search (S29) counts land after lakes. Stage 13 (measures) is deferred
-// too, so a full run reaches export (14), which writes world.json
+// it and lists it in Result.Skipped. Stages 10 (rivers) and 13 (measures)
+// are deferred, so a full run reaches export (14), which writes world.json
 // and records the stages passed over in its outcomes; its render is the
 // player-style map (package playermap), drawn from the world alone.
+//
+// # Lakes and the land target
+//
+// DESIGN.md's climate coupling, with an allowance for lakes in the datum:
+//
+//   - The elevation stage (3) first runs a pre-pass: stages 3 to 8 once on
+//     a private context (no renders, logs or outputs) with no lake
+//     allowance, counting the lake cells L of its basins stage at its sea
+//     level (Products.PrePass). The final field's datum then puts the land
+//     fraction times (N + L)/N above 0 m (elevation.NewWithLakes), so that
+//     the land left after lakes is about N at about 0 m. Exactly one
+//     pre-pass; the mesh, which does not depend on the elevation, is built
+//     once and reused by stage 4.
+//   - The sea level stage (6) searches for N + L land cells before lakes,
+//     so its ocean, which the first climate pass (7) reads, is about the
+//     final one; the basins stage (8) balances the lakes there.
+//   - The land-target stage (9) runs the sea-level search again with
+//     stages 6 and 8 inside it, against the fixed first climate pass,
+//     counting land after lakes (lake and inland-sea cells are water,
+//     playas and dry basin floors land), its first probe expecting the
+//     basins stage's lake cells; then the final climate pass with the
+//     lakes, in which inland seas recharge the air and lakes do not. It
+//     saves the search record and the pass count (2) in Products.Target.
+//   - Classification (11), edges (12) and export (14) read the land
+//     target's land and water.
 //
 // A stage is a function of a *Context, which carries the resolved config
 // and its hash, the output and render directories, the stage seed helpers, a
 // writer for log lines, and Products, where stages leave what later stages
-// read. A stage that repeats others (the land-target check repeats sea level
-// and basins) calls their functions directly.
+// read. A stage that repeats others (the elevation pre-pass repeats stages
+// 3 to 8, the land-target search the sea level flood and the basins) calls
+// their functions directly.
 //
 // # Renders
 //

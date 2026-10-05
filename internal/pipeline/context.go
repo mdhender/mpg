@@ -52,6 +52,11 @@ type Context struct {
 
 	// stage is the stage running now.
 	stage Stage
+	// prepass marks the private context of the elevation stage's
+	// pre-pass, and preMesh is the mesh that pre-pass built, which the
+	// mesh stage reuses (the mesh does not depend on the elevation).
+	prepass bool
+	preMesh *mesh.Mesh
 	// skipped lists the deferred stages the run has passed over so far.
 	skipped []Stage
 }
@@ -63,6 +68,10 @@ type Products struct {
 	Layout *layout.Layout
 	// Bias is the layout stage's continental bias field, in [−1, 1].
 	Bias *field.Field
+	// PrePass is the elevation stage's pre-pass: the lake cells of a run of
+	// stages 3 to 8 with no lake allowance, which the final datum allows
+	// for.
+	PrePass *PrePass
 	// Elevation is the elevation stage's bedrock elevation in meters.
 	Elevation *field.Field
 	// Hotspots is the elevation stage's volcanic hotspots, in draw order;
@@ -77,20 +86,26 @@ type Products struct {
 	// SeaLevel is the sea level stage's level, its land, ocean and dry
 	// basin cells, and the search's trace and outcome.
 	SeaLevel *cells.SeaLevel
-	// Climate is the climate stage's cell mask (the ocean drawn onto the
-	// raster), cell temperatures, and precipitation, PET, runoff and
-	// aridity.
+	// Climate is the climate stage's first pass: the cell mask (the ocean
+	// of the sea level stage drawn onto the raster), cell temperatures, and
+	// precipitation, PET, runoff and aridity. The basins stage and the
+	// land-target search balance their water against it; the final pass,
+	// with the lakes, is Target.Climate.
 	Climate *climate.Result
 	// Basins is the basins stage's hierarchy: every depression of the cell
 	// graph below its spill level, and the basins at least
 	// basin.min_depth_m deep, with their spill cells, edges and corners.
 	Basins *basin.Result
-	// Lakes is the basins stage's water balance: each basin's water, the
-	// lakes and inland seas, the playas, and the catchments. The later
-	// stages do not read it yet: classification, edges and export stay on
-	// the sea level stage's land and water until the land-target search
-	// (S29) counts land after lakes.
+	// Lakes is the basins stage's water balance at the sea level stage's
+	// level: each basin's water, the lakes and inland seas, the playas, and
+	// the catchments. The land-target stage counts its lake cells as the
+	// lakes its search expects; the later stages read Target instead.
 	Lakes *basin.Lakes
+	// Target is the land-target stage's search with the basins inside it,
+	// the land and water after lakes at the level it chose, the basins and
+	// lakes there, and the final climate pass. Classification, edges and
+	// export read it.
+	Target *LandTarget
 	// Classes is the classification stage's landforms, depth bands, and
 	// volcano flags.
 	Classes *classify.Result

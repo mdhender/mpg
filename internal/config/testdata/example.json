@@ -113,7 +113,7 @@
   "elevation": {
     "relief_scale_m": 500,
     "ocean_depth_m": 4000,
-    "datum_max_shift": 2,
+    "datum_max_shift": 8,
     "bias_flatten": 0.6,
     "continental": {
       "wavelength_km": 256,

@@ -100,18 +100,20 @@ type Result struct {
 	// Level is the sea level the temperatures are measured against, in
 	// meters (the sea level stage's).
 	Level float64
-	// Ocean holds, per cell in id order, whether the cell is open salt
-	// water to the climate: a rim cell, or a cell the ocean flood reached.
-	// Dry basin floors are land.
+	// Ocean holds, per cell in id order, whether the cell is open water to
+	// the climate, which recharges the air: a rim cell, a cell the ocean
+	// flood reached, and in the final pass (ComputeFinal) an inland-sea
+	// cell. Dry basin floors are land, and lakes are traced as land.
 	Ocean []bool
 	// Mask holds, per raster sample in storage order (rows north to south,
 	// columns west to east), its cell's Ocean: the cell mask drawn onto the
 	// raster through cells.Stats.Owner.
 	Mask []bool
 	// HeightM holds, per cell, the height above sea level the lapse rate
-	// applies to, in meters: altitude − Level for a land cell above the
-	// sea, 0 for every other cell (ocean, rim, and dry basin floors at or
-	// below the sea). The wind's orographic rules read it too.
+	// applies to, in meters: altitude − Level for a cell of the flood's
+	// land (lakes and inland seas included) above the sea, 0 for every
+	// other cell (ocean, rim, and basin floors at or below the sea). The
+	// wind's orographic rules read it too.
 	HeightM []float64
 	// Temperature holds, per cell, the mean annual temperature in °C:
 	// Model.At(latitude, HeightM).
@@ -149,16 +151,35 @@ type Result struct {
 // result does not depend on how many. It fails when the inputs do not
 // match or a result is not finite.
 func Compute(f *field.Field, m *mesh.Mesh, s *cells.Stats, fl *cells.Flood, model Model, world uint64) (*Result, error) {
-	return compute(f, m, s, fl, model, world, defaultWorkers())
+	return compute(f, m, s, fl, nil, model, world, defaultWorkers())
 }
 
-func compute(f *field.Field, m *mesh.Mesh, s *cells.Stats, fl *cells.Flood, model Model, world uint64, workers int) (*Result, error) {
+// ComputeFinal returns the climate's final pass, with the lakes (DESIGN.md,
+// "Climate coupling"): as Compute, at the land-target stage's flood fl,
+// with the cells marked in inlandSea, the inland seas, open water too: they
+// recharge the air as the ocean does, and their samples take the open-water
+// precipitation. Lakes (lake cells not in inlandSea) do not: they are
+// traced like land. A lake or inland-sea cell's height above sea level is
+// its altitude's, as for land (fl.Land includes them), so its temperature
+// follows its altitude, and an inland sea recharges the air at that
+// height.
+func ComputeFinal(f *field.Field, m *mesh.Mesh, s *cells.Stats, fl *cells.Flood, inlandSea []bool, model Model, world uint64) (*Result, error) {
+	if len(inlandSea) != len(m.Cells) {
+		return nil, fmt.Errorf("climate: %d inland-sea flags for %d cells", len(inlandSea), len(m.Cells))
+	}
+	return compute(f, m, s, fl, inlandSea, model, world, defaultWorkers())
+}
+
+func compute(f *field.Field, m *mesh.Mesh, s *cells.Stats, fl *cells.Flood, inlandSea []bool, model Model, world uint64, workers int) (*Result, error) {
 	if f == nil || m == nil || s == nil || fl == nil {
 		return nil, errors.New("climate: nil field, mesh, statistics, or flood")
 	}
 	n := len(m.Cells)
 	if s.Len() != n || len(s.Latitude) != n || len(s.Samples) != n || len(fl.Ocean) != n || len(fl.Land) != n {
 		return nil, fmt.Errorf("climate: %d cells, %d statistics, %d ocean flags", n, s.Len(), len(fl.Ocean))
+	}
+	if inlandSea != nil && len(inlandSea) != n {
+		return nil, fmt.Errorf("climate: %d inland-sea flags for %d cells", len(inlandSea), n)
 	}
 	if len(s.Owner) != f.Len() {
 		return nil, fmt.Errorf("climate: %d sample owners for %d raster samples", len(s.Owner), f.Len())
@@ -174,7 +195,7 @@ func compute(f *field.Field, m *mesh.Mesh, s *cells.Stats, fl *cells.Flood, mode
 		Temperature: make([]float64, n),
 	}
 	for i, c := range m.Cells {
-		r.Ocean[i] = c.Rim || fl.Ocean[i]
+		r.Ocean[i] = c.Rim || fl.Ocean[i] || (inlandSea != nil && inlandSea[i] && !c.Rim)
 		if !c.Rim && fl.Land[i] && s.Altitude[i] > fl.Level {
 			r.HeightM[i] = s.Altitude[i] - fl.Level
 		}

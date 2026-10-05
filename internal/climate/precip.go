@@ -194,9 +194,11 @@ func (g *grid) cellAt(x, y float64) int {
 // height self, toward the bearing from (degrees), and returns the moisture
 // the air brings and the lift onto the sample (hmz2bio's Profile and
 // Moisture). The trace steps p.step km at a time, at most p.steps times,
-// and stops at the first point in an ocean cell or off the map: the air
-// leaves the sea saturated. If it finds no sea, the air is taken to start
-// from the sea at 0 m one step beyond the last point. Moisture is
+// and stops at the first point in an ocean cell (open water: the rim, the
+// ocean, and in the final pass the inland seas, at their height above sea
+// level) or off the map: the air leaves the sea saturated. If it finds no
+// sea, the air is taken to start from the sea at 0 m one step beyond the
+// last point. Moisture is
 // exp(−n·step/rainout − Σrise/orographic) over the n steps of the profile,
 // rise being the height gained on a step toward the sample (0 descending);
 // lift is self minus the lowest point within p.window steps upwind (the
@@ -209,8 +211,10 @@ func (p *precip) trace(g *grid, x, y, from, self float64) (moisture, lift float6
 	for k := 1; ; k++ {
 		h, sea := 0.0, true
 		if k <= p.steps {
-			if cell := g.cellAt(x+fmath.Mul(float64(k), dx), y+fmath.Mul(float64(k), dy)); cell >= 0 && !g.ocean[cell] {
-				h, sea = g.height[cell], false
+			if cell := g.cellAt(x+fmath.Mul(float64(k), dx), y+fmath.Mul(float64(k), dy)); cell >= 0 {
+				// Open water's height is 0 for the ocean and the rim, and
+				// an inland sea's surface above the sea level.
+				h, sea = g.height[cell], g.ocean[cell]
 			}
 		}
 		rise += max(prev-h, 0)

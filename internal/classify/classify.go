@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/mdhender/mpg/internal/basin"
 	"github.com/mdhender/mpg/internal/cells"
 	"github.com/mdhender/mpg/internal/config"
 	"github.com/mdhender/mpg/internal/mesh"
@@ -221,14 +222,18 @@ func (r *Result) Volcanoes() int {
 }
 
 // Classify classifies the cells of m with altitudes alt and reliefs relief
-// (package cells' Stats) against the land and water in f (the sea level
-// stage's flood at f.Level) and the volcanic hotspot peaks, by rules r.
-// See the package documentation for the rules.
-func Classify(m *mesh.Mesh, alt, relief []float64, f *cells.Flood, peaks []topo.Point, r Rules) (*Result, error) {
+// (package cells' Stats) against the land and water in f (the flood at
+// f.Level) and lakes (its water balance at that level, or nil for none),
+// and the volcanic hotspot peaks, by rules r. See the package documentation
+// for the rules.
+func Classify(m *mesh.Mesh, alt, relief []float64, f *cells.Flood, lakes *basin.Lakes, peaks []topo.Point, r Rules) (*Result, error) {
 	n := len(m.Cells)
 	if len(alt) != n || len(relief) != n || len(f.Land) != n || len(f.Ocean) != n {
 		return nil, fmt.Errorf("classify: %d altitudes, %d reliefs, %d land and %d ocean flags for %d cells",
 			len(alt), len(relief), len(f.Land), len(f.Ocean), n)
+	}
+	if lakes != nil && len(lakes.Lake) != n {
+		return nil, fmt.Errorf("classify: %d lake ids for %d cells", len(lakes.Lake), n)
 	}
 	for i := range n {
 		if a, b := alt[i], relief[i]; !finite(a) || !finite(b) || b < 0 {
@@ -249,6 +254,12 @@ func Classify(m *mesh.Mesh, alt, relief []float64, f *cells.Flood, peaks []topo.
 		switch {
 		case c.Rim:
 			res.Landform[i] = SaltWater
+		case lakes != nil && lakes.Lake[i] != basin.None:
+			// Lake or inland sea, by size; salinity is a flag.
+			res.Landform[i] = FreshWater
+			if lakes.Lakes[lakes.Lake[i]].Kind == basin.KindInlandSea {
+				res.Landform[i] = SaltWater
+			}
 		case f.Land[i]:
 			res.Landform[i] = r.Landform(relief[i], alt[i]-f.Level)
 		default:

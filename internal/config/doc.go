@@ -76,7 +76,8 @@
 //
 // The elevation group sets the bedrock heightmap: the land height and sea
 // depth per unit of continental signal (relief_scale_m, ocean_depth_m), the
-// datum shift's bound and the bias flattening, the continental fBm, the
+// datum shift's bound (datum_max_shift, default 8, raised from 2 in S29
+// for the lake allowance) and the bias flattening, the continental fBm, the
 // domain warp, the ridged mountain chains and their belts, and the polar
 // falloff (its signal pull, jitter, ceiling, depth, and taper). Lengths are
 // km and heights meters (DESIGN.md: "rules about the ground use physical

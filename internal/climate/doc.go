@@ -11,7 +11,7 @@
 //
 // # Cell mask
 //
-// The climate is computed once from the ocean-only mask: the sea level
+// The first pass (Compute, stage 7) uses the ocean-only mask: the sea level
 // stage's flood (package cells, Classify). A cell is ocean to the climate
 // (Result.Ocean) when it is a rim cell, which counts as deep salt water, or
 // a cell the flood from the rim reached. Everything else is land, dry basin
@@ -22,6 +22,24 @@
 // nearest the sample. Climate fields computed on the raster will be
 // aggregated back to cells as the mean over each cell's samples, in storage
 // order.
+//
+// # Final pass
+//
+// DESIGN.md's climate coupling is bounded: Compute runs once with the
+// ocean-only mask (stage 7); the land-target search balances the lakes
+// against that fixed climate; and ComputeFinal runs once more with the
+// final lakes, for the biomes. Two passes, saved by the land-target stage.
+// In the final pass:
+//
+//   - inland seas recharge the air as the ocean does: their cells are open
+//     water (Result.Ocean), their samples take the open-water
+//     precipitation (moisture 1, no lift), and a trace stops at them, the
+//     air leaving them saturated at their height above sea level;
+//   - lakes do not: their cells are traced like land;
+//   - lake and inland-sea cells take their altitude's height above the sea
+//     level, as land does (the one height: their temperature follows their
+//     altitude), and 0 at or below the sea;
+//   - the sea level and the ocean are the land-target stage's.
 //
 // # Temperature
 //
@@ -141,7 +159,8 @@
 // or south edge (which the rim makes unreachable in practice): there the
 // air leaves the sea saturated. If it reaches no sea, the air is taken to
 // start from the sea at 0 m one step beyond its last point, as in hmz2bio.
-// Lakes do not yet recharge the air (the climate's first pass has none).
+// In the final pass (below) an inland sea is open water too, at its
+// height above sea level, so a trace may stop there; a lake is not.
 //
 // Every height the trace reads is a cell's height above sea level
 // (Result.HeightM: the cell altitude above the sea, 0 for water and for

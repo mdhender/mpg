@@ -19,10 +19,14 @@
 // In this order, each in a fixed order of ids:
 //
 //  1. Every cell: rim cells as the ice sheet (IceColor, with no outlines
-//     between its cells), salt water by depth band, and the other landforms
-//     in the classification stage render's palette (classify.LandformColor,
-//     looked up by the world's codebook strings), so the stage render and
-//     the player map agree. Biomes come in milestone 8.
+//     between its cells), salt water (ocean and inland seas) by depth band,
+//     and the other landforms in the classification stage render's palette
+//     (classify.LandformColor, looked up by the world's codebook strings),
+//     so the stage render and the player map agree: lakes in the
+//     fresh-water teal. The cell flags refine that: a playa in PlayaColor,
+//     a salt lake in SaltLakeColor, and a salt inland sea's blue mixed half
+//     and half with SaltSeaTint (the basins stage's lakes render's inks).
+//     Biomes come in milestone 8.
 //  2. The borders between land cells, a pixel wide, blended faintly.
 //  3. The ice front, the edges between the rim and playable cells.
 //  4. Rivers by class (none until milestone 7), then the coastlines

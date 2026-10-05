@@ -43,10 +43,8 @@ func Stages() []Stage {
 		{Number: 6, Name: "sea-level", Run: runSeaLevel},
 		{Number: 7, Name: "climate", Run: runClimate},
 		{Number: 8, Name: "basins", Run: runBasins},
-		// Stages 9 and 10 are deferred to milestones 6 and 7. Until then
-		// classification works on the sea level stage's land and water:
-		// no lakes, and dry basin floors are land.
-		{Number: 9, Name: "land-target", Deferred: true},
+		{Number: 9, Name: "land-target", Run: runLandTarget},
+		// Stage 10 is deferred to milestone 7: no rivers yet.
 		{Number: 10, Name: "rivers", Deferred: true},
 		{Number: 11, Name: "classify", Run: runClassify},
 		{Number: 12, Name: "edges", Run: runEdges},
