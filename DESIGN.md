@@ -280,9 +280,24 @@ Stage 7 computes climate on the raster with the cell mask drawn onto it: each ra
 Rivers run along Voronoi edges, corner to corner, and never through a cell's interior. This follows mapgen2, wgvc, and `hmz2riv`'s snapped edges.
 
 - **Corner height** is the mean altitude of the 3–4 cells that meet at the corner, so rivers follow the low ground between low cells using the same single height.
-- **Corner graph.** The graph has land corners joined by **land–land edges**. A corner that touches any water cell is **terminal**: a mouth on the ocean or a lake. Dry-sink corners from stage 8 are also terminal.
-- **Drainage tree.** A priority flood over the corner graph, seeded from terminal corners, gives every land corner one downstream corner. The result is acyclic by construction. Flats are broken by stable index.
-- **Lake outlets.** A river may enter a lake at any shore corner and leaves only through the spill corner. An overflowing lake's spill corner starts its own downstream path, carrying the lake's surplus.
+- **Corner graph.** The graph has the land corners (those touching a land cell) joined by **land–land edges**.
+  - A corner that touches the sea (an ocean or rim cell; the rim counts as sea) is a terminal **mouth on the ocean**. No land corner touches the rim on any world measured; the rule only makes sure of it.
+  - A corner that touches a lake or inland sea is a terminal **lake shore**. A corner touching two lakes (only at a 4-way corner, 0–7 per world) belongs to the one with the lower surface, ties to the lower id.
+  - Dry-sink corners from stage 8 are also terminal.
+- **Drainage tree.** A priority flood over the corner graph gives every land corner one downstream corner.
+  - The flood starts from the ocean corners, the dry sinks, and the shore corners of closed lakes.
+  - Corners are taken by level (corner height, filled to the spill of any corner-level pit). Among corners of equal level, the first queued is taken first (FIFO), so water crosses a flat breadth first from where the flat drains.
+  - Each corner flows to its already-taken neighbor with the lowest level, ties to the one taken first.
+  - The result is acyclic by construction.
+  - About 2–4% of tree steps lie on flats, all in corner-level pits filled to their spill level; no two neighboring land corners have exactly equal heights. Taking flats by corner id instead (the first design) combed the flow into parallel north–south runs, with flat paths up to 1.2× the shortest route on average; FIFO brings that to about 1.0 (S30, measured on 10 worlds).
+- **Lake outlets.** A river may enter a lake at any shore corner. An overflowing lake leaves by exactly one way:
+  - **(a) Direct.** If its spill corner touches the sea, or belongs to another, lower lake, it drains straight there and no river leaves it.
+  - **(b) Spill corner.** If the spill corner has a land–land edge to a corner that does not touch the lake, the spill corner is the outlet (about 70% of overflowing lakes).
+  - **(c) Pass cell.** Otherwise the outlet is the first of the lake's shore corners on the pass cell that the flood reaches. The spill corner is the lower end of the spill edge, so it often touches two lake cells and has no land–land edge (31% of overflowing lakes on 10 worlds; a strict spill-corner rule deadlocked on 2 of them). If that outlet itself has no way over land (a 4-way corner between two lakes, or the sea), the lake drains directly, as in (a).
+  - Until the outlet is taken, the lake's other shore corners are held out of the flood. The outlet's downstream path therefore never re-enters its lake, and lakes draining into lakes cannot loop. The held corners are then released at the outlet's level as inflow terminals.
+  - **(d) Fallback.** If the flood stalls with corners held, the lowest held corner, by level then id, becomes the outlet; the count is logged. It was never used in 128 test worlds.
+  - The outlet's downstream path carries the lake's surplus: the water balance's `Overflow` (S28), which is the authority, even though the tree's own inflow to a lake can differ by up to about 2×.
+- **Catchments.** Each land cell's runoff enters the tree at its lowest corner. The river stage reports how many land cells, and how much area, end somewhere other than the water balance's cell-level catchment, both immediately and after following lake overflow. Over 128 worlds: 0.4–8% immediately (mean 3.2%) and 0–9% finally (mean 1.6%), near ridges and basin rims. The water balance stays self-consistent either way.
 - **Accumulation.**
   - Each land cell sends its runoff (area × runoff depth) to its lowest corner on the graph.
   - Accumulate down the tree.

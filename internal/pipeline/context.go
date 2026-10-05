@@ -23,6 +23,7 @@ import (
 	"github.com/mdhender/mpg/internal/layout"
 	"github.com/mdhender/mpg/internal/mesh"
 	"github.com/mdhender/mpg/internal/render"
+	"github.com/mdhender/mpg/internal/river"
 	"github.com/mdhender/mpg/internal/seed"
 	"github.com/mdhender/mpg/world"
 )
@@ -106,6 +107,9 @@ type Products struct {
 	// lakes there, and the final climate pass. Classification, edges and
 	// export read it.
 	Target *LandTarget
+	// Rivers is the river stage's corner drainage tree on the land
+	// target's land and lakes.
+	Rivers *river.Tree
 	// Classes is the classification stage's landforms, depth bands, and
 	// volcano flags.
 	Classes *classify.Result

@@ -25,6 +25,7 @@ import (
 	"github.com/mdhender/mpg/internal/mesh"
 	"github.com/mdhender/mpg/internal/playermap"
 	"github.com/mdhender/mpg/internal/render"
+	"github.com/mdhender/mpg/internal/river"
 	"github.com/mdhender/mpg/internal/seed"
 	"github.com/mdhender/mpg/internal/topo"
 	"github.com/mdhender/mpg/world"
@@ -249,7 +250,7 @@ func TestConfigStage(t *testing.T) {
 	if err != nil || res.NotImplemented != nil || res.Ran[len(res.Ran)-1].Name != "export" {
 		t.Errorf("full run = %+v, %v; want a run through export", res, err)
 	}
-	if want := []string{"rivers", "measures"}; !slices.Equal(names(res.Skipped), want) {
+	if want := []string{"measures"}; !slices.Equal(names(res.Skipped), want) {
 		t.Errorf("full run skipped %q, want %q", names(res.Skipped), want)
 	}
 }
@@ -658,8 +659,52 @@ func TestBasinsStage(t *testing.T) {
 	}
 }
 
-// TestClassifyStage runs the pipeline through classification, past the
-// deferred stages, and checks the product against classify.Classify, the
+// TestRiversStage runs the pipeline through the river stage and checks the
+// product against river.Build on RiverInput, the renders, and the log.
+func TestRiversStage(t *testing.T) {
+	c := newTestContext(t, true)
+	var log bytes.Buffer
+	c.Log = &log
+	last, err := Lookup(Stages(), "rivers")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Run(c, Stages(), last)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Ran[len(res.Ran)-1].Name != "rivers" || len(res.Skipped) != 0 || res.NotImplemented != nil {
+		t.Errorf("ran %q, skipped %q, stopped at %v", names(res.Ran), names(res.Skipped), res.NotImplemented)
+	}
+	p := c.Products
+	if p.Rivers == nil {
+		t.Fatal("river stage left its product empty")
+	}
+	want, err := river.Build(RiverInput(p.Mesh, p.Cells.Altitude, p.Target))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := p.Rivers.AppendBinary(nil)
+	b, _ := want.AppendBinary(nil)
+	if !bytes.Equal(a, b) {
+		t.Error("stage product differs from river.Build")
+	}
+	if p.Rivers.Agreement == nil || p.Rivers.Agreement.Cells != p.Target.LandCells {
+		t.Errorf("agreement %+v, want one over %d land cells", p.Rivers.Agreement, p.Target.LandCells)
+	}
+	for _, f := range []string{"10-rivers.png", "10-rivers-catchments.png"} {
+		if _, err := os.Stat(filepath.Join(c.RendersDir, f)); err != nil {
+			t.Error(err)
+		}
+	}
+	for _, s := range []string{"rivers: ", " land corners: ", " tree edges (", " overflowing lakes: ", " fallback outlets", "catchments against the water balance: "} {
+		if !strings.Contains(log.String(), s) {
+			t.Errorf("log lacks %q:\n%s", s, log.String())
+		}
+	}
+}
+
+// TestClassifyStage runs the pipeline through classification and checks the product against classify.Classify, the
 // render, and the log.
 func TestClassifyStage(t *testing.T) {
 	c := newTestContext(t, true)
@@ -673,8 +718,8 @@ func TestClassifyStage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "climate", "basins", "land-target", "classify"}) ||
-		!slices.Equal(names(res.Skipped), []string{"rivers"}) || res.NotImplemented != nil {
+	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "climate", "basins", "land-target", "rivers", "classify"}) ||
+		len(res.Skipped) != 0 || res.NotImplemented != nil {
 		t.Errorf("ran %q, skipped %q, stopped at %v", names(res.Ran), names(res.Skipped), res.NotImplemented)
 	}
 	p := c.Products
@@ -718,7 +763,7 @@ func TestEdgesStage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "climate", "basins", "land-target", "classify", "edges"}) ||
+	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "climate", "basins", "land-target", "rivers", "classify", "edges"}) ||
 		res.NotImplemented != nil {
 		t.Errorf("ran %q, stopped at %v", names(res.Ran), res.NotImplemented)
 	}

@@ -88,7 +88,7 @@ func TestWorlds(t *testing.T) {
 		if w.Outcomes.LandCells != lt.LandCells || w.Outcomes.SeaLevelM != lt.Flood.Level || len(w.Outcomes.Trace) != len(lt.Search.Trace) {
 			t.Error("outcomes differ from the land-target stage")
 		}
-		if want := []string{"rivers", "measures"}; !slices.Equal(w.Outcomes.Deferred, want) {
+		if want := []string{"measures"}; !slices.Equal(w.Outcomes.Deferred, want) {
 			t.Errorf("deferred %q, want %q", w.Outcomes.Deferred, want)
 		}
 		hash, _ := ctx.Config.Hash()

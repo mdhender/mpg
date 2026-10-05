@@ -514,9 +514,71 @@ func TestGoldenLandTarget(t *testing.T) {
 	}
 }
 
+// TestGoldenRivers pins the river stage across architectures (see package
+// golden for how to record a hash): the pipeline run through stage 10,
+// rivers. Each case hashes, in order, the resolved config.json bytes
+// (golden.Hasher.Bytes, length-prefixed), then the drainage tree's
+// canonical encoding (river.Tree.AppendBinary: the corner count; each
+// corner's land flag and, for a land corner, its terminal kind, lake,
+// level, downstream corner and edge; the flood order; each lake's drain,
+// outlet corner, target lake and flags; the fallback count; and the
+// agreement with the water balance's catchments; integers and float bits
+// little-endian). The cases include a pangaea and worlds whose rivers cross
+// the seam.
+func TestGoldenRivers(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		seed   config.Seed
+		aspect string
+		preset string
+		want   string
+	}{
+		{"seed42-cinematic", 42, "cinematic", "continents", "13b97a413c84deefc8f6c400e3254b3cfb10f5871fc73974647368e3baef1548"},
+		{"seed42-square", 42, "square", "continents", "9dd734ecd3db5d26a3d3e4992cd91dacfc2b941f07a9fd1b1c52e53b68ba2890"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "45766b743dfdd3bc24053eaa388875fc408d6e90852348008fdf57eb484dcf23"},
+		{"seed7-cinematic-pangaea", 7, "cinematic", "pangaea", "4297cecb5e3e5f2f4dc752feb05569b218c58d9c9673d689bb32768ee37ab721"},
+		{"seed8-square-pangaea", 8, "square", "pangaea", "3ad2fe024b60f38ccdfcdd5e9e20ba4f2ffa68d4b758721197a39463f20b5788"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := config.Default()
+			cfg.Seed = tc.seed
+			cfg.World.Aspect = tc.aspect
+			cfg.Layout.Preset = tc.preset
+			if err := cfg.Resolve(); err != nil {
+				t.Fatal(err)
+			}
+			cfgBytes, err := cfg.Bytes()
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, err := pipeline.NewContext(cfg, t.TempDir(), "", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			stages := pipeline.Stages()
+			last, err := pipeline.Lookup(stages, "rivers")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := pipeline.Run(ctx, stages, last); err != nil {
+				t.Fatal(err)
+			}
+			enc, err := ctx.Products.Rivers.AppendBinary(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			h := golden.New()
+			h.Bytes(cfgBytes)
+			h.Write(enc)
+			golden.Check(t, "rivers/"+tc.name, h.Sum(), tc.want)
+		})
+	}
+}
+
 // TestGoldenClassify pins the classification stage across architectures
 // (see package golden for how to record a hash): the pipeline run through
-// stage 11, classify, passing over the deferred stage 10. Each case
+// stage 11, classify. Each case
 // hashes, in order, the resolved config.json bytes (golden.Hasher.Bytes,
 // length-prefixed), then the classification's canonical encoding
 // (classify.Result.AppendBinary: the cell count; each cell's landform and
@@ -649,9 +711,9 @@ func TestGoldenWorld(t *testing.T) {
 		want   string
 		player string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "continents", "b8b58aea49ad3d90cde55c07aaca2c762ab4a06457b6c8f60e2db0fb1f31bd7d", "7e8f6b5d9ef57330ac04cfdb18304aedc012ae293629f8ec8861078679a718be"},
-		{"seed7-square", 7, "square", "continents", "af766c26730b11fde86a9f7136b37bddb8610ee4e4902c7efdb4a4a5f82a22d3", "65c083be4d98e9e98b277fdc9d9c1b7cedd96d560fe3a5279a92fd911092dec4"},
-		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "fa0e17748ede53cc0ece0d68e582f29c650deb99c2bdec8a9cbd94f6e6784279", "9370382c19329da2a706d9474f0104cd24220db42e9b2d1b7662a8f28df0190d"},
+		{"seed42-cinematic", 42, "cinematic", "continents", "0cd5f1a3dd9a151ddc7c76754336c136a95029d263af393296e8db4cce35cb32", "7e8f6b5d9ef57330ac04cfdb18304aedc012ae293629f8ec8861078679a718be"},
+		{"seed7-square", 7, "square", "continents", "1bdb2de8bb243d7274bdd566352dd41930cf443e3edce0ff2f30fcca96b8bb8a", "65c083be4d98e9e98b277fdc9d9c1b7cedd96d560fe3a5279a92fd911092dec4"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "b65a7c7363e4740c462db915f473dec88ef303bc9d8457ce9c5dfa8a58e712e2", "9370382c19329da2a706d9474f0104cd24220db42e9b2d1b7662a8f28df0190d"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

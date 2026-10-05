@@ -8,10 +8,10 @@
 // reaches one, so a partly built pipeline still produces its early outputs.
 // A stage marked Deferred is the exception: it is not implemented, but the
 // implemented stages after it do not need it yet, so the runner passes over
-// it and lists it in Result.Skipped. Stages 10 (rivers) and 13 (measures)
-// are deferred, so a full run reaches export (14), which writes world.json
-// and records the stages passed over in its outcomes; its render is the
-// player-style map (package playermap), drawn from the world alone.
+// it and lists it in Result.Skipped. Stage 13 (measures) is deferred, so a
+// full run reaches export (14), which writes world.json and records the
+// stages passed over in its outcomes; its render is the player-style map
+// (package playermap), drawn from the world alone.
 //
 // # Lakes and the land target
 //
@@ -35,8 +35,12 @@
 //     basins stage's lake cells; then the final climate pass with the
 //     lakes, in which inland seas recharge the air and lakes do not. It
 //     saves the search record and the pass count (2) in Products.Target.
-//   - Classification (11), edges (12) and export (14) read the land
-//     target's land and water.
+//   - The rivers (10), classification (11), edges (12) and export (14) read
+//     the land target's land and water. The river stage builds the corner
+//     drainage tree (package river) on it, with each overflowing lake's
+//     spill corner and pass cell from its basins, and compares the tree's
+//     catchments with the water balance's cell-level ones (RiverInput);
+//     export does not read the tree yet.
 //
 // A stage is a function of a *Context, which carries the resolved config
 // and its hash, the output and render directories, the stage seed helpers, a

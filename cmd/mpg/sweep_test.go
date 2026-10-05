@@ -87,15 +87,15 @@ func TestParseSweepStages(t *testing.T) {
 		t.Errorf("unknown-stage error %q does not list the stages", err)
 	}
 
-	// Config through land-target are implemented, rivers is deferred (not
-	// implemented, but passed over on the way to classify), classify and
-	// edges are implemented, and measures and later are not.
+	// Config through edges are implemented; measures is deferred (not
+	// implemented, but passed over on the way to export), so it cannot be a
+	// column.
 	for _, tc := range []struct {
 		in   string
 		last int
 		ok   bool
 	}{{"config", 0, true}, {"layout,config", 1, true}, {"config,elevation", 2, true}, {"elevation,mesh", 3, true}, {"mesh,cells", 4, true}, {"cells:relief", 4, true}, {"cells,sea-level", 5, true}, {"sea-level", 5, true}, {"sea-level,climate", 6, true}, {"climate", 6, true}, {"climate:mask", 6, true}, {"climate:precip,climate:moisture,climate:pet,climate:runoff,climate:aridity", 6, true}, {"climate,basins", 7, true}, {"basins:depth", 7, true}, {"basins:lakes", 7, true}, {"basins,land-target", 8, true}, {"land-target:lakes", 8, true},
-		{"classify", 10, true}, {"sea-level,classify", 10, true}, {"rivers,classify", -1, false}, {"rivers", -1, false}, {"classify,edges", 11, true}, {"edges:passability", 11, true}, {"edges,measures", -1, false}} {
+		{"classify", 10, true}, {"sea-level,classify", 10, true}, {"rivers,classify", 10, true}, {"rivers", 9, true}, {"rivers:catchments", 9, true}, {"measures", -1, false}, {"classify,edges", 11, true}, {"edges:passability", 11, true}, {"edges,measures", -1, false}} {
 		cols, err := parseSweepStages(tc.in, registry)
 		if err != nil {
 			t.Fatal(err)
@@ -122,7 +122,7 @@ func TestSweepErrors(t *testing.T) {
 		{[]string{"--seeds", "1", "--stage", "layout", "--tile", "8", "--output", out}, 2, "--tile"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--aspect", "square,", "--output", out}, 2, "--aspect"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--output", out, "extra"}, 2, "unexpected"},
-		{[]string{"--seeds", "1", "--stage", "elevation,rivers", "--output", out}, 1, "stage 10 rivers is not implemented"},
+		{[]string{"--seeds", "1", "--stage", "elevation,measures", "--output", out}, 1, "stage 13 measures is not implemented"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--aspect", "squarish", "--output", out}, 1, "world.aspect"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--config", "no-such-file.json", "--output", out}, 1, "no-such-file"},
 	} {

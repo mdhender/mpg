@@ -16,7 +16,7 @@ import (
 // "passability" the impassable and coast edges, and as variant "compass" a
 // zoomed crop of the compass directions. The water is the land-target
 // stage's (Water): the ocean, the lakes and the inland seas. There are no
-// rivers until the river stage exists.
+// river classes on the edges until the river stage selects them (S31).
 func runEdges(c *Context) error {
 	m, s := c.Products.Mesh, c.Products.Cells
 	water := Water(m, c.Products.Target)
