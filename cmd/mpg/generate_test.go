@@ -241,7 +241,7 @@ func TestGenerateRendersDir(t *testing.T) {
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	if !slices.Equal(names, []string{"02-layout.png", "03-elevation.png", "04-mesh-area.png", "04-mesh-short.png", "04-mesh.png", "05-cells-relief.png", "05-cells.png", "06-sea-level.png", "11-classify.png", "12-edges-compass.png", "12-edges-passability.png", "12-edges.png"}) {
-		t.Errorf("renders = %q, want the layout, elevation, mesh area, mesh short-edge, mesh, cell relief, cell altitude, sea level, landform, compass, passability and incline renders", names)
+	if !slices.Equal(names, []string{"02-layout.png", "03-elevation.png", "04-mesh-area.png", "04-mesh-short.png", "04-mesh.png", "05-cells-relief.png", "05-cells.png", "06-sea-level.png", "11-classify.png", "12-edges-compass.png", "12-edges-passability.png", "12-edges.png", "14-export.png"}) {
+		t.Errorf("renders = %q, want the layout, elevation, mesh area, mesh short-edge, mesh, cell relief, cell altitude, sea level, landform, compass, passability, incline and player map renders", names)
 	}
 }

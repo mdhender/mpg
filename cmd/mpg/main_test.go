@@ -23,18 +23,6 @@ func TestVersion(t *testing.T) {
 	}
 }
 
-func TestStubs(t *testing.T) {
-	for _, name := range []string{"render-stage"} {
-		var stdout, stderr bytes.Buffer
-		if code := run([]string{name}, &stdout, &stderr); code == 0 {
-			t.Errorf("run(%q) = 0, want non-zero", name)
-		}
-		if !strings.Contains(stderr.String(), "not implemented") {
-			t.Errorf("run(%q) stderr = %q, want a not-implemented message", name, stderr.String())
-		}
-	}
-}
-
 func TestUsageErrors(t *testing.T) {
 	for _, args := range [][]string{nil, {"bogus"}, {"-no-such-flag"}} {
 		var stdout, stderr bytes.Buffer

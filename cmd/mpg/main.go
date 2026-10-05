@@ -33,7 +33,7 @@ type command struct {
 var commands = []command{
 	{"generate", "generate a world from a config", runGenerate},
 	{"sweep", "build a contact sheet across seeds and stages", runSweep},
-	{"render-stage", "render one stage of a world", stub("render-stage")},
+	{"render-stage", "draw the player-style map of a world.json, or a window of it", runRenderStage},
 	{"validate", "validate a generated world.json", runValidate},
 	{"version", "print the version", runVersion},
 }
@@ -109,17 +109,4 @@ func runVersion(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintln(stdout, mpg.Version().String())
 	return 0
-}
-
-// stub returns a subcommand that parses its (as yet empty) flags and reports
-// that it is not implemented.
-func stub(name string) func(args []string, stdout, stderr io.Writer) int {
-	return func(args []string, stdout, stderr io.Writer) int {
-		fs := newFlagSet(name, stderr)
-		if code, stop := parse(fs, args); stop {
-			return code
-		}
-		fmt.Fprintf(stderr, "mpg %s: not implemented yet\n", name)
-		return 1
-	}
 }

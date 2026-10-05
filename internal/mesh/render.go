@@ -300,6 +300,10 @@ func Mark(img *image.RGBA, f *field.Field, m *Mesh, p topo.Point, radius, minPx 
 // later stages that draw rim cells as ice with CellRender.
 var IceColor = iceFill
 
+// IceFrontColor is the ink of the ice front (the edges between rim and
+// playable cells) in the mesh renders, for the player map.
+var IceFrontColor = iceFront
+
 // magnify returns src scaled up s times by pixel replication.
 func magnify(src *image.RGBA, s int) *image.RGBA {
 	b := src.Bounds()

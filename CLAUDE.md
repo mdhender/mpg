@@ -22,7 +22,7 @@ go test ./...
 go test ./internal/topo -run TestWrap   # single package / single test
 ```
 
-Planned CLI (per `DESIGN.md`): `cmd/mpg` with `generate`, `sweep`, `render-stage`, `validate`.
+CLI: `cmd/mpg` with `generate`, `sweep`, `render-stage` (player map or window from `world.json`), and `validate` (checks `world.json`).
 
 ## Versioning
 

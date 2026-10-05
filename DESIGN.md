@@ -378,6 +378,7 @@ internal/classify/    landform, depth, surface, biome
 internal/measure/     playability measures and checks
 internal/edges/       half-edges, compass directions, coast, incline, passability
 internal/export/      products → world types; world.json writer
+internal/playermap/   player-style map and windows drawn from world.json alone
 internal/render/      stage renders, contact sheets
 world/                exported Go types for world.json (the schema)
 ```

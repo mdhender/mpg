@@ -12,7 +12,8 @@
 // land-target check, rivers) are deferred, so classification (11) runs on
 // the sea level stage's land and water until they exist; so is stage 13
 // (measures), so a full run reaches export (14), which writes world.json
-// and records the stages passed over in its outcomes.
+// and records the stages passed over in its outcomes; its render is the
+// player-style map (package playermap), drawn from the world alone.
 //
 // A stage is a function of a *Context, which carries the resolved config
 // and its hash, the output and render directories, the stage seed helpers, a

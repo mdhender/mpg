@@ -8,13 +8,15 @@ import (
 	"path/filepath"
 
 	"github.com/mdhender/mpg/internal/export"
+	"github.com/mdhender/mpg/internal/playermap"
 	"github.com/mdhender/mpg/world"
 )
 
 // runExport converts the stage products to the world.json types (package
 // export), validates them (world.Validate), writes world.json, and logs its
 // size and counts. The deferred stages the run passed over are recorded in
-// the outcomes. Its stage render, the player-style map, comes in S24.
+// the outcomes. Its stage render is the player-style map (package
+// playermap) at playermap.DefaultScale, drawn from the world value alone.
 func runExport(c *Context) error {
 	p := &c.Products
 	deferred := make([]string, len(c.skipped))
@@ -48,7 +50,11 @@ func runExport(c *Context) error {
 		world.File, len(b), len(w.Cells), len(w.Corners), len(w.Edges), len(w.Coastlines), closed(w.Coastlines))
 	p.World = w
 	p.WorldBytes = b
-	return nil
+	img, _, err := playermap.RenderFull(w, playermap.DefaultScale)
+	if err != nil {
+		return err
+	}
+	return c.Render("", img)
 }
 
 func closed(cls []world.Coastline) int {

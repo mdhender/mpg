@@ -11,6 +11,8 @@ import (
 	"github.com/mdhender/mpg/internal/config"
 	"github.com/mdhender/mpg/internal/golden"
 	"github.com/mdhender/mpg/internal/pipeline"
+	"github.com/mdhender/mpg/internal/playermap"
+	"github.com/mdhender/mpg/internal/render"
 	"github.com/mdhender/mpg/world"
 )
 
@@ -391,7 +393,9 @@ func TestGoldenEdges(t *testing.T) {
 // stage 14, export, passing over the deferred stages. Each case hashes the
 // world.json bytes exactly as written (golden.Sum: SHA-256 of the file).
 // The file carries the config hash in its metadata, so the config is
-// covered too.
+// covered too. Each case also pins the player-style map drawn from the
+// decoded file alone (package playermap) at playermap.DefaultScale: the
+// render.PixelHash of the full map ("player/" hashes).
 func TestGoldenWorld(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -399,10 +403,11 @@ func TestGoldenWorld(t *testing.T) {
 		aspect string
 		preset string
 		want   string
+		player string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "continents", "267b576435f785d5f023613798ee06be65b02eaf8f6f6ee15f20d42df38a91f5"},
-		{"seed7-square", 7, "square", "continents", "e03a9a7e42c8e6788715befe4654a16f7a2d11594db4ddd0c0efd5703d3a6d24"},
-		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "7ba422fd7cd15a036e14e57895373c3ffdf7d3e16ce474e01a713c4a89b84da0"},
+		{"seed42-cinematic", 42, "cinematic", "continents", "267b576435f785d5f023613798ee06be65b02eaf8f6f6ee15f20d42df38a91f5", "314f796aa17bb346737c2977cf95d1c513de5fe34bce4b88146a7f3897cba59e"},
+		{"seed7-square", 7, "square", "continents", "e03a9a7e42c8e6788715befe4654a16f7a2d11594db4ddd0c0efd5703d3a6d24", "c524babb8af76e581c8999b780e1087df0cc40184cfe43876021af41e88fb7cf"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "7ba422fd7cd15a036e14e57895373c3ffdf7d3e16ce474e01a713c4a89b84da0", "fd946e8045933bd9e7d309d8d881eefd331206706ae7b07a9c22f060257820bf"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -427,6 +432,15 @@ func TestGoldenWorld(t *testing.T) {
 				t.Fatal(err)
 			}
 			golden.Check(t, "world/"+tc.name, golden.Sum(b), tc.want)
+			w, err := world.Decode(bytes.NewReader(b))
+			if err != nil {
+				t.Fatal(err)
+			}
+			img, _, err := playermap.RenderFull(w, playermap.DefaultScale)
+			if err != nil {
+				t.Fatal(err)
+			}
+			golden.Check(t, "player/"+tc.name, render.PixelHash(img), tc.player)
 		})
 	}
 }

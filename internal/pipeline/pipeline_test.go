@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"slices"
@@ -20,9 +21,11 @@ import (
 	"github.com/mdhender/mpg/internal/elevation"
 	"github.com/mdhender/mpg/internal/layout"
 	"github.com/mdhender/mpg/internal/mesh"
+	"github.com/mdhender/mpg/internal/playermap"
 	"github.com/mdhender/mpg/internal/render"
 	"github.com/mdhender/mpg/internal/seed"
 	"github.com/mdhender/mpg/internal/topo"
+	"github.com/mdhender/mpg/world"
 )
 
 func TestStagesTable(t *testing.T) {
@@ -690,5 +693,56 @@ func TestMeshStageCheckFails(t *testing.T) {
 	}
 	if !slices.Contains(variants, "4 mesh/short") {
 		t.Errorf("renders %q, want the mesh renders before the failure", variants)
+	}
+}
+
+// TestExportStage checks that the export stage writes world.json and its
+// render, the player-style map, which is exactly the playermap render of
+// the world.json written.
+func TestExportStage(t *testing.T) {
+	cfg := config.Default()
+	cfg.Seed = 42
+	cfg.World.LandCells = 600
+	cfg.Rim.FalloffCells = 4
+	dir := t.TempDir()
+	c, err := NewContext(cfg, filepath.Join(dir, "out"), filepath.Join(dir, "renders"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Run(c, Stages(), -1)
+	if err != nil || res.NotImplemented != nil {
+		t.Fatalf("run = %+v, %v", res, err)
+	}
+	b, err := os.ReadFile(filepath.Join(c.OutputDir, world.File))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := world.Decode(bytes.NewReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _, err := playermap.RenderFull(w, playermap.DefaultScale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(c.RendersDir, "14-export.png")
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	got, err := png.Decode(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if render.PixelHash(got) != render.PixelHash(want) {
+		t.Error("14-export.png differs from the player map of world.json")
+	}
+	if _, err := f.Seek(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	meta, err := render.ReadMeta(f)
+	if err != nil || meta.Stage != "14-export" || meta.ConfigHash != c.ConfigHash {
+		t.Errorf("meta = %+v, %v", meta, err)
 	}
 }
