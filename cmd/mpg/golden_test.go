@@ -147,3 +147,59 @@ func TestGoldenMesh(t *testing.T) {
 		})
 	}
 }
+
+// TestGoldenCells pins the cell statistics stage across architectures (see
+// package golden for how to record a hash): the pipeline run through stage
+// 5, cells. Each case hashes, in order, the resolved config.json bytes
+// (golden.Hasher.Bytes, length-prefixed), then the statistics' canonical
+// encoding (cells.Stats.AppendBinary: the cell and sample counts; each
+// cell's altitude, relief and latitude as float64 bits and its sample
+// count; the empty-cell count; and every sample's cell id in storage
+// order; integers and float bits little-endian).
+func TestGoldenCells(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		seed   config.Seed
+		aspect string
+		want   string
+	}{
+		{"seed42-cinematic", 42, "cinematic", "5852f697e836a8b989f91ceaf8ecf7a4e6d2b44402aeeb452f52bbfb027335a3"},
+		{"seed42-square", 42, "square", "8d5a420ce768fdc898b092cc0a5ba0cf2368757fcabada76d7a22d4efbfc6b1c"},
+		{"seed7-cinematic", 7, "cinematic", "ce1a911a4c14ead3ba04fa92bfb2381da440f574424d33cf639300cb0d0e2737"},
+		{"seed7-portrait", 7, "portrait", "6c74bee60a5f6f876bf2b41ab6d5a30682c99c7aa8d14f669a0693a1fa512b63"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := config.Default()
+			cfg.Seed = tc.seed
+			cfg.World.Aspect = tc.aspect
+			if err := cfg.Resolve(); err != nil {
+				t.Fatal(err)
+			}
+			cfgBytes, err := cfg.Bytes()
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, err := pipeline.NewContext(cfg, t.TempDir(), "", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			stages := pipeline.Stages()
+			last, err := pipeline.Lookup(stages, "cells")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := pipeline.Run(ctx, stages, last); err != nil {
+				t.Fatal(err)
+			}
+			enc, err := ctx.Products.Cells.AppendBinary(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			h := golden.New()
+			h.Bytes(cfgBytes)
+			h.Write(enc)
+			golden.Check(t, "cells/"+tc.name, h.Sum(), tc.want)
+		})
+	}
+}

@@ -152,7 +152,10 @@
 // elevation, the 4-way corners the collapse made as blue dots and each
 // stretched edge as a red disc about a cell across. Outlines are blended
 // and the marks scale with the cell size, so the renders still read when
-// a sweep sheet shrinks them tenfold.
+// a sweep sheet shrinks them tenfold. CellRender, which AreaRender uses,
+// fills every cell with a caller's color under the same outlines and ice
+// front, for the per-cell renders of later stages; IceColor is the rim's
+// fill.
 //
 // # Ids and graph
 //

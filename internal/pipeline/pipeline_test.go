@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mdhender/mpg/internal/cells"
 	"github.com/mdhender/mpg/internal/config"
 	"github.com/mdhender/mpg/internal/elevation"
 	"github.com/mdhender/mpg/internal/layout"
@@ -209,8 +210,8 @@ func TestConfigStage(t *testing.T) {
 
 	// The full registry stops at the first unimplemented stage.
 	res, err = Run(newTestContext(t, false), Stages(), -1)
-	if err != nil || res.NotImplemented == nil || res.NotImplemented.Name != "cells" {
-		t.Errorf("full run = %+v, %v; want a stop at cells", res, err)
+	if err != nil || res.NotImplemented == nil || res.NotImplemented.Name != "sea-level" {
+		t.Errorf("full run = %+v, %v; want a stop at sea-level", res, err)
 	}
 }
 
@@ -390,6 +391,49 @@ func TestMeshStage(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(c.RendersDir, "04-mesh.png")); err != nil {
 		t.Error(err)
+	}
+}
+
+// TestCellsStage runs the pipeline through the cell statistics stage and
+// checks its product against cells.Compute and its renders.
+func TestCellsStage(t *testing.T) {
+	c := newTestContext(t, true)
+	var variants []string
+	c.Sink = func(st Stage, variant string, img image.Image) error {
+		variants = append(variants, st.String()+"/"+variant)
+		return nil
+	}
+	last, err := Lookup(Stages(), "cells")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Run(c, Stages(), last)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells"}) {
+		t.Errorf("ran %q", names(res.Ran))
+	}
+	s := c.Products.Cells
+	if s == nil {
+		t.Fatal("cells stage left its product empty")
+	}
+	want, err := cells.Compute(c.Products.Elevation, c.Products.Mesh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := s.AppendBinary(nil)
+	b, _ := want.AppendBinary(nil)
+	if !bytes.Equal(a, b) {
+		t.Error("stage product differs from cells.Compute")
+	}
+	if got := variants[len(variants)-2:]; !slices.Equal(got, []string{"5 cells/", "5 cells/relief"}) {
+		t.Errorf("renders %q, want the cell altitude and relief renders last", variants)
+	}
+	for _, name := range []string{"05-cells.png", "05-cells-relief.png"} {
+		if _, err := os.Stat(filepath.Join(c.RendersDir, name)); err != nil {
+			t.Error(err)
+		}
 	}
 }
 

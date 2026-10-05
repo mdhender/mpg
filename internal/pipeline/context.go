@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mdhender/mpg/internal/cells"
 	"github.com/mdhender/mpg/internal/config"
 	"github.com/mdhender/mpg/internal/elevation"
 	"github.com/mdhender/mpg/internal/field"
@@ -63,6 +64,9 @@ type Products struct {
 	Hotspots []elevation.Hotspot
 	// Mesh is the mesh stage's province graph.
 	Mesh *mesh.Mesh
+	// Cells is the cell statistics stage's per-cell altitude, relief,
+	// latitude and sample counts, and each raster sample's cell.
+	Cells *cells.Stats
 }
 
 // NewContext resolves cfg and returns a context for a run writing to

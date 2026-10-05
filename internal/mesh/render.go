@@ -257,13 +257,22 @@ var areaRamp = render.NewRamp(
 // AreaRender draws the mesh stage's area heatmap at StageRender's size: each
 // cell, rim cells included, filled by its area as a multiple of areaKm2
 // (A) on a diverging ramp, blue for A/2 and below, white at A, red for 3A/2
-// and above, with blended outlines and the ice front. Cells that cross the
-// seam are drawn on both sides.
+// and above, with blended outlines and the ice front (see CellRender).
 func AreaRender(f *field.Field, m *Mesh, areaKm2 float64) *image.RGBA {
+	return CellRender(f, m, func(i int) color.RGBA { return areaRamp.At(m.Area(i) / areaKm2) })
+}
+
+// CellRender draws a cell map at StageRender's size: every cell, rim cells
+// included, filled with fill(cell id), then every edge blended over the
+// fills in a dark ink at about a third of full opacity, then the ice
+// front (the edges between rim and playable cells) in steel blue. Cells
+// that cross the seam are drawn on both sides. Later stages use it for
+// their per-cell renders.
+func CellRender(f *field.Field, m *Mesh, fill func(cell int) color.RGBA) *image.RGBA {
 	cv, s := newCanvas(f, m)
 	img := image.NewRGBA(image.Rect(0, 0, f.NX()*s, f.NY()*s))
 	for i := range m.Cells {
-		cv.fillCell(img, i, areaRamp.At(m.Area(i)/areaKm2))
+		cv.fillCell(img, i, fill(i))
 	}
 	layer := image.NewRGBA(img.Rect)
 	for e := range m.Edges {
@@ -277,6 +286,10 @@ func AreaRender(f *field.Field, m *Mesh, areaKm2 float64) *image.RGBA {
 	}
 	return img
 }
+
+// IceColor is the fill of the polar ice sheet in the mesh renders, for
+// later stages that draw rim cells as ice with CellRender.
+var IceColor = iceFill
 
 // magnify returns src scaled up s times by pixel replication.
 func magnify(src *image.RGBA, s int) *image.RGBA {
