@@ -191,6 +191,18 @@ Volcanoes are possible, not forced: rare, seeded, and sometimes absent.
   - Basins can jump, so the land count is not assumed to change monotonically.
   - Save the policy, budget, chosen level, achieved count, and termination reason.
 
+### Climate
+
+Stage 7 computes climate on the raster with the cell mask drawn onto it: each raster sample takes its cell's class through the sample-to-cell assignment of stage 5. To the climate, open salt water is every rim cell and every cell the ocean flood reached; dry basin floors are land. Raster fields are averaged into each cell over its samples.
+
+**Temperature.** A cell's mean annual temperature is T = T₀(φ) − Γ·h/1000 °C.
+- φ is the cell's latitude in degrees, 90·|1 − 2y/H| at its site, so the map's north and south edges (inside the rim) are the poles.
+- T₀ is the sea-level curve `climate.sea_level_temp_c`: points (lat_deg, temp_c) from 0° to 90° joined by straight lines, never warmer poleward. The default is hmz2bio's: 27 °C to 10°, 26.5 at 15°, 25 at 20°, 22.5 at 25°, 20 at 30°, 17 at 35°, 14.5 at 40°, 12 at 45°, 8 at 50°, 4 at 55°, 0 at 60°, −8 at 70°, −16 at 80°, −22 at 90°.
+- Γ is `climate.lapse_rate_c_per_km`, default 6.5.
+- h is the cell's altitude above the sea level in meters for land above the sea, and 0 for ocean, rim, and basin floors at or below the sea, which take the sea-level temperature of their latitude.
+- No tilt, no seasons.
+- **Rim cells are coldest at sea level:** as open polar water they are colder than every playable cell at sea level. High land near a pole can be colder than the rim (seed 5 portrait pangaea has a cell 2,684 m up at about 69.5° at −25 °C against a rim of −21.8 to −20.2 °C), and that is accepted.
+
 ### Basins and lakes
 
 - **Priority flood.** A priority flood over the cell graph, seeded from ocean cells and using cell altitude, finds depressions, spill cells, spill edges, and the nested hierarchy. Original elevations are never modified.

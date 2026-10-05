@@ -46,12 +46,12 @@ func TestGoldenElevation(t *testing.T) {
 		preset string
 		want   string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "continents", "96208167f0a1955fc7e8ede9693710f7afa47eaacdd04338c9ab78fe90255d51"},
-		{"seed42-square", 42, "square", "continents", "1a1907fe6181b7e5aa4c46cf695241417b6520fae8c35359b2da7eabf7cbebe0"},
-		{"seed7-cinematic", 7, "cinematic", "continents", "362f0d49b4a093fbb01e6715f7cb5d65fedc393b6fbacc9bd7a67e6f5d2ef880"},
-		{"seed7-square", 7, "square", "continents", "5ece01691e6f9e11ea06c2b3597c82024e8bfe00b77e93dd2dcdc24ac73e79ed"},
-		{"seed7-cinematic-pangaea", 7, "cinematic", "pangaea", "d54757195a6a0c131180378c992b1ce3c574fe6ff65cae3395ecf9822a0f0c94"},
-		{"seed42-square-islands", 42, "square", "islands", "136d75abdf3bd5e3d4b24882594f99cd5acdef60abc363221bc29f2860bab726"},
+		{"seed42-cinematic", 42, "cinematic", "continents", "24a2f5ed8923ec6aa0e7f4d5627dafca58f769f2e4b777fdd2bd6c1f8ae3dfeb"},
+		{"seed42-square", 42, "square", "continents", "98d44ab407921d22f5f5d70ef7881589a6ac55f3a0a9e9e29d5e3964b52beb3d"},
+		{"seed7-cinematic", 7, "cinematic", "continents", "4007701b2efc73ae4c5b9122a476f63d38a7f3cb36f6821fda5e8b3d1bd074d5"},
+		{"seed7-square", 7, "square", "continents", "6d5f2c0c7b281bc6027c4c2c31ee699697e1923be779c5415c5411f4a8c28df6"},
+		{"seed7-cinematic-pangaea", 7, "cinematic", "pangaea", "a1458f25ed112f533e61d677c0d9d62651c76b83bd1d24790017a052a7969a59"},
+		{"seed42-square-islands", 42, "square", "islands", "b84828e166847e74bcb7afc4dbbe7fcae4a83bc8fd4bfe7752c6642184164467"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -111,10 +111,10 @@ func TestGoldenMesh(t *testing.T) {
 		aspect string
 		want   string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "ebe452abdc67724608ead793404b3041a25e5ad7884f32047ced03551860c49e"},
-		{"seed42-square", 42, "square", "144faf19696d3e9d83c46a65302bc498276325ca95bb68bcab4721188567f249"},
-		{"seed7-cinematic", 7, "cinematic", "144bc474b888b35d246d46d993c4c8f8a64e9a66e79d91bf3b1c14a7f8c0be73"},
-		{"seed7-portrait", 7, "portrait", "69bb426c3cf75d1b1ff5094cd5b03711063093443236acfe8a3e97a5631d8ee0"},
+		{"seed42-cinematic", 42, "cinematic", "287c56dd940685d631ca66fc19acf5fa250f5e6417d6af4a5bf61fbe922ec8e0"},
+		{"seed42-square", 42, "square", "c9e9cb345624f2cabf037c4d7e513a1d97cb807f1a9dd741082132ad7b21a4a7"},
+		{"seed7-cinematic", 7, "cinematic", "7644657e5ad21a5fafd3e0f7d7202bad3e3c434e77f72d9d7b27deda2696a3b8"},
+		{"seed7-portrait", 7, "portrait", "df980c9dc60b80c745aad21e56eec001e0a34db1814f079fe8111513b173fbe8"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -167,10 +167,10 @@ func TestGoldenCells(t *testing.T) {
 		aspect string
 		want   string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "069a719f17a60f950a1650f7cc36b062d37665b428b07fbc1c7faa9cc2c54ec9"},
-		{"seed42-square", 42, "square", "b19e0e7db8bc087991aa77ff8e78eda261d0ee7ff06c177aa218a753fc6061aa"},
-		{"seed7-cinematic", 7, "cinematic", "ee23554847bed6af3a06fef9fc38dc676e929037cb5a5c294a3f76c652fa8276"},
-		{"seed7-portrait", 7, "portrait", "3bb1f422ff9025317613494f1b77475cdbf626896c1f78727a3435d1d1f2e267"},
+		{"seed42-cinematic", 42, "cinematic", "5b37147542b4f7f2546d8d1c58884a5ceffac08b24190f8951af8a3cd011500a"},
+		{"seed42-square", 42, "square", "c9ea915affb2269eb59d847a152fe791d4f333779447bd0bcc9c825e2ce59fc4"},
+		{"seed7-cinematic", 7, "cinematic", "bf271308cf59402ae346e7d656608a361dff2f200419d24fec4def5c113b39c2"},
+		{"seed7-portrait", 7, "portrait", "5a750b4073d8e1d8ff35eb82e449332e965ceb4f6f5b74acb6345b0f57e5e984"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -226,12 +226,12 @@ func TestGoldenSeaLevel(t *testing.T) {
 		preset string
 		want   string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "continents", "ad7e47aaf66d2bf1efa8341795ade7485c92c25289715ba4c9a0b1eff9cfee2c"},
-		{"seed42-square", 42, "square", "continents", "da778ede98ab50e1bc2b576675e9e40131f89cf52597897b3d2e487247ecd909"},
-		{"seed7-cinematic", 7, "cinematic", "continents", "df0b8a9779fa13d8cc02f0ad84ddd4d8d27e7e6d668fbb9c89d90667e1cb4a6a"},
-		{"seed7-portrait", 7, "portrait", "continents", "e463307337ebe8cca6715b34a95c609aa1b1e5ad09fb7105bad9a288820bc10f"},
-		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "9a94c4f6c37a80cc8fa232e7fb808a3391b05782fe62ebe1612faec9b4cb48f6"},
-		{"seed6-cinematic-pangaea", 6, "cinematic", "pangaea", "adc590c59825cc7d936009d53f175bc1f146a9f6f12ec8d0e65944fd4ad1c7aa"}, // gallops
+		{"seed42-cinematic", 42, "cinematic", "continents", "99a656ff6eda2ea2a78d64fe04409f647ddc32fc00aca29034d8cc4537ffe0ab"},
+		{"seed42-square", 42, "square", "continents", "03cfdc46b485fab16c2239dadaa518a5d75914f3ee8c56515ca864a6e0909ba3"},
+		{"seed7-cinematic", 7, "cinematic", "continents", "aae5b796973bcaac477b2aae80d27faeba9d2c72ae0e03ae4175fd9d6067d894"},
+		{"seed7-portrait", 7, "portrait", "continents", "9d1a0d3f0328693ff72ae9cf3dd3a61d0982be58f8b5556cc35f0bff197234f0"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "d3f88258437e464002073777ea99c00ad45efb85e13a288673005a204cc835d3"},
+		{"seed6-cinematic-pangaea", 6, "cinematic", "pangaea", "f0f8b5774fe8855a2eac6a1cb7fe7bfe975253be5f61291d56dc35ebeb820741"}, // gallops
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -270,9 +270,67 @@ func TestGoldenSeaLevel(t *testing.T) {
 	}
 }
 
+// TestGoldenClimate pins the climate stage across architectures (see
+// package golden for how to record a hash): the pipeline run through stage
+// 7, climate. Each case hashes, in order, the resolved config.json bytes
+// (golden.Hasher.Bytes, length-prefixed), then the climate's canonical
+// encoding (climate.Result.AppendBinary: the cell and sample counts; the
+// sea level; each cell's ocean flag, height above sea level and
+// temperature; and every sample's mask flag in storage order; integers and
+// float bits little-endian, flags one byte).
+func TestGoldenClimate(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		seed   config.Seed
+		aspect string
+		preset string
+		want   string
+	}{
+		{"seed42-cinematic", 42, "cinematic", "continents", "f8c0f50165bd8d52f9ed4fc93be688fb51d272a8ba18cbb3014115b2c7c0de33"},
+		{"seed7-square", 7, "square", "continents", "e0212ae4063a8c05cd33883ee4250babf7fc6dac14d0652fd5009b2ced418479"},
+		{"seed7-portrait", 7, "portrait", "continents", "74d808ebba4bcd1798abc7d705f2eaf5dfdf46635637089db461fab98295198b"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "11b816f036a30d93800e8a1dc3b5db990832ab47e7d152a35b934cb0a1c66b02"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := config.Default()
+			cfg.Seed = tc.seed
+			cfg.World.Aspect = tc.aspect
+			cfg.Layout.Preset = tc.preset
+			if err := cfg.Resolve(); err != nil {
+				t.Fatal(err)
+			}
+			cfgBytes, err := cfg.Bytes()
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, err := pipeline.NewContext(cfg, t.TempDir(), "", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			stages := pipeline.Stages()
+			last, err := pipeline.Lookup(stages, "climate")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := pipeline.Run(ctx, stages, last); err != nil {
+				t.Fatal(err)
+			}
+			enc, err := ctx.Products.Climate.AppendBinary(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			h := golden.New()
+			h.Bytes(cfgBytes)
+			h.Write(enc)
+			golden.Check(t, "climate/"+tc.name, h.Sum(), tc.want)
+		})
+	}
+}
+
 // TestGoldenClassify pins the classification stage across architectures
 // (see package golden for how to record a hash): the pipeline run through
-// stage 11, classify, passing over the deferred stages 7 to 10. Each case
+// stage 11, classify, passing over the deferred stages 8 to 10. Each case
 // hashes, in order, the resolved config.json bytes (golden.Hasher.Bytes,
 // length-prefixed), then the classification's canonical encoding
 // (classify.Result.AppendBinary: the cell count; each cell's landform and
@@ -286,11 +344,11 @@ func TestGoldenClassify(t *testing.T) {
 		preset string
 		want   string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "continents", "34528846e185aadc8120aadb33b441daffab10fd06bd37747ffe8aa134d9f9cb"},
-		{"seed42-square", 42, "square", "continents", "fc2fbfe4ffe2686d42bec65c6a5a90221fd6fd48d5b8bbabf2cea3326ad0d83f"},
-		{"seed7-cinematic", 7, "cinematic", "continents", "5f6c30cdf45b4981f2c2c683584f97257c287abc5de33a8863e887c00d960c9f"},
-		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "4a9feefc7431c319fa637c5bd4547321e0551f8c74cf850e87cd88ce5cb61de6"},
-		{"seed7-cinematic-pangaea", 7, "cinematic", "pangaea", "57610185db5503c2ae5ab92c78d4237fc82b5b0b329d77bbf73d29f60ed09429"}, // volcanic highlands
+		{"seed42-cinematic", 42, "cinematic", "continents", "84b4ef0afb85f3fd5b3722fe1c2c2ab133fc7c3379881214b0f113c0178e1cf6"},
+		{"seed42-square", 42, "square", "continents", "c3efe3092490065c5c6bcf791138396759b07b336bf9e9c8b9a0fde8a01ba0a6"},
+		{"seed7-cinematic", 7, "cinematic", "continents", "773c95a1ddd6b13a0ff22f31c6262aadd42f76b0363bd23953989fb105fe91fe"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "4674e9d15fcc909c8d74d1ff660977e0159b164752e8a143feab26c38e7abb6f"},
+		{"seed7-cinematic-pangaea", 7, "cinematic", "pangaea", "b00592b834f3c2dcce3fd91916373b64e4e20b0d2ba2c4e55d60e32f06045c92"}, // volcanic highlands
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -331,7 +389,7 @@ func TestGoldenClassify(t *testing.T) {
 
 // TestGoldenEdges pins the edge stage across architectures (see package
 // golden for how to record a hash): the pipeline run through stage 12,
-// edges, passing over the deferred stages 7 to 10. Each case hashes, in
+// edges, passing over the deferred stages 8 to 10. Each case hashes, in
 // order, the resolved config.json bytes (golden.Hasher.Bytes,
 // length-prefixed), then the edge data's canonical encoding
 // (edges.Data.AppendBinary: per edge its passable and coast flags, water
@@ -346,10 +404,10 @@ func TestGoldenEdges(t *testing.T) {
 		preset string
 		want   string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "continents", "d8033f8a9405a75aaf1f8a943cd91fa3a417e172d2f941a0ea23d3c23a9c1bff"},
-		{"seed42-square", 42, "square", "continents", "43cf768bf819de5f29949630178d133e5fb143172a6bb453304ada505b9ed848"},
-		{"seed7-cinematic", 7, "cinematic", "continents", "a361f7edb73d77d4236c215867f5c49933af15a651959ead8e6e4aa388cf28cc"},
-		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "27e9c0b4b430d26a742a6c25abace17de7afc470a8117aa483dc8d070e3f5bd3"},
+		{"seed42-cinematic", 42, "cinematic", "continents", "b1c59a9129a2a97155ec3e283f0304f9bbf1e469fc34ab850e13399c93e1aaaa"},
+		{"seed42-square", 42, "square", "continents", "63b6210d00dc37c2d5d8310f76280ebd8c39a8e1acaba16253fead6a54a4b01a"},
+		{"seed7-cinematic", 7, "cinematic", "continents", "4290b5459fdaf2b9ece97213eec70b5f2114c5dd3de0375b34d5902274bee90f"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "b511b5d0ba8d9773765c3ede990347de6f82fca86f694920352292e407fd7eaf"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -405,9 +463,9 @@ func TestGoldenWorld(t *testing.T) {
 		want   string
 		player string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "continents", "267b576435f785d5f023613798ee06be65b02eaf8f6f6ee15f20d42df38a91f5", "314f796aa17bb346737c2977cf95d1c513de5fe34bce4b88146a7f3897cba59e"},
-		{"seed7-square", 7, "square", "continents", "e03a9a7e42c8e6788715befe4654a16f7a2d11594db4ddd0c0efd5703d3a6d24", "c524babb8af76e581c8999b780e1087df0cc40184cfe43876021af41e88fb7cf"},
-		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "7ba422fd7cd15a036e14e57895373c3ffdf7d3e16ce474e01a713c4a89b84da0", "fd946e8045933bd9e7d309d8d881eefd331206706ae7b07a9c22f060257820bf"},
+		{"seed42-cinematic", 42, "cinematic", "continents", "8477f13b6ef568ae46bc8c9634d6cd7fa60b66bd207882e84373d7646ba1e3d7", "314f796aa17bb346737c2977cf95d1c513de5fe34bce4b88146a7f3897cba59e"},
+		{"seed7-square", 7, "square", "continents", "93e135d66a1717a415f3c48dd2ec994e8578ec40ac59c98f4f121ac6b7b5e905", "c524babb8af76e581c8999b780e1087df0cc40184cfe43876021af41e88fb7cf"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "e242573132eef3dbd2cceb22cd7daf86fef2ee8b17fd4ec7855383ec71b78018", "fd946e8045933bd9e7d309d8d881eefd331206706ae7b07a9c22f060257820bf"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

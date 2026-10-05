@@ -14,6 +14,7 @@ import (
 
 	"github.com/mdhender/mpg/internal/cells"
 	"github.com/mdhender/mpg/internal/classify"
+	"github.com/mdhender/mpg/internal/climate"
 	"github.com/mdhender/mpg/internal/config"
 	"github.com/mdhender/mpg/internal/edges"
 	"github.com/mdhender/mpg/internal/elevation"
@@ -75,6 +76,9 @@ type Products struct {
 	// SeaLevel is the sea level stage's level, its land, ocean and dry
 	// basin cells, and the search's trace and outcome.
 	SeaLevel *cells.SeaLevel
+	// Climate is the climate stage's cell mask (the ocean drawn onto the
+	// raster) and cell temperatures.
+	Climate *climate.Result
 	// Classes is the classification stage's landforms, depth bands, and
 	// volcano flags.
 	Classes *classify.Result

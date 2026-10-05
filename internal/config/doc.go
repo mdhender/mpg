@@ -92,6 +92,18 @@
 // mesh.min_edge_km = mesh.min_edge_fraction × √A (derived), about 2.7 km at
 // the default 0.3. See package mesh.
 //
+// # Climate
+//
+// The climate group sets the temperature model (DESIGN.md: "Latitude plus
+// lapse-rate temperature"): the mean annual sea-level temperature by
+// latitude, as points (lat_deg, temp_c) joined by straight lines, with 0°
+// at the equator and 90° at the map's north and south edges (the latitude
+// proxy's ±1), and the lapse rate in °C per km of altitude above sea level.
+// The curve must run from 0° to 90° with latitudes increasing and
+// temperatures not increasing, and the pole must be colder than the
+// equator, so the rim is always the coldest water. DefaultClimate is
+// hmz2bio's model. See package climate.
+//
 // # Classify
 //
 // The classify group sets the landform and depth rules (DESIGN.md,

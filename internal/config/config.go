@@ -37,6 +37,7 @@ type Config struct {
 	Elevation Elevation `json:"elevation"`
 	Volcanic  Volcanic  `json:"volcanic"`
 	Mesh      Mesh      `json:"mesh"`
+	Climate   Climate   `json:"climate"`
 	Basin     Basin     `json:"basin"`
 	River     River     `json:"river"`
 	Classify  Classify  `json:"classify"`
@@ -191,6 +192,7 @@ func Default() Config {
 		Elevation: DefaultElevation(),
 		Volcanic:  DefaultVolcanic(),
 		Mesh:      DefaultMesh(),
+		Climate:   DefaultClimate(),
 		Basin:     Basin{MinDepthM: 50, InlandSeaMinCells: 20},
 		River:     River{ThresholdKm2: 500},
 		Classify:  DefaultClassify(),
@@ -246,6 +248,7 @@ func (c *Config) Validate() error {
 	c.Elevation.validate(bad)
 	c.Volcanic.validate(bad)
 	c.Mesh.validate(bad)
+	c.Climate.validate(bad)
 	if v := c.Basin.MinDepthM; !nonNegative(v) {
 		bad("basin.min_depth_m %v must be non-negative and finite", v)
 	}

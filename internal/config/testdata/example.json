@@ -170,6 +170,71 @@
     "area_max": 1.6,
     "degree_cap": 8
   },
+  "climate": {
+    "sea_level_temp_c": [
+      {
+        "lat_deg": 0,
+        "temp_c": 27
+      },
+      {
+        "lat_deg": 10,
+        "temp_c": 27
+      },
+      {
+        "lat_deg": 15,
+        "temp_c": 26.5
+      },
+      {
+        "lat_deg": 20,
+        "temp_c": 25
+      },
+      {
+        "lat_deg": 25,
+        "temp_c": 22.5
+      },
+      {
+        "lat_deg": 30,
+        "temp_c": 20
+      },
+      {
+        "lat_deg": 35,
+        "temp_c": 17
+      },
+      {
+        "lat_deg": 40,
+        "temp_c": 14.5
+      },
+      {
+        "lat_deg": 45,
+        "temp_c": 12
+      },
+      {
+        "lat_deg": 50,
+        "temp_c": 8
+      },
+      {
+        "lat_deg": 55,
+        "temp_c": 4
+      },
+      {
+        "lat_deg": 60,
+        "temp_c": 0
+      },
+      {
+        "lat_deg": 70,
+        "temp_c": -8
+      },
+      {
+        "lat_deg": 80,
+        "temp_c": -16
+      },
+      {
+        "lat_deg": 90,
+        "temp_c": -22
+      }
+    ],
+    "lapse_rate_c_per_km": 6.5
+  },
   "basin": {
     "min_depth_m": 50,
     "inland_sea_min_cells": 20

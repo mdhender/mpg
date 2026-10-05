@@ -157,13 +157,37 @@ func TestPartialFileGetsDefaults(t *testing.T) {
 	}
 }
 
+// TestClimatePartial checks that a partial climate group keeps the default
+// curve, that a curve in the file replaces the default one whole, and that
+// a misspelled point field is rejected with its path.
+func TestClimatePartial(t *testing.T) {
+	c, err := Decode(strings.NewReader(`{"schema": 1, "climate": {"lapse_rate_c_per_km": 5}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(c.Climate.SeaLevelTempC, DefaultClimate().SeaLevelTempC) || c.Climate.LapseRateCPerKm != 5 {
+		t.Errorf("climate = %+v", c.Climate)
+	}
+	c, err = Decode(strings.NewReader(`{"schema": 1, "climate": {"sea_level_temp_c": [{"lat_deg": 0, "temp_c": 30}, {"lat_deg": 90, "temp_c": -30}]}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []LatTemp{{0, 30}, {90, -30}}; !reflect.DeepEqual(c.Climate.SeaLevelTempC, want) || c.Climate.LapseRateCPerKm != 6.5 {
+		t.Errorf("climate = %+v, want curve %v and the default lapse rate", c.Climate, want)
+	}
+	_, err = Decode(strings.NewReader(`{"schema": 1, "climate": {"sea_level_temp_c": [{"lat_deg": 0, "temp": 30}, {"lat_deg": 90, "temp_c": -30}]}}`))
+	if err == nil || !strings.Contains(err.Error(), "temp") {
+		t.Errorf("misspelled curve field: %v", err)
+	}
+}
+
 func TestHash(t *testing.T) {
 	c := example(t)
 	h, err := c.Hash()
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = "019f037b680eae2c70f53df7f5dfe288861c400972704a8320af0020e44f4a58"
+	const want = "26db8ec1ed4d728153452aa914be66aa03ad3417f41c0bbdfb3eac2b48e0978b"
 	if h != want {
 		t.Errorf("Hash = %s, want %s", h, want)
 	}
@@ -324,6 +348,17 @@ func TestValidate(t *testing.T) {
 		{"classify volcanic radius", func(c *Config) { c.Classify.VolcanicRadiusKm = -1 }, "classify.volcanic_radius_km"},
 		{"classify shallow", func(c *Config) { c.Classify.ShallowMaxCells = -1 }, "classify.shallow_max_cells"},
 		{"classify open below shallow", func(c *Config) { c.Classify.OpenMaxCells = 2 }, "classify.open_max_cells 2 must be in [shallow_max_cells 3"},
+		{"climate one point", func(c *Config) { c.Climate.SeaLevelTempC = []LatTemp{{0, 20}} }, "climate.sea_level_temp_c has 1 points"},
+		{"climate no equator", func(c *Config) { c.Climate.SeaLevelTempC = []LatTemp{{5, 20}, {90, -20}} }, "climate.sea_level_temp_c[0].lat_deg 5 must be 0"},
+		{"climate no pole", func(c *Config) { c.Climate.SeaLevelTempC = []LatTemp{{0, 20}, {80, -20}} }, "climate.sea_level_temp_c[1].lat_deg 80 must be 90"},
+		{"climate lat order", func(c *Config) { c.Climate.SeaLevelTempC = []LatTemp{{0, 20}, {50, 0}, {50, -5}, {90, -20}} }, "climate.sea_level_temp_c[2].lat_deg 50 must be greater"},
+		{"climate lat range", func(c *Config) { c.Climate.SeaLevelTempC = []LatTemp{{0, 20}, {95, -20}} }, "climate.sea_level_temp_c[1].lat_deg 95 must be in [0, 90]"},
+		{"climate warmer poleward", func(c *Config) { c.Climate.SeaLevelTempC = []LatTemp{{0, 20}, {40, 22}, {90, -20}} }, "climate.sea_level_temp_c[1].temp_c 22 must not be warmer"},
+		{"climate flat", func(c *Config) { c.Climate.SeaLevelTempC = []LatTemp{{0, 10}, {90, 10}} }, "the pole (10 °C) must be colder than the equator"},
+		{"climate temp NaN", func(c *Config) { c.Climate.SeaLevelTempC = []LatTemp{{0, math.NaN()}, {90, -20}} }, "climate.sea_level_temp_c[0].temp_c NaN"},
+		{"climate temp huge", func(c *Config) { c.Climate.SeaLevelTempC = []LatTemp{{0, 200}, {90, -20}} }, "climate.sea_level_temp_c[0].temp_c 200"},
+		{"climate lapse negative", func(c *Config) { c.Climate.LapseRateCPerKm = -1 }, "climate.lapse_rate_c_per_km"},
+		{"climate lapse NaN", func(c *Config) { c.Climate.LapseRateCPerKm = math.NaN() }, "climate.lapse_rate_c_per_km"},
 		{"schema", func(c *Config) { c.Schema = 2 }, "schema 2 is not supported"},
 		{"preset", func(c *Config) { c.Layout.Preset = "isles" }, "layout.preset"},
 		{"pole margin", func(c *Config) { c.Layout.PoleMargin = -1 }, "layout.pole_margin"},

@@ -15,7 +15,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mdhender/mpg/internal/climate"
 	"github.com/mdhender/mpg/internal/config"
+	"github.com/mdhender/mpg/internal/mesh"
 	"github.com/mdhender/mpg/internal/pipeline"
 	"github.com/mdhender/mpg/internal/render"
 )
@@ -38,7 +40,9 @@ const (
 // label shows the land count achieved against N (and UNMET when it misses
 // the 1% tolerance), and
 // each sea-level tile's caption the count against N, the deviation, and the
-// search's reason. Each classify tile's caption gives the land landform
+// search's reason. Each climate tile's caption gives the temperature
+// range in °C of the rim, the land, and the land's median (land lo..hi
+// ~median). Each classify tile's caption gives the land landform
 // shares in percent (fl, pl, rp, hi, mt, pt, vh: flats to volcanic
 // highlands) and the volcanoes on land (v). Each edges tile's caption gives
 // the direction error's mean, p95 and max in degrees (err), the share of
@@ -203,6 +207,9 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 			}
 			if sl := ctx.Products.SeaLevel; sl != nil && registry[c.index].Name == "sea-level" {
 				tiles[k].Caption[1] = fmt.Sprintf("land %d/%d %+.2f%% %s", sl.LandCells, sl.Target, sl.DeviationPercent(), sl.Reason)
+			}
+			if cr := ctx.Products.Climate; cr != nil && registry[c.index].Name == "climate" {
+				tiles[k].Caption[1] = climateCaption(ctx.Products.Mesh.Cells, cr)
 			}
 			if cl := ctx.Products.Classes; cl != nil && registry[c.index].Name == "classify" {
 				tiles[k].Caption[1] = fmt.Sprintf("%s v%d", strings.Join(cl.LandShares(true), " "), cl.Volcanoes())
@@ -389,4 +396,26 @@ func checkImplemented(cols []sweepStage, registry []pipeline.Stage) (int, error)
 		}
 	}
 	return last, nil
+}
+
+// climateCaption returns a climate tile's caption: the rim's and the land's
+// temperature ranges in °C and the land's median.
+func climateCaption(cells []mesh.Cell, r *climate.Result) string {
+	rlo, rhi := math.Inf(1), math.Inf(-1)
+	var land []float64
+	for i, c := range cells {
+		t := r.Temperature[i]
+		switch {
+		case c.Rim:
+			rlo, rhi = min(rlo, t), max(rhi, t)
+		case !r.Ocean[i]:
+			land = append(land, t)
+		}
+	}
+	s := fmt.Sprintf("rim %.0f..%.0f", rlo, rhi)
+	if len(land) > 0 {
+		slices.Sort(land)
+		s += fmt.Sprintf(" land %.0f..%.0f ~%.0f", land[0], land[len(land)-1], land[len(land)/2])
+	}
+	return s + " C"
 }

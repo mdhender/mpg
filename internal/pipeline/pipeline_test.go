@@ -16,6 +16,7 @@ import (
 
 	"github.com/mdhender/mpg/internal/cells"
 	"github.com/mdhender/mpg/internal/classify"
+	"github.com/mdhender/mpg/internal/climate"
 	"github.com/mdhender/mpg/internal/config"
 	"github.com/mdhender/mpg/internal/edges"
 	"github.com/mdhender/mpg/internal/elevation"
@@ -247,7 +248,7 @@ func TestConfigStage(t *testing.T) {
 	if err != nil || res.NotImplemented != nil || res.Ran[len(res.Ran)-1].Name != "export" {
 		t.Errorf("full run = %+v, %v; want a run through export", res, err)
 	}
-	if want := []string{"climate", "basins", "land-target", "rivers", "measures"}; !slices.Equal(names(res.Skipped), want) {
+	if want := []string{"basins", "land-target", "rivers", "measures"}; !slices.Equal(names(res.Skipped), want) {
 		t.Errorf("full run skipped %q, want %q", names(res.Skipped), want)
 	}
 }
@@ -529,6 +530,53 @@ func TestSeaLevelStage(t *testing.T) {
 // (smaller ones with -short) for seeds 1 to 8 at the cinematic and square
 // aspects, and archipelago and pangaea at cinematic: every one meets the
 // land target within 1% of N.
+// TestClimateStage runs the pipeline through the climate stage and checks
+// the product against climate.Compute, the renders, and the log.
+func TestClimateStage(t *testing.T) {
+	c := newTestContext(t, true)
+	var log bytes.Buffer
+	c.Log = &log
+	last, err := Lookup(Stages(), "climate")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Run(c, Stages(), last)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "climate"}) ||
+		len(res.Skipped) != 0 || res.NotImplemented != nil {
+		t.Errorf("ran %q, skipped %q, stopped at %v", names(res.Ran), names(res.Skipped), res.NotImplemented)
+	}
+	p := c.Products
+	if p.Climate == nil {
+		t.Fatal("climate stage left its product empty")
+	}
+	model, err := climate.NewModel(c.Config.Climate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := climate.Compute(p.Mesh, p.Cells, &p.SeaLevel.Flood, model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := p.Climate.AppendBinary(nil)
+	b, _ := want.AppendBinary(nil)
+	if !bytes.Equal(a, b) {
+		t.Error("stage product differs from climate.Compute")
+	}
+	for _, name := range []string{"07-climate.png", "07-climate-mask.png"} {
+		if _, err := os.Stat(filepath.Join(c.RendersDir, name)); err != nil {
+			t.Error(err)
+		}
+	}
+	for _, s := range []string{"climate: mask: ", "climate: rim temperature ", "climate: ocean temperature ", "climate: land temperature "} {
+		if !strings.Contains(log.String(), s) {
+			t.Errorf("log lacks %q:\n%s", s, log.String())
+		}
+	}
+}
+
 // TestClassifyStage runs the pipeline through classification, past the
 // deferred stages, and checks the product against classify.Classify, the
 // render, and the log.
@@ -544,8 +592,8 @@ func TestClassifyStage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "classify"}) ||
-		!slices.Equal(names(res.Skipped), []string{"climate", "basins", "land-target", "rivers"}) || res.NotImplemented != nil {
+	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "climate", "classify"}) ||
+		!slices.Equal(names(res.Skipped), []string{"basins", "land-target", "rivers"}) || res.NotImplemented != nil {
 		t.Errorf("ran %q, skipped %q, stopped at %v", names(res.Ran), names(res.Skipped), res.NotImplemented)
 	}
 	p := c.Products
@@ -589,7 +637,7 @@ func TestEdgesStage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "classify", "edges"}) ||
+	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "climate", "classify", "edges"}) ||
 		res.NotImplemented != nil {
 		t.Errorf("ran %q, stopped at %v", names(res.Ran), res.NotImplemented)
 	}
