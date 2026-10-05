@@ -49,7 +49,7 @@ func Stages() []Stage {
 		{Number: 9, Name: "land-target", Deferred: true},
 		{Number: 10, Name: "rivers", Deferred: true},
 		{Number: 11, Name: "classify", Run: runClassify},
-		{Number: 12, Name: "edges"},
+		{Number: 12, Name: "edges", Run: runEdges},
 		{Number: 13, Name: "measures"},
 		{Number: 14, Name: "export"},
 	}

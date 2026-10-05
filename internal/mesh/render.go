@@ -311,3 +311,17 @@ func magnify(src *image.RGBA, s int) *image.RGBA {
 	}
 	return dst
 }
+
+// DrawEdges draws, on img (a render at StageRender's size over f, as
+// CellRender returns), every edge e of m for which ink returns ok, in the
+// color it returns, width pixels wide, in edge id order; an edge that
+// crosses the seam is drawn on both sides. Later stages use it for their
+// per-edge renders.
+func DrawEdges(img *image.RGBA, f *field.Field, m *Mesh, width float64, ink func(e int) (c color.RGBA, ok bool)) {
+	cv, _ := newCanvas(f, m)
+	for e := range m.Edges {
+		if c, ok := ink(e); ok {
+			cv.drawEdge(img, e, width, c)
+		}
+	}
+}

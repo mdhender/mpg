@@ -15,6 +15,7 @@ import (
 	"github.com/mdhender/mpg/internal/cells"
 	"github.com/mdhender/mpg/internal/classify"
 	"github.com/mdhender/mpg/internal/config"
+	"github.com/mdhender/mpg/internal/edges"
 	"github.com/mdhender/mpg/internal/elevation"
 	"github.com/mdhender/mpg/internal/field"
 	"github.com/mdhender/mpg/internal/layout"
@@ -74,6 +75,10 @@ type Products struct {
 	// Classes is the classification stage's landforms, depth bands, and
 	// volcano flags.
 	Classes *classify.Result
+	// Edges is the edge stage's per-edge game data and each cell's
+	// half-edges, and EdgeStats their statistics.
+	Edges     *edges.Data
+	EdgeStats *edges.Stats
 }
 
 // NewContext resolves cfg and returns a context for a run writing to

@@ -324,3 +324,62 @@ func TestGoldenClassify(t *testing.T) {
 		})
 	}
 }
+
+// TestGoldenEdges pins the edge stage across architectures (see package
+// golden for how to record a hash): the pipeline run through stage 12,
+// edges, passing over the deferred stages 7 to 10. Each case hashes, in
+// order, the resolved config.json bytes (golden.Hasher.Bytes,
+// length-prefixed), then the edge data's canonical encoding
+// (edges.Data.AppendBinary: per edge its passable and coast flags, water
+// kind, river class and incline; per cell its half-edges in compass order,
+// each with edge id, neighbor, bearing bits, direction, error bits and
+// incline; integers little-endian).
+func TestGoldenEdges(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		seed   config.Seed
+		aspect string
+		preset string
+		want   string
+	}{
+		{"seed42-cinematic", 42, "cinematic", "continents", "d8033f8a9405a75aaf1f8a943cd91fa3a417e172d2f941a0ea23d3c23a9c1bff"},
+		{"seed42-square", 42, "square", "continents", "43cf768bf819de5f29949630178d133e5fb143172a6bb453304ada505b9ed848"},
+		{"seed7-cinematic", 7, "cinematic", "continents", "a361f7edb73d77d4236c215867f5c49933af15a651959ead8e6e4aa388cf28cc"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "27e9c0b4b430d26a742a6c25abace17de7afc470a8117aa483dc8d070e3f5bd3"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := config.Default()
+			cfg.Seed = tc.seed
+			cfg.World.Aspect = tc.aspect
+			cfg.Layout.Preset = tc.preset
+			if err := cfg.Resolve(); err != nil {
+				t.Fatal(err)
+			}
+			cfgBytes, err := cfg.Bytes()
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, err := pipeline.NewContext(cfg, t.TempDir(), "", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			stages := pipeline.Stages()
+			last, err := pipeline.Lookup(stages, "edges")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := pipeline.Run(ctx, stages, last); err != nil {
+				t.Fatal(err)
+			}
+			enc, err := ctx.Products.Edges.AppendBinary(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			h := golden.New()
+			h.Bytes(cfgBytes)
+			h.Write(enc)
+			golden.Check(t, "edges/"+tc.name, h.Sum(), tc.want)
+		})
+	}
+}

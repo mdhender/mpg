@@ -86,13 +86,13 @@ func TestParseSweepStages(t *testing.T) {
 
 	// Config through sea-level are implemented, climate to rivers are
 	// deferred (not implemented, but passed over on the way to classify),
-	// classify is implemented, and edges and later are not.
+	// classify and edges are implemented, and measures and later are not.
 	for _, tc := range []struct {
 		in   string
 		last int
 		ok   bool
 	}{{"config", 0, true}, {"layout,config", 1, true}, {"config,elevation", 2, true}, {"elevation,mesh", 3, true}, {"mesh,cells", 4, true}, {"cells:relief", 4, true}, {"cells,sea-level", 5, true}, {"sea-level", 5, true}, {"sea-level,climate", -1, false}, {"climate", -1, false},
-		{"classify", 10, true}, {"sea-level,classify", 10, true}, {"rivers,classify", -1, false}, {"classify,edges", -1, false}} {
+		{"classify", 10, true}, {"sea-level,classify", 10, true}, {"rivers,classify", -1, false}, {"classify,edges", 11, true}, {"edges:passability", 11, true}, {"edges,measures", -1, false}} {
 		cols, err := parseSweepStages(tc.in, registry)
 		if err != nil {
 			t.Fatal(err)
@@ -267,19 +267,19 @@ func TestSweepPresets(t *testing.T) {
 }
 
 // TestSweepSeaLevel checks that a sweep runs through the sea level stage
-// and on to classification, past the deferred stages, and gives the same
-// sheet twice.
+// and on to classification and the edges, past the deferred stages, and
+// gives the same sheet twice.
 func TestSweepSeaLevel(t *testing.T) {
 	dir := t.TempDir()
 	var hashes []string
 	for _, name := range []string{"a.png", "b.png"} {
-		code, stdout, stderr := sweep(t, "--seeds", "1,2", "--stage", "cells,sea-level,classify", "--land-cells", "600",
+		code, stdout, stderr := sweep(t, "--seeds", "1,2", "--stage", "cells,sea-level,classify,edges,edges:passability", "--land-cells", "600",
 			"--tile", "64", "--output", filepath.Join(dir, name))
 		if code != 0 {
 			t.Fatalf("exit %d; stderr %q", code, stderr)
 		}
-		if !strings.Contains(stdout, "stages  cells, sea-level, classify") || !strings.Contains(stderr, "sea-level: level ") ||
-			!strings.Contains(stderr, "classify: land: ") {
+		if !strings.Contains(stdout, "stages  cells, sea-level, classify, edges, edges:passability") || !strings.Contains(stderr, "sea-level: level ") ||
+			!strings.Contains(stderr, "classify: land: ") || !strings.Contains(stderr, "edges: direction error ") {
 			t.Errorf("stdout %q, stderr %q", stdout, stderr)
 		}
 		_, h, _ := strings.Cut(stdout, "pixels  ")

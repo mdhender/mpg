@@ -51,7 +51,7 @@ func TestGenerateSeed42(t *testing.T) {
 	if !bytes.Equal(got, want) {
 		t.Errorf("config.json differs from testdata/example.json:\n%s", got)
 	}
-	if !strings.Contains(stderr, "stopped: stage 12 edges not implemented yet") {
+	if !strings.Contains(stderr, "stopped: stage 13 measures not implemented yet") {
 		t.Errorf("stderr = %q, want a not-implemented stop", stderr)
 	}
 	if !strings.Contains(stderr, "skipped climate, basins, land-target, rivers: not implemented yet") {
@@ -59,7 +59,7 @@ func TestGenerateSeed42(t *testing.T) {
 	}
 	cfg, _ := readConfig(t, out)
 	hash, _ := cfg.Hash()
-	for _, s := range []string{hash, "stages  config, layout, elevation, mesh, cells, sea-level, classify\n", "33333 playable"} {
+	for _, s := range []string{hash, "stages  config, layout, elevation, mesh, cells, sea-level, classify, edges\n", "33333 playable"} {
 		if !strings.Contains(stdout, s) {
 			t.Errorf("stdout = %q, want it to contain %q", stdout, s)
 		}
@@ -238,7 +238,7 @@ func TestGenerateRendersDir(t *testing.T) {
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	if !slices.Equal(names, []string{"02-layout.png", "03-elevation.png", "04-mesh-area.png", "04-mesh-short.png", "04-mesh.png", "05-cells-relief.png", "05-cells.png", "06-sea-level.png", "11-classify.png"}) {
-		t.Errorf("renders = %q, want the layout, elevation, mesh area, mesh short-edge, mesh, cell relief, cell altitude, sea level and landform renders", names)
+	if !slices.Equal(names, []string{"02-layout.png", "03-elevation.png", "04-mesh-area.png", "04-mesh-short.png", "04-mesh.png", "05-cells-relief.png", "05-cells.png", "06-sea-level.png", "11-classify.png", "12-edges-compass.png", "12-edges-passability.png", "12-edges.png"}) {
+		t.Errorf("renders = %q, want the layout, elevation, mesh area, mesh short-edge, mesh, cell relief, cell altitude, sea level, landform, compass, passability and incline renders", names)
 	}
 }

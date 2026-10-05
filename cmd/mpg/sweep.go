@@ -40,7 +40,10 @@ const (
 // each sea-level tile's caption the count against N, the deviation, and the
 // search's reason. Each classify tile's caption gives the land landform
 // shares in percent (fl, pl, rp, hi, mt, pt, vh: flats to volcanic
-// highlands) and the volcanoes on land (v). Rows run one after another, so the sheet does not
+// highlands) and the volcanoes on land (v). Each edges tile's caption gives
+// the direction error's mean, p95 and max in degrees (err), the share of
+// edges whose reverse direction is not the opposite point (rev), and the
+// coast edges per land cell (coast). Rows run one after another, so the sheet does not
 // depend on scheduling. Exit codes: 0 on success, 1 on a config error, an
 // unimplemented stage, or a run error, 2 on a usage error.
 func runSweep(args []string, stdout, stderr io.Writer) int {
@@ -203,6 +206,13 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 			}
 			if cl := ctx.Products.Classes; cl != nil && registry[c.index].Name == "classify" {
 				tiles[k].Caption[1] = fmt.Sprintf("%s v%d", strings.Join(cl.LandShares(true), " "), cl.Volcanoes())
+			}
+			if es := ctx.Products.EdgeStats; es != nil && registry[c.index].Name == "edges" {
+				rev := 0.0
+				if es.Pairs > 0 {
+					rev = 100 * float64(es.NotOpposite) / float64(es.Pairs)
+				}
+				tiles[k].Caption[1] = fmt.Sprintf("err %.0f/%.0f/%.0f rev %.1f%% coast %.2f", es.ErrorMean, es.ErrorP95, es.ErrorMax, rev, es.CoastPerLand())
 			}
 		}
 		label := []string{fmt.Sprintf("seed %d", uint64(row.cfg.Seed)), w.Aspect, row.cfg.Layout.Preset, fmt.Sprintf("%d land", w.LandCells)}

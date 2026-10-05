@@ -16,6 +16,7 @@ import (
 	"github.com/mdhender/mpg/internal/cells"
 	"github.com/mdhender/mpg/internal/classify"
 	"github.com/mdhender/mpg/internal/config"
+	"github.com/mdhender/mpg/internal/edges"
 	"github.com/mdhender/mpg/internal/elevation"
 	"github.com/mdhender/mpg/internal/layout"
 	"github.com/mdhender/mpg/internal/mesh"
@@ -240,8 +241,8 @@ func TestConfigStage(t *testing.T) {
 	// The full registry passes over the deferred stages and stops at the
 	// first unimplemented stage that is not deferred.
 	res, err = Run(newTestContext(t, false), Stages(), -1)
-	if err != nil || res.NotImplemented == nil || res.NotImplemented.Name != "edges" {
-		t.Errorf("full run = %+v, %v; want a stop at edges", res, err)
+	if err != nil || res.NotImplemented == nil || res.NotImplemented.Name != "measures" {
+		t.Errorf("full run = %+v, %v; want a stop at measures", res, err)
 	}
 	if want := []string{"climate", "basins", "land-target", "rivers"}; !slices.Equal(names(res.Skipped), want) {
 		t.Errorf("full run skipped %q, want %q", names(res.Skipped), want)
@@ -565,6 +566,58 @@ func TestClassifyStage(t *testing.T) {
 		t.Error(err)
 	}
 	for _, s := range []string{"classify: land: flats ", "mountains ", "classify: salt water: shallow ", "volcanoes on land"} {
+		if !strings.Contains(log.String(), s) {
+			t.Errorf("log lacks %q:\n%s", s, log.String())
+		}
+	}
+}
+
+// TestEdgesStage runs the pipeline through the edge stage and checks the
+// product against edges.Build, the renders, and the log.
+func TestEdgesStage(t *testing.T) {
+	c := newTestContext(t, true)
+	var log bytes.Buffer
+	c.Log = &log
+	last, err := Lookup(Stages(), "edges")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Run(c, Stages(), last)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "classify", "edges"}) ||
+		res.NotImplemented != nil {
+		t.Errorf("ran %q, stopped at %v", names(res.Ran), res.NotImplemented)
+	}
+	p := c.Products
+	if p.Edges == nil || p.EdgeStats == nil {
+		t.Fatal("edge stage left its product empty")
+	}
+	water := make([]edges.Water, len(p.Mesh.Cells))
+	for i, o := range p.SeaLevel.Flood.Ocean {
+		if o {
+			water[i] = edges.Ocean
+		}
+	}
+	want, err := edges.Build(p.Mesh, p.Cells.Altitude, water, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := p.Edges.AppendBinary(nil)
+	b, _ := want.AppendBinary(nil)
+	if !bytes.Equal(a, b) {
+		t.Error("stage product differs from edges.Build")
+	}
+	if st := edges.Summarize(p.Mesh, want, water); st != *p.EdgeStats {
+		t.Error("stage statistics differ from edges.Summarize")
+	}
+	for _, name := range []string{"12-edges.png", "12-edges-passability.png", "12-edges-compass.png"} {
+		if _, err := os.Stat(filepath.Join(c.RendersDir, name)); err != nil {
+			t.Error(err)
+		}
+	}
+	for _, s := range []string{"edges: direction error over ", "reverse not opposite on ", "nearest-point labels would repeat", "|grade| % land-land: 0-1 ", "coast edges ("} {
 		if !strings.Contains(log.String(), s) {
 			t.Errorf("log lacks %q:\n%s", s, log.String())
 		}

@@ -157,7 +157,8 @@
 // front, for the per-cell renders of later stages; IceColor is the rim's
 // fill, and Mark paints a disc sized in cells (with a floor in pixels) on
 // such a render, wrapping across the seam, to mark points such as
-// volcanoes.
+// volcanoes; DrawEdges draws chosen edges on it in chosen colors, for the
+// per-edge renders.
 //
 // # Ids and graph
 //
