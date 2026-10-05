@@ -286,6 +286,8 @@ The geometry in `world.json`:
 - **Coastline polylines:** chains of coast edges, closed for islands and lakes.
 - **World metadata:** W, H, rim, wrap flag, province area, units, codebooks.
 
+v0 (S23) writes compact JSON with `schema: 0`; inclines are in permille (tenths of a percent), positions are rounded to 1e-6 km, and heights keep full precision. The default 10,000-land-cell world is about 55 MB (13 MB gzipped); trimming waits for the game's feedback. `mpg validate` checks the file's structural invariants.
+
 Rendering a player's map segment means selecting cells whose bounding boxes intersect the window (taken modulo W) and drawing each polygon by its geography and biome, then rivers and coasts. Rim cells are drawn as impassable ice instead. No raster is needed.
 
 ## Playability measures
@@ -374,6 +376,8 @@ internal/basin/       cell-graph basins, water balance, lakes
 internal/river/       corner drainage tree, river edges
 internal/classify/    landform, depth, surface, biome
 internal/measure/     playability measures and checks
+internal/edges/       half-edges, compass directions, coast, incline, passability
+internal/export/      products → world types; world.json writer
 internal/render/      stage renders, contact sheets
 world/                exported Go types for world.json (the schema)
 ```

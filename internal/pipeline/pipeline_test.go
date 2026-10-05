@@ -238,13 +238,13 @@ func TestConfigStage(t *testing.T) {
 		t.Errorf("config.json differs from the seed-42 example:\n%s", got)
 	}
 
-	// The full registry passes over the deferred stages and stops at the
-	// first unimplemented stage that is not deferred.
+	// The full registry passes over the deferred stages and runs to the
+	// end, through export.
 	res, err = Run(newTestContext(t, false), Stages(), -1)
-	if err != nil || res.NotImplemented == nil || res.NotImplemented.Name != "measures" {
-		t.Errorf("full run = %+v, %v; want a stop at measures", res, err)
+	if err != nil || res.NotImplemented != nil || res.Ran[len(res.Ran)-1].Name != "export" {
+		t.Errorf("full run = %+v, %v; want a run through export", res, err)
 	}
-	if want := []string{"climate", "basins", "land-target", "rivers"}; !slices.Equal(names(res.Skipped), want) {
+	if want := []string{"climate", "basins", "land-target", "rivers", "measures"}; !slices.Equal(names(res.Skipped), want) {
 		t.Errorf("full run skipped %q, want %q", names(res.Skipped), want)
 	}
 }

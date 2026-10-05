@@ -44,6 +44,7 @@ func Run(c *Context, stages []Stage, stopAfter int) (Result, error) {
 		if !st.Implemented() {
 			if st.Deferred {
 				res.Skipped = append(res.Skipped, st)
+				c.skipped = append(c.skipped, st)
 				continue
 			}
 			res.NotImplemented = &st

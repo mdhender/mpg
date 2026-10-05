@@ -34,7 +34,7 @@ var commands = []command{
 	{"generate", "generate a world from a config", runGenerate},
 	{"sweep", "build a contact sheet across seeds and stages", runSweep},
 	{"render-stage", "render one stage of a world", stub("render-stage")},
-	{"validate", "validate a generated world", stub("validate")},
+	{"validate", "validate a generated world.json", runValidate},
 	{"version", "print the version", runVersion},
 }
 

@@ -5,11 +5,13 @@ package main
 import (
 	"bytes"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/mdhender/mpg/internal/config"
 	"github.com/mdhender/mpg/internal/golden"
 	"github.com/mdhender/mpg/internal/pipeline"
+	"github.com/mdhender/mpg/world"
 )
 
 // TestGoldenElevation pins today's end-to-end output across architectures
@@ -380,6 +382,51 @@ func TestGoldenEdges(t *testing.T) {
 			h.Bytes(cfgBytes)
 			h.Write(enc)
 			golden.Check(t, "edges/"+tc.name, h.Sum(), tc.want)
+		})
+	}
+}
+
+// TestGoldenWorld pins the game data file across architectures (see
+// package golden for how to record a hash): the whole pipeline, through
+// stage 14, export, passing over the deferred stages. Each case hashes the
+// world.json bytes exactly as written (golden.Sum: SHA-256 of the file).
+// The file carries the config hash in its metadata, so the config is
+// covered too.
+func TestGoldenWorld(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		seed   config.Seed
+		aspect string
+		preset string
+		want   string
+	}{
+		{"seed42-cinematic", 42, "cinematic", "continents", "267b576435f785d5f023613798ee06be65b02eaf8f6f6ee15f20d42df38a91f5"},
+		{"seed7-square", 7, "square", "continents", "e03a9a7e42c8e6788715befe4654a16f7a2d11594db4ddd0c0efd5703d3a6d24"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "7ba422fd7cd15a036e14e57895373c3ffdf7d3e16ce474e01a713c4a89b84da0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := config.Default()
+			cfg.Seed = tc.seed
+			cfg.World.Aspect = tc.aspect
+			cfg.Layout.Preset = tc.preset
+			out := t.TempDir()
+			ctx, err := pipeline.NewContext(cfg, out, "", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			res, err := pipeline.Run(ctx, pipeline.Stages(), -1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.NotImplemented != nil {
+				t.Fatalf("run stopped at %s", res.NotImplemented)
+			}
+			b, err := os.ReadFile(filepath.Join(out, world.File))
+			if err != nil {
+				t.Fatal(err)
+			}
+			golden.Check(t, "world/"+tc.name, golden.Sum(b), tc.want)
 		})
 	}
 }

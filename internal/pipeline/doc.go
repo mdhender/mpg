@@ -10,7 +10,9 @@
 // implemented stages after it do not need it yet, so the runner passes over
 // it and lists it in Result.Skipped. Stages 7 to 10 (climate, basins, the
 // land-target check, rivers) are deferred, so classification (11) runs on
-// the sea level stage's land and water until they exist.
+// the sea level stage's land and water until they exist; so is stage 13
+// (measures), so a full run reaches export (14), which writes world.json
+// and records the stages passed over in its outcomes.
 //
 // A stage is a function of a *Context, which carries the resolved config
 // and its hash, the output and render directories, the stage seed helpers, a

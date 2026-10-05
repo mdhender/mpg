@@ -22,6 +22,7 @@ import (
 	"github.com/mdhender/mpg/internal/mesh"
 	"github.com/mdhender/mpg/internal/render"
 	"github.com/mdhender/mpg/internal/seed"
+	"github.com/mdhender/mpg/world"
 )
 
 // Context is the state shared by the stages of one run.
@@ -49,6 +50,8 @@ type Context struct {
 
 	// stage is the stage running now.
 	stage Stage
+	// skipped lists the deferred stages the run has passed over so far.
+	skipped []Stage
 }
 
 // Products holds the stage products. Each stage adds the fields it fills as
@@ -79,6 +82,10 @@ type Products struct {
 	// half-edges, and EdgeStats their statistics.
 	Edges     *edges.Data
 	EdgeStats *edges.Stats
+	// World is the export stage's world.json content, and WorldBytes the
+	// bytes it wrote.
+	World      *world.World
+	WorldBytes []byte
 }
 
 // NewContext resolves cfg and returns a context for a run writing to

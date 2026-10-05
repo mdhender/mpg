@@ -51,15 +51,18 @@ func TestGenerateSeed42(t *testing.T) {
 	if !bytes.Equal(got, want) {
 		t.Errorf("config.json differs from testdata/example.json:\n%s", got)
 	}
-	if !strings.Contains(stderr, "stopped: stage 13 measures not implemented yet") {
-		t.Errorf("stderr = %q, want a not-implemented stop", stderr)
+	if strings.Contains(stderr, "stopped") {
+		t.Errorf("stderr = %q, want a run to the end", stderr)
 	}
-	if !strings.Contains(stderr, "skipped climate, basins, land-target, rivers: not implemented yet") {
+	if !strings.Contains(stderr, "skipped climate, basins, land-target, rivers, measures: not implemented yet") {
 		t.Errorf("stderr = %q, want the deferred stages listed as skipped", stderr)
+	}
+	if code, vout, verr := validate(t, out); code != 0 {
+		t.Errorf("validate: exit %d, stdout %q, stderr %q", code, vout, verr)
 	}
 	cfg, _ := readConfig(t, out)
 	hash, _ := cfg.Hash()
-	for _, s := range []string{hash, "stages  config, layout, elevation, mesh, cells, sea-level, classify, edges\n", "33333 playable"} {
+	for _, s := range []string{hash, "stages  config, layout, elevation, mesh, cells, sea-level, classify, edges, export\n", "33333 playable"} {
 		if !strings.Contains(stdout, s) {
 			t.Errorf("stdout = %q, want it to contain %q", stdout, s)
 		}
