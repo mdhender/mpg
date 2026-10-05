@@ -163,7 +163,7 @@ func TestHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = "805f2cc704ea4c005fb4d9cae2be8f3b6c43b73946cc69bed3225372b289dc8c"
+	const want = "019f037b680eae2c70f53df7f5dfe288861c400972704a8320af0020e44f4a58"
 	if h != want {
 		t.Errorf("Hash = %s, want %s", h, want)
 	}
@@ -211,6 +211,7 @@ func TestDecodeErrors(t *testing.T) {
 		{"mesh area bounds", `{"schema":1,"mesh":{"area_min":0,"area_max":0.9}}`, `mesh.area_max 0.9 must be in [1, 10]`},
 		{"mesh lloyd", `{"schema":1,"mesh":{"lloyd_passes":-1}}`, `mesh.lloyd_passes -1 must be in [0, 10]`},
 		{"mesh min edge derived", `{"schema":1,"mesh":{"min_edge_km":2.7}}`, `mesh.min_edge_km is 2.7 but the inputs give`},
+		{"classify unknown field", `{"schema":1,"classify":{"hills_below":400}}`, `hills_below`},
 		{"unknown custom field", `{"schema":1,"layout":{"custom":{"attractors":[{"x_km":1,"radius_kn":5}]}}}`, `unknown field "layout.custom.attractors[0].radius_kn"; did you mean "layout.custom.attractors[0].radius_km"?`},
 	}
 	for _, tc := range cases {
@@ -315,6 +316,14 @@ func TestValidate(t *testing.T) {
 		{"basin depth NaN", func(c *Config) { c.Basin.MinDepthM = math.NaN() }, "basin.min_depth_m"},
 		{"inland sea 1", func(c *Config) { c.Basin.InlandSeaMinCells = 1 }, "basin.inland_sea_min_cells"},
 		{"river zero", func(c *Config) { c.River.ThresholdKm2 = 0 }, "river.threshold_km2"},
+		{"classify flats negative", func(c *Config) { c.Classify.FlatsBelowM = -1 }, "classify.flats_below_m"},
+		{"classify breaks decrease", func(c *Config) { c.Classify.HillsBelowM = 100 }, "classify.hills_below_m 100 must be in [150"},
+		{"classify plains NaN", func(c *Config) { c.Classify.PlainsBelowM = math.NaN() }, "classify.plains_below_m"},
+		{"classify plateau", func(c *Config) { c.Classify.PlateauMinAltitudeM = math.Inf(1) }, "classify.plateau_min_altitude_m"},
+		{"classify plateau relief", func(c *Config) { c.Classify.PlateauBelowM = -5 }, "classify.plateau_below_m"},
+		{"classify volcanic radius", func(c *Config) { c.Classify.VolcanicRadiusKm = -1 }, "classify.volcanic_radius_km"},
+		{"classify shallow", func(c *Config) { c.Classify.ShallowMaxCells = -1 }, "classify.shallow_max_cells"},
+		{"classify open below shallow", func(c *Config) { c.Classify.OpenMaxCells = 2 }, "classify.open_max_cells 2 must be in [shallow_max_cells 3"},
 		{"schema", func(c *Config) { c.Schema = 2 }, "schema 2 is not supported"},
 		{"preset", func(c *Config) { c.Layout.Preset = "isles" }, "layout.preset"},
 		{"pole margin", func(c *Config) { c.Layout.PoleMargin = -1 }, "layout.pole_margin"},

@@ -92,6 +92,16 @@
 // mesh.min_edge_km = mesh.min_edge_fraction × √A (derived), about 2.7 km at
 // the default 0.3. See package mesh.
 //
+// # Classify
+//
+// The classify group sets the landform and depth rules (DESIGN.md,
+// "Classification"): the relief breaks between flats, plains, rolling
+// plains, hills and mountains, which must not decrease; the plateau rule's
+// height above sea level and relief limit; the volcanic-highlands radius in
+// km; and the depth bands in cell steps. The names follow hmz2ter's rules,
+// and DefaultClassify records how the defaults were retuned from hmz2ter's.
+// See package classify.
+//
 // # Versioning
 //
 // The file carries "schema": 1. A file without a schema, or with another

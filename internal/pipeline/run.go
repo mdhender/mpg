@@ -11,6 +11,8 @@ import (
 type Result struct {
 	// Ran lists the stages that ran, in order.
 	Ran []Stage
+	// Skipped lists the deferred stages the run passed over, in order.
+	Skipped []Stage
 	// NotImplemented is the first unimplemented stage the run reached, if
 	// it stopped there.
 	NotImplemented *Stage
@@ -18,8 +20,10 @@ type Result struct {
 
 // Run creates the output and render directories and runs stages in order,
 // through the stage at index stopAfter (or all of them when stopAfter is
-// negative). It stops early, without error, at the first stage that is not
-// implemented, and returns at the first stage error.
+// negative). It passes over a deferred stage that is not implemented,
+// listing it in Result.Skipped, stops early, without error, at the first
+// other stage that is not implemented, and returns at the first stage
+// error.
 func Run(c *Context, stages []Stage, stopAfter int) (Result, error) {
 	var res Result
 	if stopAfter >= len(stages) {
@@ -38,6 +42,10 @@ func Run(c *Context, stages []Stage, stopAfter int) (Result, error) {
 	}
 	for _, st := range stages[:stopAfter+1] {
 		if !st.Implemented() {
+			if st.Deferred {
+				res.Skipped = append(res.Skipped, st)
+				continue
+			}
 			res.NotImplemented = &st
 			return res, nil
 		}

@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/mdhender/mpg/internal/cells"
+	"github.com/mdhender/mpg/internal/classify"
 	"github.com/mdhender/mpg/internal/config"
 	"github.com/mdhender/mpg/internal/elevation"
 	"github.com/mdhender/mpg/internal/field"
@@ -70,6 +71,9 @@ type Products struct {
 	// SeaLevel is the sea level stage's level, its land, ocean and dry
 	// basin cells, and the search's trace and outcome.
 	SeaLevel *cells.SeaLevel
+	// Classes is the classification stage's landforms, depth bands, and
+	// volcano flags.
+	Classes *classify.Result
 }
 
 // NewContext resolves cfg and returns a context for a run writing to

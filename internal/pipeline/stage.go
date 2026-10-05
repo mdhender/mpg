@@ -18,6 +18,11 @@ type Stage struct {
 	Name string
 	// Run runs the stage. It is nil while the stage is not implemented.
 	Run func(*Context) error
+	// Deferred marks a stage that is not implemented yet but that the
+	// implemented stages after it do not need: the runner passes over it
+	// (Result.Skipped) instead of stopping there. It has no effect on an
+	// implemented stage.
+	Deferred bool
 }
 
 // Implemented reports whether the stage has a Run function.
@@ -36,11 +41,14 @@ func Stages() []Stage {
 		{Number: 4, Name: "mesh", Run: runMesh},
 		{Number: 5, Name: "cells", Run: runCells},
 		{Number: 6, Name: "sea-level", Run: runSeaLevel},
-		{Number: 7, Name: "climate"},
-		{Number: 8, Name: "basins"},
-		{Number: 9, Name: "land-target"},
-		{Number: 10, Name: "rivers"},
-		{Number: 11, Name: "classify"},
+		// Stages 7 to 10 are deferred to milestones 5 to 7. Until then
+		// classification works on the sea level stage's land and water:
+		// no lakes, and dry basin floors are land.
+		{Number: 7, Name: "climate", Deferred: true},
+		{Number: 8, Name: "basins", Deferred: true},
+		{Number: 9, Name: "land-target", Deferred: true},
+		{Number: 10, Name: "rivers", Deferred: true},
+		{Number: 11, Name: "classify", Run: runClassify},
 		{Number: 12, Name: "edges"},
 		{Number: 13, Name: "measures"},
 		{Number: 14, Name: "export"},

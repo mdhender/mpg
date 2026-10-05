@@ -90,6 +90,13 @@ func runGenerate(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "world   %.1f x %.1f km, %d land of %d playable cells, aspect %s\n",
 		w.WidthKm, w.HeightKm, w.LandCells, w.PlayableCells, w.Aspect)
 	fmt.Fprintf(stdout, "stages  %s\n", strings.Join(names, ", "))
+	if len(res.Skipped) > 0 {
+		skipped := make([]string, len(res.Skipped))
+		for i, st := range res.Skipped {
+			skipped[i] = st.Name
+		}
+		fmt.Fprintf(stderr, "mpg generate: skipped %s: not implemented yet\n", strings.Join(skipped, ", "))
+	}
 	switch {
 	case res.NotImplemented != nil:
 		fmt.Fprintf(stderr, "mpg generate: stopped: stage %s not implemented yet\n", res.NotImplemented)

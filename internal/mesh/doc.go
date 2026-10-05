@@ -155,7 +155,9 @@
 // a sweep sheet shrinks them tenfold. CellRender, which AreaRender uses,
 // fills every cell with a caller's color under the same outlines and ice
 // front, for the per-cell renders of later stages; IceColor is the rim's
-// fill.
+// fill, and Mark paints a disc sized in cells (with a floor in pixels) on
+// such a render, wrapping across the seam, to mark points such as
+// volcanoes.
 //
 // # Ids and graph
 //

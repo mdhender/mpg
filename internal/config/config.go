@@ -39,6 +39,7 @@ type Config struct {
 	Mesh      Mesh      `json:"mesh"`
 	Basin     Basin     `json:"basin"`
 	River     River     `json:"river"`
+	Classify  Classify  `json:"classify"`
 }
 
 // Province sizes one province (one Voronoi cell) by the area of a wilderness
@@ -192,6 +193,7 @@ func Default() Config {
 		Mesh:      DefaultMesh(),
 		Basin:     Basin{MinDepthM: 50, InlandSeaMinCells: 20},
 		River:     River{ThresholdKm2: 500},
+		Classify:  DefaultClassify(),
 	}
 }
 
@@ -253,6 +255,7 @@ func (c *Config) Validate() error {
 	if v := c.River.ThresholdKm2; !positive(v) {
 		bad("river.threshold_km2 %v must be positive and finite", v)
 	}
+	c.Classify.validate(bad)
 	return errors.Join(errs...)
 }
 

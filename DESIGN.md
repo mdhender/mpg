@@ -242,10 +242,10 @@ This guarantees by construction:
 Use the hm* codebooks where they fit, so the engine and converter tools stay familiar.
 
 - **Landform (land), from relief and altitude:**
-  - `flats`, `plains`, `rolling-plains`, `hills`, `mountains`, `plateaus`, using `hmz2ter`'s relief thresholds as starting values. Retune them, because relief within an 81 km² cell of synthetic terrain will not match DEM relief.
-  - `volcanic-highlands`: a `plateaus` cell within `volcanic_radius_km` of a volcano (`hmz2ter`'s rule, default 25 km).
+  - `flats`, `plains`, `rolling-plains`, `hills`, `mountains`, `plateaus`, using `hmz2ter`'s relief thresholds as starting values. Retune them, because relief within an 81 km² cell of synthetic terrain will not match DEM relief. First retune (S21): relief breaks 35 / 65 / 150 / 450 m (flats / plains / rolling-plains / hills, mountains above), plateaus at altitude ≥ 500 m above sea level with relief < 150 m. Synthetic land keeps about 30 m of relief even when flat, so hmz2ter's 20 m gave almost no flats, and 350 m spread mountains down the flanks.
+  - `volcanic-highlands`: a `plateaus` cell within `volcanic_radius_km` of a volcano (`hmz2ter`'s rule, default 25 km). At 25 km this falls inside the cone and rarely fires; that is accepted as a possible, not forced outcome.
 - **Landform (water):** `salt-water` (ocean, inland sea) and `fresh-water` (lake). Salinity is a flag.
-- **Depth (salt water):** `shallow`, `open`, `deep`, from distance in cell steps to the nearest non-salt-water cell, as in `hmz2ter`. The bands are play rules, so they are retuned in cells.
+- **Depth (salt water):** `shallow`, `open`, `deep`, from distance in cell steps to the nearest non-salt-water cell, as in `hmz2ter`. The bands are play rules, so they are retuned in cells: shallow ≤ 3 steps, open ≤ 8, deep beyond (S21; `hmz2ter`'s 12 / 19 made over half the sea shallow). Rim cells are deep salt water and are not stepped through.
 - **Surface and biome:**
   - From temperature, precipitation and aridity, and wetness. The lookup table is versioned and uses `hmz2bio`'s vocabulary. Initial candidates: polar desert, tundra, boreal forest, temperate forest, temperate rainforest, grassland, steppe, desert, savanna, tropical seasonal forest, tropical rainforest, and alpine vegetation.
   - Glacier and ice field are **surfaces** on land cells. Permanent ice needs cold plus enough snowfall, so cold dry land can stay bare. Ice fields cover broad cold high ground; a glacier is permanent ice on a mountain cell, or reaching down from one. Neither is placed on purpose.

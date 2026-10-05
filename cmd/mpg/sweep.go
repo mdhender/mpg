@@ -38,7 +38,9 @@ const (
 // label shows the land count achieved against N (and UNMET when it misses
 // the 1% tolerance), and
 // each sea-level tile's caption the count against N, the deviation, and the
-// search's reason. Rows run one after another, so the sheet does not
+// search's reason. Each classify tile's caption gives the land landform
+// shares in percent (fl, pl, rp, hi, mt, pt, vh: flats to volcanic
+// highlands) and the volcanoes on land (v). Rows run one after another, so the sheet does not
 // depend on scheduling. Exit codes: 0 on success, 1 on a config error, an
 // unimplemented stage, or a run error, 2 on a usage error.
 func runSweep(args []string, stdout, stderr io.Writer) int {
@@ -199,6 +201,9 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 			if sl := ctx.Products.SeaLevel; sl != nil && registry[c.index].Name == "sea-level" {
 				tiles[k].Caption[1] = fmt.Sprintf("land %d/%d %+.2f%% %s", sl.LandCells, sl.Target, sl.DeviationPercent(), sl.Reason)
 			}
+			if cl := ctx.Products.Classes; cl != nil && registry[c.index].Name == "classify" {
+				tiles[k].Caption[1] = fmt.Sprintf("%s v%d", strings.Join(cl.LandShares(true), " "), cl.Volcanoes())
+			}
 		}
 		label := []string{fmt.Sprintf("seed %d", uint64(row.cfg.Seed)), w.Aspect, row.cfg.Layout.Preset, fmt.Sprintf("%d land", w.LandCells)}
 		if sl := ctx.Products.SeaLevel; sl != nil {
@@ -358,15 +363,18 @@ func parseSweepStages(s string, registry []pipeline.Stage) ([]sweepStage, error)
 }
 
 // checkImplemented returns the registry index of the last pipeline stage the
-// columns need, or an error when it or any stage before it is not
-// implemented yet.
+// columns need, or an error when a column's stage is not implemented yet,
+// or a stage before the last is neither implemented nor deferred.
 func checkImplemented(cols []sweepStage, registry []pipeline.Stage) (int, error) {
 	last := -1
 	for _, c := range cols {
 		last = max(last, c.index)
+		if st := registry[c.index]; !st.Implemented() {
+			return -1, fmt.Errorf("stage %s is not implemented yet", st)
+		}
 	}
 	for _, st := range registry[:last+1] {
-		if !st.Implemented() {
+		if !st.Implemented() && !st.Deferred {
 			return -1, fmt.Errorf("stage %s is not implemented yet; sweep cannot run through stage %s", st, registry[last])
 		}
 	}

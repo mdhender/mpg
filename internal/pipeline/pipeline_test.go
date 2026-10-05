@@ -14,12 +14,14 @@ import (
 	"testing"
 
 	"github.com/mdhender/mpg/internal/cells"
+	"github.com/mdhender/mpg/internal/classify"
 	"github.com/mdhender/mpg/internal/config"
 	"github.com/mdhender/mpg/internal/elevation"
 	"github.com/mdhender/mpg/internal/layout"
 	"github.com/mdhender/mpg/internal/mesh"
 	"github.com/mdhender/mpg/internal/render"
 	"github.com/mdhender/mpg/internal/seed"
+	"github.com/mdhender/mpg/internal/topo"
 )
 
 func TestStagesTable(t *testing.T) {
@@ -66,7 +68,8 @@ func fake(ran *[]string) []Stage {
 		return nil
 	}
 	return []Stage{
-		{1, "a", rec}, {2, "b", rec}, {3, "c", rec}, {4, "d", nil}, {5, "e", rec},
+		{Number: 1, Name: "a", Run: rec}, {Number: 2, Name: "b", Run: rec}, {Number: 3, Name: "c", Run: rec},
+		{Number: 4, Name: "d"}, {Number: 5, Name: "e", Run: rec},
 	}
 }
 
@@ -129,6 +132,31 @@ func TestRunOrderAndStops(t *testing.T) {
 	}
 	if _, err := Run(newTestContext(t, false), fake(new([]string)), 5); err == nil {
 		t.Error("Run with stopAfter past the end succeeded")
+	}
+}
+
+// TestRunDeferred checks that the runner passes over a deferred stage that
+// is not implemented, lists it, and still stops at the next unimplemented
+// stage that is not deferred; Deferred does not stop an implemented stage
+// from running.
+func TestRunDeferred(t *testing.T) {
+	var ran []string
+	stages := fake(&ran)
+	stages[3].Deferred = true                                       // d
+	stages = append(stages, Stage{Number: 6, Name: "f"}, stages[4]) // f stops; e again never runs
+	stages[1].Deferred = true                                       // b is implemented: it runs
+	res, err := Run(newTestContext(t, false), stages, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"a", "b", "c", "e"}; !slices.Equal(ran, want) || !slices.Equal(names(res.Ran), want) {
+		t.Errorf("ran %q, Ran %q, want %q", ran, names(res.Ran), want)
+	}
+	if !slices.Equal(names(res.Skipped), []string{"d"}) {
+		t.Errorf("Skipped = %q, want [d]", names(res.Skipped))
+	}
+	if res.NotImplemented == nil || res.NotImplemented.Name != "f" {
+		t.Errorf("NotImplemented = %v, want f", res.NotImplemented)
 	}
 }
 
@@ -209,10 +237,14 @@ func TestConfigStage(t *testing.T) {
 		t.Errorf("config.json differs from the seed-42 example:\n%s", got)
 	}
 
-	// The full registry stops at the first unimplemented stage.
+	// The full registry passes over the deferred stages and stops at the
+	// first unimplemented stage that is not deferred.
 	res, err = Run(newTestContext(t, false), Stages(), -1)
-	if err != nil || res.NotImplemented == nil || res.NotImplemented.Name != "climate" {
-		t.Errorf("full run = %+v, %v; want a stop at climate", res, err)
+	if err != nil || res.NotImplemented == nil || res.NotImplemented.Name != "edges" {
+		t.Errorf("full run = %+v, %v; want a stop at edges", res, err)
+	}
+	if want := []string{"climate", "basins", "land-target", "rivers"}; !slices.Equal(names(res.Skipped), want) {
+		t.Errorf("full run skipped %q, want %q", names(res.Skipped), want)
 	}
 }
 
@@ -493,6 +525,52 @@ func TestSeaLevelStage(t *testing.T) {
 // (smaller ones with -short) for seeds 1 to 8 at the cinematic and square
 // aspects, and archipelago and pangaea at cinematic: every one meets the
 // land target within 1% of N.
+// TestClassifyStage runs the pipeline through classification, past the
+// deferred stages, and checks the product against classify.Classify, the
+// render, and the log.
+func TestClassifyStage(t *testing.T) {
+	c := newTestContext(t, true)
+	var log bytes.Buffer
+	c.Log = &log
+	last, err := Lookup(Stages(), "classify")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := Run(c, Stages(), last)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "classify"}) ||
+		!slices.Equal(names(res.Skipped), []string{"climate", "basins", "land-target", "rivers"}) || res.NotImplemented != nil {
+		t.Errorf("ran %q, skipped %q, stopped at %v", names(res.Ran), names(res.Skipped), res.NotImplemented)
+	}
+	p := c.Products
+	if p.Classes == nil {
+		t.Fatal("classify stage left its product empty")
+	}
+	peaks := make([]topo.Point, len(p.Hotspots))
+	for k, h := range p.Hotspots {
+		peaks[k] = h.Point()
+	}
+	want, err := classify.Classify(p.Mesh, p.Cells.Altitude, p.Cells.Relief, &p.SeaLevel.Flood, peaks, classify.RulesOf(c.Config))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := p.Classes.AppendBinary(nil)
+	b, _ := want.AppendBinary(nil)
+	if !bytes.Equal(a, b) {
+		t.Error("stage product differs from classify.Classify")
+	}
+	if _, err := os.Stat(filepath.Join(c.RendersDir, "11-classify.png")); err != nil {
+		t.Error(err)
+	}
+	for _, s := range []string{"classify: land: flats ", "mountains ", "classify: salt water: shallow ", "volcanoes on land"} {
+		if !strings.Contains(log.String(), s) {
+			t.Errorf("log lacks %q:\n%s", s, log.String())
+		}
+	}
+}
+
 func TestSeaLevelMeetsTarget(t *testing.T) {
 	type row struct {
 		aspect, preset string

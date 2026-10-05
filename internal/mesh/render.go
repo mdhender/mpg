@@ -287,6 +287,15 @@ func CellRender(f *field.Field, m *Mesh, fill func(cell int) color.RGBA) *image.
 	return img
 }
 
+// Mark paints a disc on img, a render at StageRender's size over f (as
+// CellRender returns), centered at p: radius cells mean cell sides across,
+// but at least minPx pixels, in ink, drawn again across the seam where it
+// overhangs an edge. Later stages use it to mark points such as volcanoes.
+func Mark(img *image.RGBA, f *field.Field, m *Mesh, p topo.Point, radius, minPx float64, ink color.RGBA) {
+	cv, _ := newCanvas(f, m)
+	cv.disc(img, p, max(minPx, fmath.Mul(radius, cv.cellPx())), ink)
+}
+
 // IceColor is the fill of the polar ice sheet in the mesh renders, for
 // later stages that draw rim cells as ice with CellRender.
 var IceColor = iceFill

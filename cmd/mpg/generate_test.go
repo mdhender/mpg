@@ -51,12 +51,15 @@ func TestGenerateSeed42(t *testing.T) {
 	if !bytes.Equal(got, want) {
 		t.Errorf("config.json differs from testdata/example.json:\n%s", got)
 	}
-	if !strings.Contains(stderr, "stopped: stage 7 climate not implemented yet") {
+	if !strings.Contains(stderr, "stopped: stage 12 edges not implemented yet") {
 		t.Errorf("stderr = %q, want a not-implemented stop", stderr)
+	}
+	if !strings.Contains(stderr, "skipped climate, basins, land-target, rivers: not implemented yet") {
+		t.Errorf("stderr = %q, want the deferred stages listed as skipped", stderr)
 	}
 	cfg, _ := readConfig(t, out)
 	hash, _ := cfg.Hash()
-	for _, s := range []string{hash, "stages  config, layout, elevation, mesh, cells, sea-level\n", "33333 playable"} {
+	for _, s := range []string{hash, "stages  config, layout, elevation, mesh, cells, sea-level, classify\n", "33333 playable"} {
 		if !strings.Contains(stdout, s) {
 			t.Errorf("stdout = %q, want it to contain %q", stdout, s)
 		}
@@ -190,10 +193,12 @@ func TestGenerateStopAfter(t *testing.T) {
 		readConfig(t, out)
 	}
 
-	// Stopping after a later stage still stops at the first unimplemented one.
-	code, _, stderr := generate(t, "--stop-after", "basins", "--output", t.TempDir())
-	if code != 0 || !strings.Contains(stderr, "stage 7 climate not implemented yet") {
-		t.Errorf("--stop-after basins: exit %d, stderr %q", code, stderr)
+	// Stopping after a deferred stage passes over the deferred stages up
+	// to it.
+	code, stdout, stderr := generate(t, "--stop-after", "basins", "--output", t.TempDir())
+	if code != 0 || !strings.Contains(stderr, "skipped climate, basins: not implemented yet") ||
+		!strings.Contains(stderr, "stopped after stage 8 basins") || !strings.Contains(stdout, "stages  config, layout, elevation, mesh, cells, sea-level\n") {
+		t.Errorf("--stop-after basins: exit %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
 }
 
@@ -233,7 +238,7 @@ func TestGenerateRendersDir(t *testing.T) {
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	if !slices.Equal(names, []string{"02-layout.png", "03-elevation.png", "04-mesh-area.png", "04-mesh-short.png", "04-mesh.png", "05-cells-relief.png", "05-cells.png", "06-sea-level.png"}) {
-		t.Errorf("renders = %q, want the layout, elevation, mesh area, mesh short-edge, mesh, cell relief, cell altitude and sea level renders", names)
+	if !slices.Equal(names, []string{"02-layout.png", "03-elevation.png", "04-mesh-area.png", "04-mesh-short.png", "04-mesh.png", "05-cells-relief.png", "05-cells.png", "06-sea-level.png", "11-classify.png"}) {
+		t.Errorf("renders = %q, want the layout, elevation, mesh area, mesh short-edge, mesh, cell relief, cell altitude, sea level and landform renders", names)
 	}
 }

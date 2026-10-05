@@ -176,5 +176,16 @@
   },
   "river": {
     "threshold_km2": 500
+  },
+  "classify": {
+    "flats_below_m": 35,
+    "plains_below_m": 65,
+    "rolling_plains_below_m": 150,
+    "hills_below_m": 450,
+    "plateau_min_altitude_m": 500,
+    "plateau_below_m": 150,
+    "volcanic_radius_km": 25,
+    "shallow_max_cells": 3,
+    "open_max_cells": 8
   }
 }

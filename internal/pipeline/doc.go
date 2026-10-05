@@ -6,6 +6,11 @@
 // DESIGN.md ("Pipeline"); Stages returns them. A stage whose Run is nil is
 // registered but not implemented yet: the runner stops cleanly when it
 // reaches one, so a partly built pipeline still produces its early outputs.
+// A stage marked Deferred is the exception: it is not implemented, but the
+// implemented stages after it do not need it yet, so the runner passes over
+// it and lists it in Result.Skipped. Stages 7 to 10 (climate, basins, the
+// land-target check, rivers) are deferred, so classification (11) runs on
+// the sea level stage's land and water until they exist.
 //
 // A stage is a function of a *Context, which carries the resolved config
 // and its hash, the output and render directories, the stage seed helpers, a
