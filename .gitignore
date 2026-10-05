@@ -8,3 +8,6 @@ NEXT-MILESTONE-PROMPT.md
 # build artifacts
 /mpg
 /tmp/
+
+# generated worlds handed to the game
+/var/

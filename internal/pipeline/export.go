@@ -36,6 +36,7 @@ func runExport(c *Context) error {
 		DatumLandShare:   p.PrePass.LandShare,
 		Classes:          p.Classes,
 		Edges:            p.Edges,
+		Network:          p.Network,
 		Deferred:         deferred,
 	})
 	if err != nil {
@@ -51,8 +52,8 @@ func runExport(c *Context) error {
 	if err := os.WriteFile(filepath.Join(c.OutputDir, world.File), b, 0o644); err != nil {
 		return fmt.Errorf("pipeline: %w", err)
 	}
-	c.Logf("%s: %d bytes; %d cells, %d corners, %d edges, %d coastlines (%d closed)",
-		world.File, len(b), len(w.Cells), len(w.Corners), len(w.Edges), len(w.Coastlines), closed(w.Coastlines))
+	c.Logf("%s: %d bytes; %d cells, %d corners, %d edges, %d coastlines (%d closed), %d rivers",
+		world.File, len(b), len(w.Cells), len(w.Corners), len(w.Edges), len(w.Coastlines), closed(w.Coastlines), len(w.Rivers))
 	p.World = w
 	p.WorldBytes = b
 	img, _, err := playermap.RenderFull(w, playermap.DefaultScale)

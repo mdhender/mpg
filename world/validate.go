@@ -111,7 +111,13 @@ func (e *Invalid) Error() string {
 //     connected corner to corner with land on its right; closed exactly
 //     when it returns to its first corner, then starting at its lowest
 //     edge id; chains ordered by first edge id;
-//   - rivers: chains of land–land edges whose classes match the edges';
+//   - rivers: chains of land–land edges whose classes match the edges',
+//     corner to corner with no corner twice, classes never falling
+//     downstream, ordered by first edge id; every edge with a river class
+//     on exactly one chain, and none with a corner touching a rim cell;
+//     the mouth flag exactly on the corners where a chain ends and no
+//     chain continues (a chain ends at a mouth or at a confluence, a
+//     corner inside another chain);
 //   - outcomes: the playable, land, ocean, dry basin, lake and inland-sea
 //     cell counts match the cells; ocean cells lie at or below the sea
 //     level and dry basin floors are the land at or below it; the lake,
@@ -761,17 +767,49 @@ func (v *validator) coastlines() {
 
 func (v *validator) rivers() {
 	w := v.w
+	nk := len(w.Corners)
+	onPath := make([]int, len(w.Edges)) // polylines holding each edge
+	ends := make([]bool, nk)            // the last corner of some polyline
+	within := make([]bool, nk)          // a corner of some polyline before its last
+	lastFirst := -1
 	for i, r := range w.Rivers {
 		n := len(r.Edges)
 		if n == 0 || len(r.Corners) != n+1 || len(r.Classes) != n {
 			v.bad("river %d: %d edges, %d corners, %d classes", i, n, len(r.Corners), len(r.Classes))
 			continue
 		}
+		if r.Edges[0] <= lastFirst {
+			v.bad("river %d: first edge %d, not after the previous river's %d", i, r.Edges[0], lastFirst)
+		}
+		lastFirst = r.Edges[0]
+		ok := true
+		for _, k := range r.Corners {
+			if k < 0 || k >= nk {
+				v.bad("river %d: corner %d out of range", i, k)
+				ok = false
+			}
+		}
+		if !ok {
+			continue
+		}
+		seen := map[int]bool{}
+		for k, c := range r.Corners {
+			if seen[c] {
+				v.bad("river %d: corner %d twice", i, c)
+			}
+			seen[c] = true
+			if k < n {
+				within[c] = true
+			}
+		}
+		ends[r.Corners[n]] = true
+		prev := -1
 		for k, e := range r.Edges {
 			if e < 0 || e >= len(w.Edges) {
 				v.bad("river %d: edge %d out of range", i, e)
 				continue
 			}
+			onPath[e]++
 			ed := &w.Edges[e]
 			if ed.River == RiverNone || ed.River != r.Classes[k] {
 				v.bad("river %d: edge %d class %q, river says %q", i, e, ed.River, r.Classes[k])
@@ -779,6 +817,32 @@ func (v *validator) rivers() {
 			if c := [2]int{r.Corners[k], r.Corners[k+1]}; c != ed.Corners && c != [2]int{ed.Corners[1], ed.Corners[0]} {
 				v.bad("river %d: edge %d joins corners %v, not %v", i, e, ed.Corners, c)
 			}
+			x := slices.Index(RiverClasses, r.Classes[k])
+			if x < prev {
+				v.bad("river %d: class falls from %q to %q at edge %d", i, RiverClasses[prev], r.Classes[k], e)
+			}
+			prev = max(prev, x)
+		}
+	}
+	for e := range w.Edges {
+		ed := &w.Edges[e]
+		if ed.River != RiverNone && onPath[e] != 1 {
+			v.bad("edge %d: river %q on %d river polylines, want 1", e, ed.River, onPath[e])
+		}
+		if ed.River == RiverNone {
+			continue
+		}
+		for _, k := range ed.Corners {
+			for _, c := range w.Corners[k].Cells {
+				if w.Cells[c].HasFlag(FlagRim) {
+					v.bad("edge %d: river %q beside rim cell %d", e, ed.River, c)
+				}
+			}
+		}
+	}
+	for k := range w.Corners {
+		if mouth := ends[k] && !within[k]; mouth != w.Corners[k].HasFlag(FlagMouth) {
+			v.bad("corner %d: mouth flag %v, but rivers end there %v and continue %v", k, !mouth, ends[k], within[k])
 		}
 	}
 }

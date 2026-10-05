@@ -47,7 +47,7 @@
 //     a dry basin, is land with the playa flag.
 //   - A Corner has its position, height (the mean altitude of the 3–4 cells
 //     that meet there, as DESIGN.md's rivers define it), flags (boundary,
-//     terminal, sink for a playa's dry sink, and later mouth), and its
+//     terminal, mouth where a river ends, and sink for a playa's dry sink), and its
 //     cells and edges.
 //   - An Edge has its two cells (Cells[1] = Boundary, −1, on the map's
 //     north or south edge), its corners in Cells[0]'s clockwise order,
@@ -55,7 +55,8 @@
 //     class, and the incline from Cells[0] to Cells[1].
 //   - A Coastline is a chain of coast edges walked with land on the right:
 //     clockwise around islands, counterclockwise around enclosed water.
-//   - Rivers are river polylines; none until milestone 7.
+//   - Rivers are river polylines from source to mouth or confluence, split
+//     by main stem, each edge with its class.
 //   - Outcomes hold the sea level, the land (after lakes), ocean, dry
 //     basin, lake and inland-sea cell counts, the lake, inland-sea, salt
 //     and playa counts, the target and tolerance, whether it was met and
@@ -82,9 +83,9 @@
 //
 // Version 0 is the first playable export (milestone 4); lakes, inland
 // seas, the salt and playa cell flags, the sink corner flag and the lake
-// outcomes came with milestone 6 (S29). Surface and biome come with
-// milestone 8, and rivers (edge classes, river polylines, corner mouths)
-// with milestone 7; the codebooks already list the values. The schema is frozen as version 1 in milestone 9; until
+// outcomes came with milestone 6 (S29), and rivers (edge classes, river
+// polylines, corner mouths) with milestone 7 (S31). Surface and biome come
+// with milestone 8; the codebooks already list the values. The schema is frozen as version 1 in milestone 9; until
 // then it may change without migration.
 //
 // # Determinism

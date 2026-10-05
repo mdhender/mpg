@@ -29,7 +29,7 @@
 //     Biomes come in milestone 8.
 //  2. The borders between land cells, a pixel wide, blended faintly.
 //  3. The ice front, the edges between the rim and playable cells.
-//  4. Rivers by class (none until milestone 7), then the coastlines
+//  4. Rivers by class (1/12, 1/8 and 1/5 of a cell wide), then the coastlines
 //     (world.Coastlines, edge by edge).
 //  5. Each volcano cell's site, as a black disc in a white ring.
 //

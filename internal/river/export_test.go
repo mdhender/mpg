@@ -2,5 +2,9 @@
 
 package river
 
-// CheckTree exports checkTree to the external tests.
-var CheckTree = checkTree
+// CheckTree and CheckNetwork export checkTree and checkNetwork to the
+// external tests.
+var (
+	CheckTree    = checkTree
+	CheckNetwork = checkNetwork
+)

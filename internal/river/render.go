@@ -7,16 +7,19 @@ import (
 	"image/color"
 
 	"github.com/mdhender/mpg/internal/basin"
+	"github.com/mdhender/mpg/internal/edges"
 	"github.com/mdhender/mpg/internal/field"
 	"github.com/mdhender/mpg/internal/mesh"
 )
 
-// The renders' inks: tree edges in TreeInk, edges across a flat or climbing
+// The renders' inks: rivers in RiverInk, darker than any water fill; tree
+// edges in TreeInk, edges across a flat or climbing
 // out of a pit in FlatInk, lake outlets in OutletInk and dry sinks in
 // basin.SinkInk, each in a white ring; land cells that drain to the sea in
 // the catchments render in SeaCatchColor, cells whose destination differs
 // from the cell-level model's dotted in DifferInk.
 var (
+	RiverInk      = color.RGBA{0x0b, 0x24, 0x5e, 0xff}
 	TreeInk       = color.RGBA{0x1e, 0x6b, 0x2a, 0xff}
 	FlatInk       = color.RGBA{0xd0, 0x10, 0x10, 0xff}
 	OutletInk     = color.RGBA{0xff, 0x80, 0x00, 0xff}
@@ -33,14 +36,12 @@ func lakeFill(in Input, t *Tree, c int) color.RGBA {
 	return basin.FreshLakeColor
 }
 
-// Render is the stage render: land by basin.LandRamp at its altitude above
-// level, closed lakes in basin.SaltLakeColor and draining ones in
-// basin.FreshLakeColor, the sea in basin.OceanColor and the rim as ice,
-// with every tree edge drawn (in FlatInk where it crosses a flat or climbs
-// out of a pit), each lake outlet and dry sink marked.
-func Render(f *field.Field, in Input, t *Tree, level float64) *image.RGBA {
+// base draws land by basin.LandRamp at its altitude above level, closed
+// lakes in basin.SaltLakeColor and draining ones in basin.FreshLakeColor,
+// the sea in basin.OceanColor and the rim as ice.
+func base(f *field.Field, in Input, t *Tree, level float64) *image.RGBA {
 	m := in.Mesh
-	img := mesh.CellRender(f, m, func(c int) color.RGBA {
+	return mesh.CellRender(f, m, func(c int) color.RGBA {
 		switch {
 		case m.Cells[c].Rim:
 			return mesh.IceColor
@@ -51,6 +52,39 @@ func Render(f *field.Field, in Input, t *Tree, level float64) *image.RGBA {
 		}
 		return basin.OceanColor
 	})
+}
+
+// RiverWidths returns the line widths, in pixels, of the stream, river and
+// major-river classes in a stage render over f: about a twentieth, a
+// tenth and a fifth of a cell at the renders' usual scale, and never
+// thinner than 1, 1.75 and 3 pixels.
+func RiverWidths(f *field.Field, m *mesh.Mesh) [3]float64 {
+	s := float64(mesh.RenderScale(f, m))
+	return [3]float64{max(1, s*0.5), max(1.75, s), max(3, s*1.75)}
+}
+
+// Render is the stage render: the river edges over the base (land by
+// altitude above level, lakes, sea and ice), in RiverInk, widths by class
+// (RiverWidths), with each lake outlet and dry sink marked.
+func Render(f *field.Field, in Input, t *Tree, n *Network, level float64) *image.RGBA {
+	m := in.Mesh
+	img := base(f, in, t, level)
+	w := RiverWidths(f, m)
+	for i, cl := range []edges.RiverClass{edges.Stream, edges.River, edges.MajorRiver} {
+		mesh.DrawEdges(img, f, m, w[i], func(e int) (color.RGBA, bool) {
+			return RiverInk, n.Class[e] == cl
+		})
+	}
+	marks(img, f, in, t)
+	return img
+}
+
+// TreeRender is the "tree" variant: the base as in Render, with every tree
+// edge drawn (in FlatInk where it crosses a flat or climbs out of a pit),
+// each lake outlet and dry sink marked.
+func TreeRender(f *field.Field, in Input, t *Tree, level float64) *image.RGBA {
+	m := in.Mesh
+	img := base(f, in, t, level)
 	from := make([]int, len(m.Edges))
 	for e := range from {
 		from[e] = None

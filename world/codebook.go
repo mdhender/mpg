@@ -143,8 +143,8 @@ const (
 	// edges"): a shore corner, one that touches both a land cell and a
 	// water or rim cell, or a dry sink (FlagSink).
 	FlagTerminal CornerFlag = "terminal"
-	// FlagMouth marks a terminal corner where a river ends (from
-	// milestone 7).
+	// FlagMouth marks a terminal corner where a river ends: the last
+	// corner of a river polyline that no polyline continues through.
 	FlagMouth CornerFlag = "mouth"
 	// FlagSink marks a dry sink: the lowest corner (by height, ties to the
 	// lower id) of a playa cell, where rivers draining into a dry basin

@@ -350,7 +350,9 @@
     "salt_evap_share": 0.5
   },
   "river": {
-    "threshold_km2": 500
+    "threshold_km2": 500,
+    "river_km2": 2000,
+    "major_river_km2": 10000
   },
   "classify": {
     "flats_below_m": 35,

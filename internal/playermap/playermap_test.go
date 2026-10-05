@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sync"
 	"testing"
 
@@ -222,6 +223,72 @@ func TestCoastline(t *testing.T) {
 				t.Errorf("land cell %d site pixel = %v, want %v", i, got, want)
 			}
 		}
+	}
+}
+
+// TestRivers checks that the player map draws the rivers: away from water
+// and volcanoes, every river edge's midpoint is river ink, wider by class;
+// with the rivers removed, no pixel is.
+func TestRivers(t *testing.T) {
+	w := loadWorld(t)
+	if len(w.Rivers) == 0 {
+		t.Fatal("world has no rivers")
+	}
+	img, l := full(t, w, 2)
+	checked := 0
+	for _, r := range w.Rivers {
+		for _, e := range r.Edges {
+			ed := &w.Edges[e]
+			if w.Cells[ed.Cells[0]].HasFlag(world.FlagVolcano) || w.Cells[ed.Cells[1]].HasFlag(world.FlagVolcano) ||
+				w.Corners[ed.Corners[0]].HasFlag(world.FlagTerminal) || w.Corners[ed.Corners[1]].HasFlag(world.FlagTerminal) {
+				continue
+			}
+			a, b := w.Corners[ed.Corners[0]].Point, w.Corners[ed.Corners[1]].Point
+			dx := b.X - a.X
+			if dx > w.Meta.WidthKm/2 {
+				dx -= w.Meta.WidthKm
+			} else if dx < -w.Meta.WidthKm/2 {
+				dx += w.Meta.WidthKm
+			}
+			mx := fmath.FloorModFloat(a.X+dx/2, w.Meta.WidthKm)
+			my := (a.Y + b.Y) / 2
+			x := fmath.FloorMod(int(fmath.Mul(mx, l.SX)), l.Width)
+			y := int(fmath.Mul(my, l.SY))
+			if got := img.RGBAAt(x, y); got != playermap.RiverColor {
+				t.Errorf("river edge %d midpoint pixel (%d, %d) = %v, want river ink", e, x, y, got)
+			}
+			checked++
+		}
+	}
+	if checked == 0 {
+		t.Error("no river edge checked")
+	}
+	count := func(img *image.RGBA) int {
+		n := 0
+		for i := 0; i < len(img.Pix); i += 4 {
+			if img.Pix[i] == playermap.RiverColor.R && img.Pix[i+1] == playermap.RiverColor.G && img.Pix[i+2] == playermap.RiverColor.B {
+				n++
+			}
+		}
+		return n
+	}
+	bare := *w
+	bare.Rivers = nil
+	if img, _ := full(t, &bare, 2); count(img) != 0 {
+		t.Error("river ink without rivers")
+	}
+	// The same rivers drawn as major rivers cover more than as streams.
+	as := func(c world.RiverClass) int {
+		v := *w
+		v.Rivers = make([]world.RiverPath, len(w.Rivers))
+		for i, r := range w.Rivers {
+			v.Rivers[i] = world.RiverPath{Edges: r.Edges, Corners: r.Corners, Classes: slices.Repeat([]world.RiverClass{c}, len(r.Edges))}
+		}
+		img, _ := full(t, &v, 2)
+		return count(img)
+	}
+	if s, r, m := as(world.Stream), as(world.River), as(world.MajorRiver); !(s < r && r < m) {
+		t.Errorf("river ink by class: stream %d, river %d, major %d; want increasing", s, r, m)
 	}
 }
 

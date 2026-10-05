@@ -15,12 +15,12 @@ import (
 // passability counts), and renders the land–land inclines, as variant
 // "passability" the impassable and coast edges, and as variant "compass" a
 // zoomed crop of the compass directions. The water is the land-target
-// stage's (Water): the ocean, the lakes and the inland seas. There are no
-// river classes on the edges until the river stage selects them (S31).
+// stage's (Water): the ocean, the lakes and the inland seas; the river
+// classes are the river stage's (Network.Class).
 func runEdges(c *Context) error {
 	m, s := c.Products.Mesh, c.Products.Cells
 	water := Water(m, c.Products.Target)
-	d, err := edges.Build(m, s.Altitude, water, nil)
+	d, err := edges.Build(m, s.Altitude, water, c.Products.Network.Class)
 	if err != nil {
 		return err
 	}

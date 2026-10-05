@@ -1,10 +1,11 @@
 // Copyright (c) 2026 Michael D Henderson. All rights reserved.
 
-// Package river builds the corner drainage tree (DESIGN.md, "Rivers on
-// edges"; pipeline stage 10). Rivers run along Voronoi edges, corner to
-// corner, never through a cell; the tree says, for every land corner, which
-// corner its water runs to next. River classes and polylines (S31) are
-// built on it.
+// Package river builds the corner drainage tree and the river network on it
+// (DESIGN.md, "Rivers on edges"; pipeline stage 10). Rivers run along
+// Voronoi edges, corner to corner, never through a cell; the tree says, for
+// every land corner, which corner its water runs to next, and Accumulate
+// sends each land cell's runoff down it to select the river edges, class
+// them, and split them into polylines.
 //
 // # Corners and terminals
 //
@@ -99,12 +100,65 @@
 // much area, end elsewhere (Tree.Agreement): on the worlds measured, 1.4–
 // 5.9% immediately and 0.3–8% finally, near ridges and basin rims.
 //
+// # Accumulation
+//
+// Accumulate (S31) sends each land cell's area (km²) and runoff (area ×
+// the final climate pass's runoff depth, in mm·km² per year) to its lowest
+// corner, and accumulates both down the tree in reverse flood order, so
+// every corner sees the corners upstream of it first. A corner's Drainage
+// and Volume are everything that reaches it; a tree edge carries those of
+// its upstream corner (Network.Up), the water flowing through it.
+//
+// Lakes. The drainage reaching a lake's shore corners, the lake's own
+// cells' area, and the drainage of the lakes draining straight into it
+// (DirectLake) make the lake's drainage (Network.LakeDrainage). A lake with
+// an outlet passes it on there, and the outlet's volume gains the water
+// balance's Overflow, the authority on what leaves the lake (the tree's own
+// inflow can differ, being from the final climate pass where the balance
+// used the first). A closed lake, or one draining straight to the sea,
+// ends its drainage. In reverse flood order every shore corner of a lake
+// comes before its outlet, and a lake draining straight into another
+// before that one's outlet, so each lake is complete when passed on;
+// Accumulate checks it.
+//
+// Discharge in m³/s is the volume × 1000 / 31,557,600 (a Julian year).
+//
+// # River classes
+//
+// A tree edge is a river when its drainage is at least Params.ThresholdKm2
+// (config river.threshold_km2, 500 km²); it is a stream from there, a
+// river from RiverKm2 (2,000) and a major river from MajorRiverKm2
+// (10,000). Drainage never falls downstream, so neither does the class.
+// The classes go on the edges (edges.Build); drainage and discharge stay
+// internal, for the logs, measures and debugging.
+//
+// # Polylines and mouths
+//
+// The river edges are split by main stem into polylines (Network.Paths),
+// listed downstream from their source and ordered by first edge id. At a
+// corner the main inflow is the river edge into it with the largest
+// drainage, ties to the lower upstream corner id; at a lake's outlet the
+// lake is an inflow too, with the drainage it passes on, and wins a tie. A
+// polyline starts at a corner with no main river inflow (a source, or an
+// outlet whose lake is its main inflow) and runs down the tree to a
+// terminal, its mouth, or to a corner where it is not the main inflow, a
+// confluence, where the main stem continues. Each river edge lies on
+// exactly one polyline. Network.Mouth marks the corners where a polyline
+// ends at a terminal: on the sea, a lake shore, or a dry sink.
+//
+// NetworkStats reports the class counts, the density (river edges per land
+// cell, km per 1,000 km² of land, the share of land cells touching a
+// river), the polylines and how they end, the mouths, the longest river,
+// and the seam crossings.
+//
 // # Renders
 //
-// Render, the stage render, draws every tree edge over the land (by
+// Render, the stage render, draws the river edges in RiverInk, a dark blue
+// no water fill uses, wider by class (RiverWidths), over the land (by
 // altitude), lakes (closed ones salt-green, draining ones blue), sea and
-// ice, in FlatInk where the step is flat or climbs out of a pit, with lake
-// outlets and dry sinks marked. CatchmentRender, variant "catchments",
+// ice, with lake outlets and dry sinks marked. TreeRender, variant "tree",
+// draws every tree edge over the same base, in FlatInk where the step is
+// flat or climbs out of a pit. CatchmentRender, variant "catchments",
 // fills each land cell by its destination (a palette color per lake, the
 // playa color for a sink, pale for the sea) and dots the cells whose
 // destination differs from the cell-level model's.
@@ -115,6 +169,9 @@
 // order follows from processing in a fixed order, so nothing depends on
 // map order or scheduling. The tree's only arithmetic is the corner height
 // (a sum in cell id order and one division) and the agreement's area sums
-// in cell id order; TestNoFusedMultiplyAdd checks the compiled code.
-// Tree.AppendBinary gives the canonical encoding the golden hashes cover.
+// in cell id order. The accumulation adds in cell id order, then in
+// reverse flood order, each runoff × area product rounded before it is
+// added (fmath.Mul); TestNoFusedMultiplyAdd checks the compiled code.
+// Tree.AppendBinary and Network.AppendBinary give the canonical encodings
+// the golden hashes cover.
 package river

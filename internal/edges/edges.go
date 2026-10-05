@@ -38,8 +38,7 @@ func (w Water) String() string {
 // RiverClass is the class of the river along an edge, or RiverNone.
 type RiverClass uint8
 
-// The river classes (DESIGN.md, "Rivers on edges"). Until the river stage
-// exists every edge is RiverNone.
+// The river classes (DESIGN.md, "Rivers on edges"), smallest first.
 const (
 	RiverNone RiverClass = iota
 	Stream
@@ -101,8 +100,7 @@ type Edge struct {
 	// Water is the kind of the water side of a coast edge, and WaterNone
 	// on every other edge.
 	Water Water
-	// River is the class of the river along the edge. Until the river
-	// stage exists it is RiverNone.
+	// River is the class of the river along the edge, or RiverNone.
 	River RiverClass
 	// Incline is the grade from the mesh edge's Cells[0] to its Cells[1],
 	// computed once (Grade); the half-edge of Cells[1] holds its negation.

@@ -120,6 +120,33 @@ func TestWorlds(t *testing.T) {
 				}
 			}
 		}
+		// Rivers are the river network's: its polylines, edge classes and
+		// mouths.
+		net := ctx.Products.Network
+		if len(w.Rivers) != len(net.Paths) {
+			t.Errorf("%d rivers, the network has %d polylines", len(w.Rivers), len(net.Paths))
+		}
+		for i, r := range w.Rivers {
+			p := net.Paths[i]
+			if !slices.Equal(r.Edges, p.Edges) || !slices.Equal(r.Corners, p.Corners) || len(r.Classes) != len(p.Classes) {
+				t.Fatalf("river %d differs from the network's polyline", i)
+			}
+			for k, c := range r.Classes {
+				if string(c) != p.Classes[k].String() {
+					t.Fatalf("river %d class %d %q, network %v", i, k, c, p.Classes[k])
+				}
+			}
+		}
+		for e := range w.Edges {
+			if string(w.Edges[e].River) != net.Class[e].String() {
+				t.Fatalf("edge %d river %q, network %v", e, w.Edges[e].River, net.Class[e])
+			}
+		}
+		for k := range w.Corners {
+			if w.Corners[k].HasFlag(world.FlagMouth) != net.Mouth[k] {
+				t.Fatalf("corner %d mouth flag %v, network %v", k, !net.Mouth[k], net.Mouth[k])
+			}
+		}
 		if len(w.Coastlines) == 0 {
 			t.Error("no coastlines")
 		}
@@ -174,7 +201,7 @@ func TestDeterminism(t *testing.T) {
 // TestValidateCorrupt corrupts a valid world one way at a time and checks
 // that Validate reports each.
 func TestValidateCorrupt(t *testing.T) {
-	good := generate(t, 3, "cinematic", "archipelago", 600).Products.WorldBytes
+	good := generate(t, 3, "cinematic", "archipelago", 2000).Products.WorldBytes
 	fresh := func() *world.World {
 		w, err := world.DecodeBytes(good)
 		if err != nil {
@@ -199,6 +226,17 @@ func TestValidateCorrupt(t *testing.T) {
 	inner := slices.IndexFunc(g.Edges, func(e world.Edge) bool { return e.Passable && e.InclinePermille != 0 })
 	boundary := slices.IndexFunc(g.Edges, func(e world.Edge) bool { return e.OnBoundary() })
 	terminal := slices.IndexFunc(g.Corners, func(k world.Corner) bool { return k.HasFlag(world.FlagTerminal) })
+	long := slices.IndexFunc(g.Rivers, func(r world.RiverPath) bool { return len(r.Edges) >= 2 })
+	tributary := slices.IndexFunc(g.Rivers, func(r world.RiverPath) bool {
+		return !g.Corners[r.Corners[len(r.Corners)-1]].HasFlag(world.FlagMouth)
+	})
+	mouth := slices.IndexFunc(g.Corners, func(k world.Corner) bool { return k.HasFlag(world.FlagMouth) })
+	if long < 0 || tributary < 0 || mouth < 0 || len(g.Rivers) < 2 {
+		t.Fatalf("the test world lacks rivers: %d rivers, long %d, tributary %d, mouth %d", len(g.Rivers), long, tributary, mouth)
+	}
+	rimEdge := slices.IndexFunc(g.Edges, func(e world.Edge) bool {
+		return !e.OnBoundary() && g.Cells[e.Cells[0]].HasFlag(world.FlagRim) != g.Cells[e.Cells[1]].HasFlag(world.FlagRim)
+	})
 	for _, tc := range []struct {
 		name string
 		f    func(w *world.World)
@@ -245,6 +283,41 @@ func TestValidateCorrupt(t *testing.T) {
 		{"impassable", func(w *world.World) { w.Edges[inner].Passable = false }, "passable"},
 		{"coast", func(w *world.World) { w.Edges[coast].Coast = false; w.Edges[coast].Water = "" }, "coast"},
 		{"river at sea", func(w *world.World) { w.Edges[coast].River = world.Stream }, "river"},
+		{"river dropped", func(w *world.World) { w.Rivers = slices.Delete(w.Rivers, long, long+1) }, "on 0 river polylines, want 1"},
+		{"river twice", func(w *world.World) { w.Rivers = append(w.Rivers, w.Rivers[long]) }, "on 2 river polylines, want 1"},
+		{"river order", func(w *world.World) { w.Rivers[0], w.Rivers[1] = w.Rivers[1], w.Rivers[0] }, "not after the previous river's"},
+		{"river class falls", func(w *world.World) {
+			r := &w.Rivers[long]
+			r.Classes[0] = world.MajorRiver
+			w.Edges[r.Edges[0]].River = world.MajorRiver
+			n := len(r.Edges) - 1
+			r.Classes[n] = world.Stream
+			w.Edges[r.Edges[n]].River = world.Stream
+		}, "class falls"},
+		{"river class differs", func(w *world.World) { w.Rivers[long].Classes[0] = world.MajorRiver }, "river says"},
+		{"river corner twice", func(w *world.World) { r := &w.Rivers[long]; r.Corners[2] = r.Corners[0] }, "twice"},
+		{"river corner out of range", func(w *world.World) { w.Rivers[long].Corners[0] = len(w.Corners) }, "out of range"},
+		{"river beside rim", func(w *world.World) {
+			w.Edges[rimEdge].River = world.Stream
+			e := w.Edges[rimEdge]
+			w.Rivers = append(w.Rivers, world.RiverPath{Edges: []int{rimEdge}, Corners: e.Corners[:], Classes: []world.RiverClass{world.Stream}})
+		}, "beside rim cell"},
+		{"mouth missing", func(w *world.World) {
+			k := &w.Corners[mouth]
+			k.Flags = slices.DeleteFunc(k.Flags, func(f world.CornerFlag) bool { return f == world.FlagMouth })
+		}, "mouth flag false, but rivers end there true and continue false"},
+		{"mouth at a confluence", func(w *world.World) {
+			r := w.Rivers[tributary]
+			k := &w.Corners[r.Corners[len(r.Corners)-1]]
+			k.Flags = append(k.Flags, world.FlagMouth)
+			slices.SortFunc(k.Flags, func(a, b world.CornerFlag) int {
+				return slices.Index(world.CornerFlags, a) - slices.Index(world.CornerFlags, b)
+			})
+		}, "mouth flag true, but rivers end there true and continue true"},
+		{"river ends nowhere", func(w *world.World) {
+			r := &w.Rivers[long]
+			r.Edges, r.Corners, r.Classes = r.Edges[:1], r.Corners[:2], r.Classes[:1]
+		}, "river polylines, want 1"},
 		{"coastline gap", func(w *world.World) { cl := &w.Coastlines[0]; cl.Edges = cl.Edges[1:]; cl.Corners = cl.Corners[1:] }, "coastline"},
 		{"coastline reversed", func(w *world.World) {
 			cl := &w.Coastlines[0]

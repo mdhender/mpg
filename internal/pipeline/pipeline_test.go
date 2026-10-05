@@ -692,12 +692,32 @@ func TestRiversStage(t *testing.T) {
 	if p.Rivers.Agreement == nil || p.Rivers.Agreement.Cells != p.Target.LandCells {
 		t.Errorf("agreement %+v, want one over %d land cells", p.Rivers.Agreement, p.Target.LandCells)
 	}
-	for _, f := range []string{"10-rivers.png", "10-rivers-catchments.png"} {
+	for _, f := range []string{"10-rivers.png", "10-rivers-tree.png", "10-rivers-catchments.png"} {
 		if _, err := os.Stat(filepath.Join(c.RendersDir, f)); err != nil {
 			t.Error(err)
 		}
 	}
-	for _, s := range []string{"rivers: ", " land corners: ", " tree edges (", " overflowing lakes: ", " fallback outlets", "catchments against the water balance: "} {
+	in := RiverInput(p.Mesh, p.Cells.Altitude, p.Target)
+	net, err := river.Accumulate(in, want, RiverFlow(p.Target), RiverParams(&c.Config))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ = p.Network.AppendBinary(nil)
+	b, _ = net.AppendBinary(nil)
+	if !bytes.Equal(a, b) {
+		t.Error("stage river network differs from river.Accumulate")
+	}
+	ns := net.Stats(in, want)
+	if p.RiverStats == nil || *p.RiverStats != ns {
+		t.Errorf("stage river statistics %+v, want %+v", p.RiverStats, ns)
+	}
+	if ns.RiverEdges == 0 || ns.Paths == 0 || ns.Mouths == 0 {
+		t.Errorf("no rivers: %+v", ns)
+	}
+	density := fmt.Sprintf("river density: %.3f river edges per land cell, %.1f km per 1000 km² of land, %.1f%% of land cells touching a river",
+		ns.EdgesPerLandCell(), ns.KmPer1000Km2(), 100*ns.TouchShare())
+	for _, s := range []string{"rivers: ", " land corners: ", " tree edges (", " overflowing lakes: ", " fallback outlets", "catchments against the water balance: ",
+		density, fmt.Sprintf("%d river edges of ", ns.RiverEdges), fmt.Sprintf("%d river polylines (", ns.Paths), fmt.Sprintf("%d mouths; longest %d edges", ns.Mouths, ns.LongestEdges)} {
 		if !strings.Contains(log.String(), s) {
 			t.Errorf("log lacks %q:\n%s", s, log.String())
 		}
@@ -782,9 +802,18 @@ func TestEdgesStage(t *testing.T) {
 			water[i] = edges.Lake
 		}
 	}
-	want, err := edges.Build(p.Mesh, p.Cells.Altitude, water, nil)
+	want, err := edges.Build(p.Mesh, p.Cells.Altitude, water, p.Network.Class)
 	if err != nil {
 		t.Fatal(err)
+	}
+	rivers := 0
+	for e := range want.Edges {
+		if want.Edges[e].River != edges.RiverNone {
+			rivers++
+		}
+	}
+	if rivers == 0 {
+		t.Error("no river edges")
 	}
 	a, _ := p.Edges.AppendBinary(nil)
 	b, _ := want.AppendBinary(nil)

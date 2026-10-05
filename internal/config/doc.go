@@ -118,6 +118,16 @@
 // positive. DefaultClimate is hmz2bio's model with S26's additions and
 // tuning. See package climate.
 //
+// # River
+//
+// The river group sets river selection (DESIGN.md, "Rivers on edges"): an
+// edge of the corner drainage tree is a river when the drainage area
+// flowing through it is at least river.threshold_km2 (default 500 km²,
+// about 6 cells), and its class is stream from the threshold, river from
+// river.river_km2 (2,000) and major-river from river.major_river_km2
+// (10,000). The breaks must increase strictly, so the lowest break is the
+// threshold itself. See package river.
+//
 // # Classify
 //
 // The classify group sets the landform and depth rules (DESIGN.md,

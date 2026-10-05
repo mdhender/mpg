@@ -177,11 +177,19 @@ type Basin struct {
 	SaltEvapShare float64 `json:"salt_evap_share"`
 }
 
-// River sets river selection.
+// River sets river selection (DESIGN.md, "Rivers on edges"): an edge of
+// the drainage tree is a river when the drainage area flowing through it is
+// at least ThresholdKm2, and its class comes from the drainage breaks
+// ThresholdKm2 (stream), RiverKm2 (river) and MajorRiverKm2 (major-river).
 type River struct {
-	// ThresholdKm2 is the drainage area at which an edge becomes a river
-	// (DESIGN.md: river_threshold_km2).
+	// ThresholdKm2 is the drainage area at which an edge becomes a river,
+	// a stream (DESIGN.md: river_threshold_km2): the lowest class break.
 	ThresholdKm2 float64 `json:"threshold_km2"`
+	// RiverKm2 is the drainage area from which a river is of class river,
+	// and MajorRiverKm2 the one from which it is a major river (S31: 2,000
+	// and 10,000 km², about 25 and 124 cells of catchment).
+	RiverKm2      float64 `json:"river_km2"`
+	MajorRiverKm2 float64 `json:"major_river_km2"`
 }
 
 // Default returns the default inputs, with the derived fields zero. The
@@ -203,7 +211,7 @@ func Default() Config {
 		Mesh:      DefaultMesh(),
 		Climate:   DefaultClimate(),
 		Basin:     Basin{MinDepthM: 50, InlandSeaMinCells: 20, SeepageMM: 50, SaltEvapShare: 0.5},
-		River:     River{ThresholdKm2: 500},
+		River:     River{ThresholdKm2: 500, RiverKm2: 2000, MajorRiverKm2: 10_000},
 		Classify:  DefaultClassify(),
 	}
 }
@@ -272,6 +280,12 @@ func (c *Config) Validate() error {
 	}
 	if v := c.River.ThresholdKm2; !positive(v) {
 		bad("river.threshold_km2 %v must be positive and finite", v)
+	}
+	if v := c.River.RiverKm2; !(v > c.River.ThresholdKm2) || math.IsInf(v, 0) {
+		bad("river.river_km2 %v must be finite and greater than threshold_km2 %v", v, c.River.ThresholdKm2)
+	}
+	if v := c.River.MajorRiverKm2; !(v > c.River.RiverKm2) || math.IsInf(v, 0) {
+		bad("river.major_river_km2 %v must be finite and greater than river_km2 %v", v, c.River.RiverKm2)
 	}
 	c.Classify.validate(bad)
 	return errors.Join(errs...)

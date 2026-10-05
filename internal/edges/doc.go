@@ -108,7 +108,11 @@
 //
 // # River
 //
-// Edge.River is the river class, RiverNone until the river stage exists.
+// Edge.River is the river class the river stage selected (package river:
+// stream, river or major-river by the drainage flowing along the edge), or
+// RiverNone. A river edge is always land–land. It is stored once per
+// undirected edge; the half-edges carry no river of their own. Rivers do
+// not change an edge's incline or passability.
 //
 // # Incline
 //

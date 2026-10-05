@@ -108,8 +108,12 @@ type Products struct {
 	// export read it.
 	Target *LandTarget
 	// Rivers is the river stage's corner drainage tree on the land
-	// target's land and lakes.
-	Rivers *river.Tree
+	// target's land and lakes; Network the river network on it (drainage,
+	// river classes, polylines and mouths), and RiverStats its statistics
+	// (density, polylines, endings, longest river) for the measures.
+	Rivers     *river.Tree
+	Network    *river.Network
+	RiverStats *river.NetworkStats
 	// Classes is the classification stage's landforms, depth bands, and
 	// volcano flags.
 	Classes *classify.Result

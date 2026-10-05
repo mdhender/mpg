@@ -299,15 +299,38 @@ Rivers run along Voronoi edges, corner to corner, and never through a cell's int
   - The outlet's downstream path carries the lake's surplus: the water balance's `Overflow` (S28), which is the authority, even though the tree's own inflow to a lake can differ by up to about 2×.
 - **Catchments.** Each land cell's runoff enters the tree at its lowest corner. The river stage reports how many land cells, and how much area, end somewhere other than the water balance's cell-level catchment, both immediately and after following lake overflow. Over 128 worlds: 0.4–8% immediately (mean 3.2%) and 0–9% finally (mean 1.6%), near ridges and basin rims. The water balance stays self-consistent either way.
 - **Accumulation.**
-  - Each land cell sends its runoff (area × runoff depth) to its lowest corner on the graph.
-  - Accumulate down the tree.
-  - Each edge on the tree carries the drainage (km²) and discharge (m³/s) of its downstream corner.
+  - Each land cell sends its area and its runoff (area × the final climate pass's runoff depth) to its lowest corner on the graph.
+  - Both accumulate down the tree in reverse flood order. A corner's drainage (km²) and water are everything reaching it.
+  - Each tree edge carries the drainage and discharge of its **upstream** corner: the water flowing through it. (Reading it as the downstream corner's would make every one-edge stub that joins a big river a river itself.) Discharge in m³/s is the volume (mm·km²/yr) × 1000 / 31,557,600 (a Julian year).
+  - **Lakes pass drainage through.** A lake's drainage is the drainage reaching its shore corners, plus its own cells' area, plus the drainage of lakes draining straight into it.
+    - An overflowing lake passes it on at its outlet. The outlet's discharge is the water balance's `Overflow` (the authority), plus whatever the tree brings to the outlet corner itself. The tree's own inflow, from the final climate pass, can differ by up to about 2×; discharge is internal, so the step is harmless.
+    - A closed lake, or one draining straight to the sea, ends its drainage.
+    - On 12 worlds, passing through instead of stopping adds 3–7% river edges; the largest drainage per world is 9.4k–150k km².
 - **River selection.**
-  - An edge is a river when its drainage is at least `river_threshold_km2`.
-  - Classes (`stream`, `river`, `major-river`) come from configured drainage breaks, with the lowest break at the threshold.
-  - Drainage and discharge are internal: they set the class and appear in the measures and debug dumps, not in `world.json`.
-  - Each cell is about 81 km², so the threshold has to span several cells. The default `river_threshold_km2` is **500 km²** (about 6 cells of catchment); tune from there.
-  - For comparison: on Panama, `hmz2riv`'s 50 km² gave about one river edge for every two 10 km hexes, chosen deliberately to slow north–south travel.
+  - An edge is a river when its drainage is at least `river.threshold_km2` (500 km², about 6 cells).
+  - Classes come from drainage breaks: `stream` from the threshold, `river` from `river.river_km2` (2,000 km², about 25 cells), `major-river` from `river.major_river_km2` (10,000 km², about 124 cells). The breaks must increase strictly, so the lowest break is the threshold.
+  - Measured on 12 default worlds: stream 60–82%, river 18–33%, major-river 0–11% of river edges. Islands have almost no major rivers; possible, not forced.
+  - Drainage never falls downstream, so neither does a river's class.
+  - Drainage and discharge are internal: they set the class and appear in the logs, measures and debug dumps, not in `world.json`.
+  - For comparison: on Panama, `hmz2riv`'s 50 km² gave about one river edge for every two 10 km hexes, chosen deliberately to slow north–south travel. Here 500 km² gives 0.15–0.29 river edges per land cell; about 100–150 km² would match Panama. Tune against play.
+- **Polylines and mouths.**
+  - The river edges are split by main stem into polylines, listed source to mouth and ordered by first edge id.
+  - At a corner the main inflow is the river edge into it with the largest drainage, ties to the lower upstream corner id. At a lake's outlet the lake also counts as an inflow, with the drainage it passes on, and wins a tie.
+  - A polyline starts at a corner with no main river inflow: a source, or an outlet whose lake is its main inflow.
+  - It ends at a terminal (its mouth: the sea, a lake shore, or a dry sink), or at a confluence: a corner inside another polyline where the main stem continues.
+  - Every river edge lies on exactly one polyline.
+  - The `mouth` corner flag goes exactly where a polyline ends and none continues. A lake outlet is a terminal corner (it touches the lake) but not a mouth.
+  - On 12 worlds: 302–418 polylines, 200–263 mouths, 12–42 rivers per world leaving lake outlets, longest river 18–75 edges (123–572 km).
+- **Density** is reported by the river stage (its log, and `river.NetworkStats` for the measures; `measures.json` from S35), not in `world.json`:
+  - river edges per land cell (0.15–0.29);
+  - river km per 1,000 km² of land (12–25);
+  - share of land cells touching a river (18–32%);
+  - mouths, polyline endings, the longest river, and seam crossings (0–21 per world).
+- **Validator rules** (`mpg validate`):
+  - a river edge is land–land, and no corner of it touches the rim;
+  - polylines follow their edges corner to corner, with no corner twice, classes never falling, ordered by first edge id;
+  - every river-class edge is on exactly one polyline;
+  - `mouth` sits exactly on corners where a polyline ends and none continues, and a mouth is terminal.
 
 This guarantees by construction:
 

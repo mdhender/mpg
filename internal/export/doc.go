@@ -34,8 +34,12 @@
 //     the corner"), summed in ascending cell id order and divided by the
 //     count. A corner is terminal when it touches a land cell and a water or
 //     rim cell (a shore corner, where a river would end), or is a playa's
-//     dry sink, which is flagged sink too; the mouth flag comes with
-//     rivers.
+//     dry sink, which is flagged sink too. A corner is a mouth where the
+//     river network's polylines end at a terminal (river Network.Mouth).
+//   - Rivers. Each edge's river class is the edge stage's (from the river
+//     network); the river polylines are the network's, source to mouth or
+//     confluence, ordered by first edge id, with each edge's class by its
+//     world.json name.
 //   - Edge seeds. Each edge's noise seed is a uint32 drawn from the seed
 //     stream "edge-noise" (DESIGN.md, "Determinism") at algorithm version
 //     EdgeNoiseVersion: seed.Rand(world seed, "edge-noise", "1").Uint32(),

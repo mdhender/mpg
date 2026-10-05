@@ -15,6 +15,7 @@ import (
 	"github.com/mdhender/mpg/internal/config"
 	"github.com/mdhender/mpg/internal/edges"
 	"github.com/mdhender/mpg/internal/mesh"
+	"github.com/mdhender/mpg/internal/river"
 	"github.com/mdhender/mpg/internal/seed"
 	"github.com/mdhender/mpg/internal/topo"
 	"github.com/mdhender/mpg/world"
@@ -49,6 +50,10 @@ type Input struct {
 	DatumLandShare   float64
 	Classes          *classify.Result
 	Edges            *edges.Data
+	// Network is the river stage's river network: its polylines become
+	// world.json's rivers and its mouths the corners' mouth flags. Nil
+	// means no rivers; the edges' river classes must then be empty too.
+	Network *river.Network
 	// Deferred names the pipeline stages the run passed over, in order.
 	Deferred []string
 }
@@ -62,7 +67,8 @@ func Build(in Input) (*world.World, error) {
 	}
 	n := len(m.Cells)
 	if in.Cells.Len() != n || len(in.Flood.Land) != n || len(in.Lakes.Lake) != n || len(in.Classes.Landform) != n ||
-		len(in.Edges.Cells) != n || len(in.Edges.Edges) != len(m.Edges) {
+		len(in.Edges.Cells) != n || len(in.Edges.Edges) != len(m.Edges) ||
+		in.Network != nil && (len(in.Network.Mouth) != len(m.Corners) || len(in.Network.Class) != len(m.Edges)) {
 		return nil, errors.New("export: stage products disagree on the mesh size")
 	}
 	cyl := m.Cylinder()
@@ -96,8 +102,29 @@ func Build(in Input) (*world.World, error) {
 	}
 	b.w.Codebooks = world.DefaultCodebooks()
 	b.w.Outcomes = b.outcomes()
-	b.w.Rivers = []world.RiverPath{}
+	b.w.Rivers = b.rivers()
 	return &b.w, nil
+}
+
+// rivers returns the river network's polylines, in its order (by first
+// edge id), each class by its world.json name.
+func (b *builder) rivers() []world.RiverPath {
+	rs := []world.RiverPath{}
+	if b.in.Network == nil {
+		return rs
+	}
+	for _, p := range b.in.Network.Paths {
+		r := world.RiverPath{
+			Edges:   slices.Clone(p.Edges),
+			Corners: slices.Clone(p.Corners),
+			Classes: make([]world.RiverClass, len(p.Classes)),
+		}
+		for k, c := range p.Classes {
+			r.Classes[k] = world.RiverClass(c.String())
+		}
+		rs = append(rs, r)
+	}
+	return rs
 }
 
 type builder struct {
@@ -197,6 +224,9 @@ func (b *builder) corners() {
 		}
 		if land && wet || b.sink[i] {
 			flags = append(flags, world.FlagTerminal)
+		}
+		if b.in.Network != nil && b.in.Network.Mouth[i] {
+			flags = append(flags, world.FlagMouth)
 		}
 		if b.sink[i] {
 			flags = append(flags, world.FlagSink)

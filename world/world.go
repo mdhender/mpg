@@ -39,7 +39,7 @@ type World struct {
 	// Coastlines lists the chains of coast edges, each with land on its
 	// right, ordered by their first edge id.
 	Coastlines []Coastline `json:"coastlines"`
-	// Rivers lists the river polylines. It is empty until milestone 7.
+	// Rivers lists the river polylines, ordered by their first edge id.
 	Rivers []RiverPath `json:"rivers"`
 }
 
@@ -247,9 +247,13 @@ type Coastline struct {
 	Corners []int `json:"corners"`
 }
 
-// RiverPath is a river polyline from source to mouth: a chain of land–land
-// edges, Edges[k] joining Corners[k] and Corners[k+1], with Classes[k]
-// the class of Edges[k]. There are none until milestone 7.
+// RiverPath is a river polyline, downstream from its source: a chain of
+// land–land edges, Edges[k] joining Corners[k] and Corners[k+1], with
+// Classes[k] the class of Edges[k]. Rivers are split by main stem: at a
+// confluence the river with the larger drainage continues and the other
+// ends there, on a corner inside it; a river leaving a lake starts at the
+// lake's outlet. A river that does not end at a confluence ends at a mouth
+// (on the sea, a lake, or a dry sink). Classes never fall downstream.
 type RiverPath struct {
 	Edges   []int        `json:"edges"`
 	Corners []int        `json:"corners"`

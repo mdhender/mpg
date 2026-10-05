@@ -206,7 +206,7 @@ func TestHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = "bc26e6000989f154badbce7a87380185c4b2f34140d4eada37e6a1eb95ea4a40"
+	const want = "477cd1f48a5d412c8dba899f24378689a867b17512ed18b9cb4a212485b88f0e"
 	if h != want {
 		t.Errorf("Hash = %s, want %s", h, want)
 	}
@@ -365,6 +365,11 @@ func TestValidate(t *testing.T) {
 		{"salt share above 1", func(c *Config) { c.Basin.SaltEvapShare = 1.5 }, "basin.salt_evap_share"},
 		{"salt share NaN", func(c *Config) { c.Basin.SaltEvapShare = math.NaN() }, "basin.salt_evap_share"},
 		{"river zero", func(c *Config) { c.River.ThresholdKm2 = 0 }, "river.threshold_km2"},
+		{"river threshold NaN", func(c *Config) { c.River.ThresholdKm2 = math.NaN() }, "river.threshold_km2"},
+		{"river break at threshold", func(c *Config) { c.River.RiverKm2 = 500 }, "river.river_km2 500 must be finite and greater than threshold_km2 500"},
+		{"river break NaN", func(c *Config) { c.River.RiverKm2 = math.NaN() }, "river.river_km2"},
+		{"major below river", func(c *Config) { c.River.MajorRiverKm2 = 1000 }, "river.major_river_km2 1000 must be finite and greater than river_km2 2000"},
+		{"major Inf", func(c *Config) { c.River.MajorRiverKm2 = math.Inf(1) }, "river.major_river_km2"},
 		{"classify flats negative", func(c *Config) { c.Classify.FlatsBelowM = -1 }, "classify.flats_below_m"},
 		{"classify breaks decrease", func(c *Config) { c.Classify.HillsBelowM = 100 }, "classify.hills_below_m 100 must be in [150"},
 		{"classify plains NaN", func(c *Config) { c.Classify.PlainsBelowM = math.NaN() }, "classify.plains_below_m"},

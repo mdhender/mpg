@@ -5,12 +5,16 @@ package river_test
 import (
 	"bytes"
 	"fmt"
+	"image"
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"testing"
 
 	"github.com/mdhender/mpg/internal/config"
+	"github.com/mdhender/mpg/internal/edges"
+	"github.com/mdhender/mpg/internal/field"
 	"github.com/mdhender/mpg/internal/pipeline"
 	"github.com/mdhender/mpg/internal/river"
 )
@@ -20,8 +24,13 @@ import (
 // corner reaches a terminal; tree edges land–land only, never beside the
 // rim; outlets never re-enter their lake), that the pipeline's river stage
 // builds the same tree, that no lake needed the fallback, and that the
-// catchments agreement is reported. Small worlds have a narrow falloff, so
-// their land comes closest to the rim.
+// catchments agreement is reported. It then accumulates the river network
+// and checks every invariant of CheckNetwork (drainage cell by cell and
+// conserved, rivers only on land–land edges and never beside the rim,
+// polylines covering every river edge once, split by main stem, ending at
+// mouths or confluences), that the stage built the same network, and that
+// the world has rivers; and on the first world, the river render. Small
+// worlds have a narrow falloff, so their land comes closest to the rim.
 func TestWorlds(t *testing.T) {
 	for _, tc := range []struct {
 		seed           uint64
@@ -79,10 +88,79 @@ func TestWorlds(t *testing.T) {
 			if a == nil || a.Cells != p.Target.LandCells || a.Differ > a.Cells || a.FinalDiffer > a.Cells {
 				t.Errorf("agreement %+v for %d land cells", a, p.Target.LandCells)
 			}
+			net, err := river.Accumulate(in, tr, pipeline.RiverFlow(p.Target), pipeline.RiverParams(&ctx.Config))
+			if err != nil {
+				t.Fatal(err)
+			}
+			river.CheckNetwork(t, in, tr, pipeline.RiverFlow(p.Target), net)
+			n1, _ := net.AppendBinary(nil)
+			n2, _ := p.Network.AppendBinary(nil)
+			if !bytes.Equal(n1, n2) {
+				t.Error("the river stage's network differs from a second accumulation")
+			}
+			ns := net.Stats(in, tr)
+			if ns.RiverEdges == 0 || ns.Paths == 0 || ns.Mouths == 0 {
+				t.Errorf("no rivers: %+v", ns)
+			}
+			if tc.seed == 42 {
+				checkRender(t, p.Elevation, in, tr, net, p.Target.Flood.Level)
+			}
+			t.Logf("rivers %d (stream %d, river %d, major %d; seam %d): %.3f edges per land cell, %.1f km per 1000 km², %.1f%% of land cells; %d polylines, ends %v, %d mouths; longest %d edges %.0f km",
+				ns.RiverEdges, ns.Edges[1], ns.Edges[2], ns.Edges[3], ns.Seam, ns.EdgesPerLandCell(), ns.KmPer1000Km2(), 100*ns.TouchShare(),
+				ns.Paths, ns.Ends, ns.Mouths, ns.LongestEdges, ns.LongestKm)
 			s := tr.Stats(p.Mesh)
 			t.Logf("%d land corners, %d tree edges (%d seam, %d flat, %d climb); %d overflowing lakes, %d at the spill corner, drains %v; differ %d/%d, finally %d",
 				s.LandCorners, s.Edges, s.Seam, s.Flat, s.Climb, s.Overflowing, s.AtSpill, s.Drains, a.Differ, a.Cells, a.FinalDiffer)
 		})
+	}
+}
+
+// checkRender checks the river render: it draws river ink exactly when
+// there are rivers, wider by class, and the tree variant draws none.
+func checkRender(t *testing.T, f *field.Field, in river.Input, tr *river.Tree, net *river.Network, level float64) {
+	t.Helper()
+	ink := func(img *image.RGBA) int {
+		n := 0
+		for y := img.Rect.Min.Y; y < img.Rect.Max.Y; y++ {
+			for x := img.Rect.Min.X; x < img.Rect.Max.X; x++ {
+				if img.RGBAAt(x, y) == river.RiverInk {
+					n++
+				}
+			}
+		}
+		return n
+	}
+	if n := ink(river.Render(f, in, tr, net, level)); n == 0 {
+		t.Error("the river render draws no river ink")
+	}
+	none := *net
+	none.Class = make([]edges.RiverClass, len(net.Class))
+	if n := ink(river.Render(f, in, tr, &none, level)); n != 0 {
+		t.Errorf("the river render without rivers draws %d river pixels", n)
+	}
+	if n := ink(river.TreeRender(f, in, tr, level)); n != 0 {
+		t.Errorf("the tree render draws %d river pixels", n)
+	}
+	if w := river.RiverWidths(f, in.Mesh); !(w[0] >= 1 && w[0] < w[1] && w[1] < w[2]) {
+		t.Errorf("river widths %v not increasing by class", w)
+	}
+	// Major rivers alone draw more ink at their width than at a stream's.
+	major := *net
+	major.Class = slices.Clone(net.Class)
+	for e, c := range major.Class {
+		if c != edges.MajorRiver {
+			major.Class[e] = edges.RiverNone
+		}
+	}
+	thin := *net
+	thin.Class = slices.Clone(major.Class)
+	for e, c := range thin.Class {
+		if c == edges.MajorRiver {
+			thin.Class[e] = edges.Stream
+		}
+	}
+	if a, b := ink(river.Render(f, in, tr, &major, level)), ink(river.Render(f, in, tr, &thin, level)); a <= b {
+		t.Errorf("major rivers draw %d pixels, as streams %d", a, b)
 	}
 }
 

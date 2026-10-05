@@ -25,7 +25,7 @@ var (
 	// BorderColor is blended at BorderAlpha over the borders between two
 	// land cells.
 	BorderColor = color.RGBA{R: 0x10, G: 0x10, B: 0x10, A: 0xff}
-	// RiverColor draws rivers (none until milestone 7).
+	// RiverColor draws rivers.
 	RiverColor = color.RGBA{R: 0x2a, G: 0x6f, B: 0xc0, A: 0xff}
 	// VolcanoRing and VolcanoInk mark a volcano cell's site: a black disc
 	// in a white ring, as the classification render marks them.
@@ -108,11 +108,11 @@ func LandformColor(l world.Landform, d world.Depth) color.RGBA {
 func riverWidth(c world.RiverClass) float64 {
 	switch c {
 	case world.Stream:
-		return 1.0 / 16
+		return 1.0 / 12
 	case world.River:
-		return 1.0 / 10
+		return 1.0 / 8
 	case world.MajorRiver:
-		return 1.0 / 6
+		return 1.0 / 5
 	}
 	return 0
 }

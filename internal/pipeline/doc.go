@@ -39,8 +39,12 @@
 //     the land target's land and water. The river stage builds the corner
 //     drainage tree (package river) on it, with each overflowing lake's
 //     spill corner and pass cell from its basins, and compares the tree's
-//     catchments with the water balance's cell-level ones (RiverInput);
-//     export does not read the tree yet.
+//     catchments with the water balance's cell-level ones (RiverInput).
+//     It then accumulates the final climate pass's runoff down the tree,
+//     with each overflowing lake's water-balance overflow at its outlet
+//     (RiverFlow), and selects and classes the river edges by the config's
+//     breaks (RiverParams). The edge stage puts the classes on the edges,
+//     and export writes the polylines and mouths.
 //
 // A stage is a function of a *Context, which carries the resolved config
 // and its hash, the output and render directories, the stage seed helpers, a

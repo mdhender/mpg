@@ -159,6 +159,12 @@ func TestWorlds(t *testing.T) {
 			if ed.Coast != wantCoast || ed.Water != wantWater {
 				t.Errorf("seed %d edge %d: coast %v %s, want %v", tc.seed, e, ed.Coast, ed.Water, wantCoast)
 			}
+			if ed.River != ctx.Products.Network.Class[e] {
+				t.Errorf("seed %d edge %d: river %v, the river stage's %v", tc.seed, e, ed.River, ctx.Products.Network.Class[e])
+			}
+			if ed.River != edges.RiverNone && (rim || ed.Coast || water[a] != edges.WaterNone || water[b] != edges.WaterNone) {
+				t.Errorf("seed %d edge %d: river %v not land–land", tc.seed, e, ed.River)
+			}
 		}
 		st := ctx.Products.EdgeStats
 		if st == nil || st.Coast != coast || st.LandRim != 0 || st.HalfEdges == 0 {
@@ -186,7 +192,7 @@ func TestDeterminism(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := edges.Build(m, alt, water, nil)
+	d, err := edges.Build(m, alt, water, ctx.Products.Network.Class)
 	if err != nil {
 		t.Fatal(err)
 	}
