@@ -449,7 +449,7 @@ func TestDeterminism(t *testing.T) {
 	if !bytes.Equal(a, b) {
 		t.Error("two classifications differ")
 	}
-	if len(a) != 8+len(m.Cells)*11+8+len(peaks)*9 {
+	if len(a) != 8+len(m.Cells)*11+8+len(peaks)*9+8 {
 		t.Errorf("encoding is %d bytes", len(a))
 	}
 }

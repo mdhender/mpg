@@ -119,6 +119,12 @@ type Cell struct {
 	// Water is the water kind of a water cell that is not on the rim,
 	// empty otherwise.
 	Water Water `json:"water,omitempty"`
+	// Biome is the biome of a playable land cell, empty otherwise.
+	Biome Biome `json:"biome,omitempty"`
+	// Surface is the cell's surface: glacier, ice field or a wetland on
+	// land, pack ice on playable water; empty for bare ground, open water,
+	// and rim cells.
+	Surface Surface `json:"surface,omitempty"`
 	// AltitudeM is the median elevation of the cell's raster samples, in
 	// meters: the one height every height rule uses.
 	AltitudeM float64 `json:"altitude_m"`
@@ -227,6 +233,12 @@ type Edge struct {
 	// rim cell; Water is then the water side's kind.
 	Coast bool  `json:"coast,omitzero"`
 	Water Water `json:"water,omitempty"`
+	// Biome is the biome of a playable land cell, empty otherwise.
+	Biome Biome `json:"biome,omitempty"`
+	// Surface is the cell's surface: glacier, ice field or a wetland on
+	// land, pack ice on playable water; empty for bare ground, open water,
+	// and rim cells.
+	Surface Surface `json:"surface,omitempty"`
 	// River is the class of the river along the edge, empty for none.
 	River RiverClass `json:"river,omitempty"`
 	// InclinePermille is the grade from Cells[0] to Cells[1] in tenths of
@@ -295,6 +307,16 @@ type Outcomes struct {
 	SaltLakes      int `json:"salt_lakes"`
 	SaltInlandSeas int `json:"salt_inland_seas"`
 	Playas         int `json:"playas"`
+	// BiomeTable names the biome and surface table the biomes and surfaces
+	// come from. GlacierCells, IceFieldCells, PackIceCells and
+	// WetlandCells count the cells with those surfaces (wetlands: marshes,
+	// swamps, bogs, mangroves and salt flats). Possible, not forced: any
+	// may be 0.
+	BiomeTable    string `json:"biome_table"`
+	GlacierCells  int    `json:"glacier_cells"`
+	IceFieldCells int    `json:"ice_field_cells"`
+	PackIceCells  int    `json:"pack_ice_cells"`
+	WetlandCells  int    `json:"wetland_cells"`
 	// Met reports whether LandCells is within ToleranceCells of
 	// TargetLandCells. An unmet target is reported, not an error.
 	Met bool `json:"met"`

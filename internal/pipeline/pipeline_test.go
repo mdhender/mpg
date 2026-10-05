@@ -754,15 +754,24 @@ func TestClassifyStage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	in, err := CoverInput(c.Config, p.Cells, p.Target, p.Network)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := want.Cover(p.Mesh, in, classify.DefaultBiomeRules()); err != nil {
+		t.Fatal(err)
+	}
 	a, _ := p.Classes.AppendBinary(nil)
 	b, _ := want.AppendBinary(nil)
 	if !bytes.Equal(a, b) {
-		t.Error("stage product differs from classify.Classify")
+		t.Error("stage product differs from classify.Classify and Cover")
 	}
-	if _, err := os.Stat(filepath.Join(c.RendersDir, "11-classify.png")); err != nil {
-		t.Error(err)
+	for _, f := range []string{"11-classify.png", "11-classify-biome.png", "11-classify-surface.png", "11-classify-wetness.png"} {
+		if _, err := os.Stat(filepath.Join(c.RendersDir, f)); err != nil {
+			t.Error(err)
+		}
 	}
-	for _, s := range []string{"classify: land: flats ", "mountains ", "classify: salt water: shallow ", "volcanoes on land"} {
+	for _, s := range []string{"classify: land: flats ", "mountains ", "classify: salt water: shallow ", "volcanoes on land", "classify: biome table " + classify.BiomeTableVersion, "classify: surfaces: glacier "} {
 		if !strings.Contains(log.String(), s) {
 			t.Errorf("log lacks %q:\n%s", s, log.String())
 		}

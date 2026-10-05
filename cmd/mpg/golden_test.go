@@ -590,7 +590,8 @@ func TestGoldenRivers(t *testing.T) {
 // length-prefixed), then the classification's canonical encoding
 // (classify.Result.AppendBinary: the cell count; each cell's landform and
 // depth codes, sea steps and volcano flag; the hotspot count; each
-// hotspot's cell and whether it is on land; integers little-endian).
+// hotspot's cell and whether it is on land; the covered cell count; each
+// cell's biome and surface codes; integers little-endian).
 func TestGoldenClassify(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -599,11 +600,11 @@ func TestGoldenClassify(t *testing.T) {
 		preset string
 		want   string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "continents", "80276f218bec253b7f40b73d976ed97d0e59de3733709bf12562a8f6c832bfcb"},
-		{"seed42-square", 42, "square", "continents", "84cf0118306277e3c657a2ea33aff98152ae75565f7b1164291fbefda88fe115"},
-		{"seed7-cinematic", 7, "cinematic", "continents", "1cb362acbfa03a7976807fc0dd4d10a267586519d4bbb8116bae75f82ef0d6db"},
-		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "925457d3bfbe22709b64ecd602f41be41dfc29cba261a25d7a23cc79004c58cf"},
-		{"seed7-cinematic-pangaea", 7, "cinematic", "pangaea", "af120c355c680123649431c550fb6a74b163bc29345f025c8ef7dce2a30be768"}, // volcanic highlands
+		{"seed42-cinematic", 42, "cinematic", "continents", "76efe71b88b2075f1cff33075de8ef9420951cb92ab2e9203a8d3961fe6cb644"},
+		{"seed42-square", 42, "square", "continents", "eef89036278175ad334b534126ae72376b746656b3bea4c239f56b4f06729cb9"},
+		{"seed7-cinematic", 7, "cinematic", "continents", "4fe69fc9d10f8352acb418ff198c6399477297078bcc8a54e741c4cc115f03d3"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "4c1fe949a566fe867249bb6b9b8dc07f8d8037acaa2efa77c6e444836048d11c"},
+		{"seed7-cinematic-pangaea", 7, "cinematic", "pangaea", "0530cf5e836e3912b9c0f8c5b005634cbd39f5c994049f98e93d51f9c3a4f934"}, // volcanic highlands
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -718,9 +719,9 @@ func TestGoldenWorld(t *testing.T) {
 		want   string
 		player string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "continents", "15ba683dcc9779869e17781c9ac7846046739682afb526988aaaa2e0409e25b3", "cd40a0536f3e1fc29af3888961540507d55728c6275684272aafc676da5c969d"},
-		{"seed7-square", 7, "square", "continents", "69424baf69ed6b6219f532b3f2f777d3f065856d4407ec715d6b927bca814ede", "30035d5767758319b52d975c4d61f5e70d1cf9d3eeb3ee5537458ef3ec90a0bb"},
-		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "489986766b7d2977e462ca092bfd619436d8a6ad569a4841828ab84b05c1a645", "d11223042e030405d13f28520c50d28e301afe71ae4d56c14fe340072bb08991"},
+		{"seed42-cinematic", 42, "cinematic", "continents", "9b5a762adf36e5fab48ea73666470b3325b3f8528fe3a064e52f147d5bd6c4be", "99833872989f373640030207a900e39fbef19b723f50e2468705faec70b6d061"},
+		{"seed7-square", 7, "square", "continents", "f93065bf856b5e6f5ce91900c353e48301548576d87b357e82ac96df89e2274c", "630589edcf069e4e2e23548e7cfdccb35899764ea745592937ff5e81069a0e02"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "61a5bb2739389b6ccb05d424667a3a88c5c2378527485302ebfa13571420cfae", "d214bf8ef7dd5c0605d2c7956754bf7f2b4df4040e5beb8bf4620ce7fe83598f"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

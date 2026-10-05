@@ -3,6 +3,7 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"image"
 	"io"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/mdhender/mpg/internal/basin"
+	"github.com/mdhender/mpg/internal/classify"
 	"github.com/mdhender/mpg/internal/climate"
 	"github.com/mdhender/mpg/internal/config"
 	"github.com/mdhender/mpg/internal/mesh"
@@ -52,7 +54,12 @@ const (
 // p10/p50/p90; for aridity, the land's UNEP class shares in percent (ha, a,
 // sa, ds, hu: hyper-arid to humid). Each classify tile's caption gives the land landform
 // shares in percent (fl, pl, rp, hi, mt, pt, vh: flats to volcanic
-// highlands) and the volcanoes on land (v). Each basins tile's caption gives
+// highlands) and the volcanoes on land (v); a classify:biome tile's the
+// four largest biome shares in percent (de desert, sv savanna, …: see
+// classify.Result.BiomeShares); a classify:surface tile's the glacier (gl),
+// ice-field (if), polar-desert (pd) and pack-ice (pk) cells; and a
+// classify:wetness tile's the wetland cells and their share of the land.
+// Each basins tile's caption gives
 // the depressions found (dep), the basins at least the minimum deep (bas),
 // the deepest nesting (nest), and the cells in basins (cells); a
 // basins:lakes tile's gives the lakes (lk), inland seas (sea), the salt ones
@@ -240,7 +247,7 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 				}
 			}
 			if cl := ctx.Products.Classes; cl != nil && registry[c.index].Name == "classify" {
-				tiles[k].Caption[1] = fmt.Sprintf("%s v%d", strings.Join(cl.LandShares(true), " "), cl.Volcanoes())
+				tiles[k].Caption[1] = classifyCaption(cl, c.variant)
 			}
 			if es := ctx.Products.EdgeStats; es != nil && registry[c.index].Name == "edges" {
 				rev := 0.0
@@ -522,4 +529,37 @@ func basinsCaption(r *basin.Result) string {
 		}
 	}
 	return fmt.Sprintf("dep %d bas %d nest %d cells %d", len(r.Depressions), len(r.Basins), nest, cells)
+}
+
+// classifyCaption returns a classify tile's caption for render variant
+// variant (see runSweep).
+func classifyCaption(cl *classify.Result, variant string) string {
+	switch variant {
+	case "biome":
+		counts, total := cl.BiomeHistogram()
+		order := make([]int, len(counts))
+		for k := range order {
+			order[k] = k
+		}
+		slices.SortStableFunc(order, func(a, b int) int { return cmp.Compare(counts[b], counts[a]) })
+		var parts []string
+		for _, k := range order[:min(4, len(order))] {
+			if counts[k] > 0 && total > 0 {
+				parts = append(parts, fmt.Sprintf("%s%.0f", classify.Biomes[k].Abbrev(), 100*float64(counts[k])/float64(total)))
+			}
+		}
+		return strings.Join(parts, " ")
+	case "surface":
+		counts, _ := cl.BiomeHistogram()
+		return fmt.Sprintf("gl %d if %d pd %d pk %d", cl.SurfaceCount(classify.Glacier), cl.SurfaceCount(classify.IceField),
+			counts[classify.PolarDesert-classify.Clear], cl.SurfaceCount(classify.PackIce))
+	case "wetness":
+		_, total := cl.BiomeHistogram()
+		pct := 0.0
+		if total > 0 {
+			pct = 100 * float64(cl.WetlandCount()) / float64(total)
+		}
+		return fmt.Sprintf("wet %d (%.1f%%)", cl.WetlandCount(), pct)
+	}
+	return fmt.Sprintf("%s v%d", strings.Join(cl.LandShares(true), " "), cl.Volcanoes())
 }

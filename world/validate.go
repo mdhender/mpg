@@ -74,7 +74,13 @@ func (e *Invalid) Error() string {
 //     impassable; rim cells deep salt water with no water kind and no
 //     salt flag; volcanoes on land; the coast flag exactly on cells with a
 //     coast edge; the salt flag only on lake and inland-sea cells; the
-//     playa flag only on playable land;
+//     playa flag only on playable land; biome and surface in their
+//     codebooks; a biome on exactly the playable land cells; biome clear
+//     exactly under a glacier or ice-field surface; glacier, ice-field and
+//     wetland surfaces only on land, wetlands only on flats or plains
+//     (except a playa's salt-flats), mangroves only with the coast flag;
+//     pack-ice only on playable water; no biome or surface on the rim;
+//     every playa salt-flats;
 //   - polygons: at least 3 corners, distinct, starting at the lowest id;
 //     Sides[k] joins Corners[k] to Corners[k+1] in the orientation its
 //     edge records for this cell, so the polygon is closed; each offset
@@ -122,8 +128,10 @@ func (e *Invalid) Error() string {
 //     cell counts match the cells; ocean cells lie at or below the sea
 //     level and dry basin floors are the land at or below it; the lake,
 //     inland-sea, salt and playa counts match the cells (lakes counted as
-//     connected sets of cells); met agrees with the target and tolerance;
-//     the land area is the land polygons' area; the reason, policy,
+//     connected sets of cells), and so do the glacier, ice-field, pack-ice
+//     and wetland counts; the biome table is named; met agrees with the
+//     target and tolerance; the land area is the land polygons' area; the
+//     reason, policy,
 //     budget, expected lake cells, climate passes, and trace are well
 //     formed.
 func Validate(w *World) error {
@@ -387,6 +395,7 @@ func (v *validator) cells() {
 		if c.HasFlag(FlagPlaya) && (rim || !c.Landform.IsLand()) {
 			v.bad("cell %d: playa on %s (rim %v): want playable land", i, c.Landform, rim)
 		}
+		v.cover(i, c, rim)
 		if !v.inMap(c.Site) || c.Site.Y == 0 || c.Site.Y == v.ht {
 			v.bad("cell %d: site %v off the map", i, c.Site)
 		}
@@ -394,6 +403,44 @@ func (v *validator) cells() {
 			v.bad("cell %d: centroid %v off the map", i, c.Centroid)
 		}
 		v.polygon(i, c)
+	}
+}
+
+// cover checks a cell's biome and surface.
+func (v *validator) cover(i int, c *Cell, rim bool) {
+	land := !rim && c.Landform.IsLand()
+	water := !rim && c.Landform.IsWater()
+	if c.Biome != BiomeNone && !slices.Contains(Biomes, c.Biome) {
+		v.bad("cell %d: biome %q not in the codebook", i, c.Biome)
+	}
+	if c.Surface != SurfaceNone && !slices.Contains(Surfaces, c.Surface) {
+		v.bad("cell %d: surface %q not in the codebook", i, c.Surface)
+	}
+	switch {
+	case rim && (c.Biome != BiomeNone || c.Surface != SurfaceNone):
+		v.bad("cell %d: rim cell with biome %q, surface %q: want neither", i, c.Biome, c.Surface)
+	case land && c.Biome == BiomeNone:
+		v.bad("cell %d: land with no biome", i)
+	case !land && c.Biome != BiomeNone:
+		v.bad("cell %d: biome %q on %s: want land", i, c.Biome, c.Landform)
+	}
+	if land && (c.Biome == Clear) != c.Surface.IsIce() {
+		v.bad("cell %d: biome %q with surface %q: biome clear exactly under glacier or ice-field", i, c.Biome, c.Surface)
+	}
+	switch {
+	case c.Surface.IsIce() && !land:
+		v.bad("cell %d: %s on %s: want land", i, c.Surface, c.Landform)
+	case c.Surface == PackIce && !water:
+		v.bad("cell %d: pack-ice on %s (rim %v): want playable water", i, c.Landform, rim)
+	case c.Surface.IsWetland() && !land:
+		v.bad("cell %d: %s on %s: want land", i, c.Surface, c.Landform)
+	case c.Surface.IsWetland() && c.Landform != Flats && c.Landform != Plains && !(c.Surface == SaltFlats && c.HasFlag(FlagPlaya)):
+		v.bad("cell %d: %s on %s: want flats or plains (or a playa's salt-flats)", i, c.Surface, c.Landform)
+	case c.Surface == Mangroves && !c.HasFlag(FlagCoast):
+		v.bad("cell %d: mangroves without the coast flag", i)
+	}
+	if c.HasFlag(FlagPlaya) && c.Surface != SaltFlats {
+		v.bad("cell %d: playa with surface %q, want salt-flats", i, c.Surface)
 	}
 }
 
@@ -851,9 +898,20 @@ func (v *validator) outcomes() {
 	w := v.w
 	o := &w.Outcomes
 	var playable, land, ocean, basin, lake, sea, playas int
+	var glacier, iceField, packIce, wetland int
 	var area float64
 	for i := range w.Cells {
 		c := &w.Cells[i]
+		switch {
+		case c.Surface == Glacier:
+			glacier++
+		case c.Surface == IceField:
+			iceField++
+		case c.Surface == PackIce:
+			packIce++
+		case c.Surface.IsWetland():
+			wetland++
+		}
 		if c.HasFlag(FlagRim) {
 			continue
 		}
@@ -890,6 +948,13 @@ func (v *validator) outcomes() {
 	if lakes != o.Lakes || seas != o.InlandSeas || saltLakes != o.SaltLakes || saltSeas != o.SaltInlandSeas || playas != o.Playas {
 		v.bad("outcomes: %d lakes, %d inland seas, %d and %d salt, %d playas; the cells give %d, %d, %d and %d, %d",
 			o.Lakes, o.InlandSeas, o.SaltLakes, o.SaltInlandSeas, o.Playas, lakes, seas, saltLakes, saltSeas, playas)
+	}
+	if glacier != o.GlacierCells || iceField != o.IceFieldCells || packIce != o.PackIceCells || wetland != o.WetlandCells {
+		v.bad("outcomes: %d glacier, %d ice-field, %d pack-ice, %d wetland cells; the cells give %d, %d, %d, %d",
+			o.GlacierCells, o.IceFieldCells, o.PackIceCells, o.WetlandCells, glacier, iceField, packIce, wetland)
+	}
+	if o.BiomeTable == "" {
+		v.bad("outcomes: no biome table")
 	}
 	if o.ExpectedLakeCells < 0 || o.PrePassLakeCells < 0 || o.ClimatePasses < 1 || !(o.DatumLandShare > 0 && o.DatumLandShare < 1) {
 		v.bad("outcomes: expected lake cells %d, pre-pass lake cells %d, datum land share %v, climate passes %d",

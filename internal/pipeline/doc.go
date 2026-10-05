@@ -44,7 +44,10 @@
 //     with each overflowing lake's water-balance overflow at its outlet
 //     (RiverFlow), and selects and classes the river edges by the config's
 //     breaks (RiverParams). The edge stage puts the classes on the edges,
-//     and export writes the polylines and mouths.
+//     and export writes the polylines and mouths. The classification stage
+//     gives the land its biomes and the cells their surfaces from the final
+//     climate pass, the lakes and playas, and the river classes
+//     (CoverInput; classify.Result.Cover).
 //
 // A stage is a function of a *Context, which carries the resolved config
 // and its hash, the output and render directories, the stage seed helpers, a

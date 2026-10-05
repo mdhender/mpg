@@ -343,6 +343,102 @@ func TestValidateCorrupt(t *testing.T) {
 	}
 }
 
+// TestValidateCover checks the biome and surface rules: a generated world
+// carries a biome on exactly its land, the outcome counts match its cells,
+// and each corruption of the rules, one at a time, is reported.
+func TestValidateCover(t *testing.T) {
+	ctx := generate(t, 3, "cinematic", "archipelago", 2000)
+	good := ctx.Products.WorldBytes
+	fresh := func() *world.World {
+		w, err := world.DecodeBytes(good)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return w
+	}
+	g := fresh()
+	if g.Outcomes.BiomeTable == "" || g.Outcomes.PackIceCells == 0 || g.Outcomes.WetlandCells == 0 {
+		t.Fatalf("outcomes %+v: want a biome table, pack ice and wetlands", g.Outcomes)
+	}
+	plain, mountain, ocean, rim := -1, -1, -1, -1
+	for i := range g.Cells {
+		c := &g.Cells[i]
+		switch {
+		case c.HasFlag(world.FlagRim):
+			if c.Biome != world.BiomeNone || c.Surface != world.SurfaceNone {
+				t.Fatalf("rim cell %d: %q/%q", i, c.Biome, c.Surface)
+			}
+			if rim < 0 {
+				rim = i
+			}
+		case c.Landform.IsLand():
+			if c.Biome == world.BiomeNone {
+				t.Fatalf("land cell %d without a biome", i)
+			}
+			if c.Landform == world.Plains && c.Surface == world.SurfaceNone && !c.HasFlag(world.FlagCoast) && !c.HasFlag(world.FlagPlaya) && plain < 0 {
+				plain = i
+			}
+			if c.Landform == world.Mountains && c.Surface == world.SurfaceNone && mountain < 0 {
+				mountain = i
+			}
+		case c.Water == world.Ocean && c.Surface == world.SurfaceNone && ocean < 0:
+			ocean = i
+		}
+	}
+	if plain < 0 || mountain < 0 || ocean < 0 || rim < 0 {
+		t.Fatalf("cells: plain %d, mountain %d, ocean %d, rim %d", plain, mountain, ocean, rim)
+	}
+	addFlag := func(fs []world.CellFlag, f world.CellFlag) []world.CellFlag {
+		fs = append(fs, f)
+		slices.SortFunc(fs, func(a, b world.CellFlag) int {
+			return slices.Index(world.CellFlags, a) - slices.Index(world.CellFlags, b)
+		})
+		return fs
+	}
+	set := func(i int, b world.Biome, s world.Surface) func(w *world.World) {
+		return func(w *world.World) { w.Cells[i].Biome, w.Cells[i].Surface = b, s }
+	}
+	for _, tc := range []struct {
+		name string
+		f    func(w *world.World)
+		msg  string
+	}{
+		{"biome codebook", func(w *world.World) { w.Codebooks.Biomes = w.Codebooks.Biomes[1:] }, "codebooks"},
+		{"surface codebook", func(w *world.World) { w.Codebooks.Surfaces = nil }, "codebooks"},
+		{"unknown biome", set(plain, "jungle", ""), `biome "jungle" not in the codebook`},
+		{"unknown surface", set(plain, world.Grassland, "lava"), `surface "lava" not in the codebook`},
+		{"land without biome", set(plain, "", ""), "land with no biome"},
+		{"biome at sea", set(ocean, world.Desert, ""), `biome "desert" on salt-water`},
+		{"biome on the rim", set(rim, world.Tundra, ""), "rim cell with biome"},
+		{"surface on the rim", set(rim, "", world.PackIce), "rim cell with biome"},
+		{"clear without ice", set(plain, world.Clear, ""), "biome clear exactly under"},
+		{"ice without clear", set(mountain, world.Alpine, world.Glacier), "biome clear exactly under"},
+		{"ice at sea", set(ocean, "", world.IceField), "ice-field on salt-water: want land"},
+		{"pack ice on land", set(plain, world.Grassland, world.PackIce), "pack-ice on plains"},
+		{"wetland at sea", set(ocean, "", world.Marshes), "marshes on salt-water: want land"},
+		{"wetland on mountains", set(mountain, world.Alpine, world.Bogs), "want flats or plains"},
+		{"mangroves inland", set(plain, world.TropicalRainforest, world.Mangroves), "mangroves without the coast flag"},
+		{"playa without salt flats", func(w *world.World) { w.Cells[plain].Flags = addFlag(w.Cells[plain].Flags, world.FlagPlaya) }, "playa with surface"},
+		{"glacier count", func(w *world.World) { w.Outcomes.GlacierCells++ }, "glacier"},
+		{"ice-field count", func(w *world.World) { w.Outcomes.IceFieldCells++ }, "ice-field"},
+		{"pack-ice count", func(w *world.World) { w.Outcomes.PackIceCells-- }, "pack-ice"},
+		{"wetland count", func(w *world.World) { w.Outcomes.WetlandCells-- }, "wetland"},
+		{"biome table", func(w *world.World) { w.Outcomes.BiomeTable = "" }, "no biome table"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := fresh()
+			tc.f(w)
+			err := world.Validate(w)
+			if _, ok := errors.AsType[*world.Invalid](err); !ok {
+				t.Fatalf("Validate = %v, want an *Invalid", err)
+			}
+			if !strings.Contains(err.Error(), tc.msg) {
+				t.Errorf("Validate = %v\nwant a problem mentioning %q", err, tc.msg)
+			}
+		})
+	}
+}
+
 // TestNoFusedMultiplyAdd compiles this package for the architectures whose Go
 // compilers fuse a*b+c into one instruction and fails if any fused
 // multiply-add or multiply-subtract appears in its code.

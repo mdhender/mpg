@@ -23,10 +23,15 @@
 //     and the other landforms in the classification stage render's palette
 //     (classify.LandformColor, looked up by the world's codebook strings),
 //     so the stage render and the player map agree: lakes in the
-//     fresh-water teal. The cell flags refine that: a playa in PlayaColor,
-//     a salt lake in SaltLakeColor, and a salt inland sea's blue mixed half
-//     and half with SaltSeaTint (the basins stage's lakes render's inks).
-//     Biomes come in milestone 8.
+//     fresh-water teal. The cell flags refine that: a salt lake in
+//     SaltLakeColor, and a salt inland sea's blue mixed half and half with
+//     SaltSeaTint (the basins stage's lakes render's inks). A cell with a
+//     surface takes the surface's color (glacier, ice field, pack ice on
+//     water, and the wetlands; a playa is salt flats), and a land cell its
+//     biome's, darkened by landform so relief still reads (classify.Shade);
+//     both colors are the classification stage's biome renders'
+//     (classify.BiomeColor, classify.SurfaceColor). A land cell without a
+//     biome (a world from before milestone 8) keeps its landform's color.
 //  2. The borders between land cells, a pixel wide, blended faintly.
 //  3. The ice front, the edges between the rim and playable cells.
 //  4. Rivers by class (1/12, 1/8 and 1/5 of a cell wide), then the coastlines

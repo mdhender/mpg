@@ -158,6 +158,15 @@ type Result struct {
 	// that cell is land, so the hotspot is a volcano.
 	VolcanoCell []int
 	VolcanoLand []bool
+	// Biome is each playable land cell's biome, BiomeNone for the rest;
+	// Surface each cell's surface (permanent ice or a wetland on land,
+	// pack ice on playable water), SurfaceNone for bare ground, open water
+	// and rim cells; and Wetness each land cell's wetness signals
+	// (WetRiver, WetShore, WetSurplus), 0 on permanent ice. Classify
+	// leaves them nil; Cover fills them.
+	Biome   []Biome
+	Surface []Surface
+	Wetness []uint8
 }
 
 // Count returns the number of cells with landform l, rim cells excluded
@@ -351,6 +360,9 @@ func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
 //	per hotspot, in order:
 //	    VolcanoCell                     integer
 //	    VolcanoLand                     one byte, 0 or 1
+//	number of covered cells             integer: len(Biome), 0 before Cover
+//	per cell, in id order:
+//	    Biome, Surface                  one byte each
 //
 // The error is always nil; the signature is encoding.BinaryAppender's.
 func (r *Result) AppendBinary(b []byte) ([]byte, error) {
@@ -372,6 +384,10 @@ func (r *Result) AppendBinary(b []byte) ([]byte, error) {
 	for k := range r.VolcanoCell {
 		i(r.VolcanoCell[k])
 		flag(r.VolcanoLand[k])
+	}
+	i(len(r.Biome))
+	for c := range r.Biome {
+		b = append(b, byte(r.Biome[c]), byte(r.Surface[c]))
 	}
 	return b, nil
 }

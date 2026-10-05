@@ -67,7 +67,7 @@ func Build(in Input) (*world.World, error) {
 	}
 	n := len(m.Cells)
 	if in.Cells.Len() != n || len(in.Flood.Land) != n || len(in.Lakes.Lake) != n || len(in.Classes.Landform) != n ||
-		len(in.Edges.Cells) != n || len(in.Edges.Edges) != len(m.Edges) ||
+		len(in.Classes.Biome) != n || len(in.Classes.Surface) != n || len(in.Edges.Cells) != n || len(in.Edges.Edges) != len(m.Edges) ||
 		in.Network != nil && (len(in.Network.Mouth) != len(m.Corners) || len(in.Network.Class) != len(m.Edges)) {
 		return nil, errors.New("export: stage products disagree on the mesh size")
 	}
@@ -305,6 +305,8 @@ func (b *builder) cells() {
 			Landform:  world.Landform(in.Classes.Landform[i].String()),
 			Depth:     depth,
 			Water:     water,
+			Biome:     world.Biome(in.Classes.Biome[i].String()),
+			Surface:   world.Surface(in.Classes.Surface[i].String()),
 			AltitudeM: in.Cells.Altitude[i],
 			Flags:     flags,
 			Site:      site,
@@ -462,6 +464,11 @@ func (b *builder) outcomes() world.Outcomes {
 		PlayableCells:     in.Flood.Playable,
 		OceanCells:        in.Flood.OceanCells,
 		Playas:            len(in.Lakes.Playas),
+		BiomeTable:        classify.BiomeTableVersion,
+		GlacierCells:      in.Classes.SurfaceCount(classify.Glacier),
+		IceFieldCells:     in.Classes.SurfaceCount(classify.IceField),
+		PackIceCells:      in.Classes.SurfaceCount(classify.PackIce),
+		WetlandCells:      in.Classes.WetlandCount(),
 		Met:               rec.Met,
 		Reason:            string(rec.Reason),
 		Policy:            rec.Policy,

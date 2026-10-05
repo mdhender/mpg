@@ -42,6 +42,8 @@ const BorderAlpha = 60
 var (
 	landforms = map[world.Landform]classify.Landform{}
 	depths    = map[world.Depth]classify.Depth{world.DepthNone: classify.DepthNone}
+	biomes    = map[world.Biome]classify.Biome{}
+	surfaces  = map[world.Surface]classify.Surface{}
 )
 
 func init() {
@@ -51,10 +53,16 @@ func init() {
 	for _, d := range classify.Depths {
 		depths[world.Depth(d.String())] = d
 	}
+	for _, b := range classify.Biomes {
+		biomes[world.Biome(b.String())] = b
+	}
+	for _, s := range classify.Surfaces {
+		surfaces[world.Surface(s.String())] = s
+	}
 }
 
-// The inland water and playa inks, the basins stage's lakes render's (package
-// basin), so the stage render and the player map read alike.
+// The inland water inks, the basins stage's lakes render's (package basin),
+// so the stage render and the player map read alike.
 var (
 	// SaltLakeColor fills a lake cell with the salt flag; a fresh lake
 	// keeps the fresh-water landform's teal.
@@ -63,26 +71,56 @@ var (
 	// inland-sea cell with the salt flag; a fresh inland sea is drawn as
 	// the ocean is, by depth band.
 	SaltSeaTint = basin.SaltSeaColor
-	// PlayaColor fills a playa cell: a dry lake bed.
-	PlayaColor = basin.PlayaColor
 )
 
-// CellColor returns the fill of a cell: ice for a rim cell, a playa in
-// PlayaColor, a salt lake in SaltLakeColor, a salt inland sea its depth
-// band's blue mixed with SaltSeaTint, other salt water by its depth band,
-// and every other landform by classify.LandformColor.
+// CellColor returns the fill of a cell: ice for a rim cell; a cell with a
+// surface (glacier, ice field, pack ice, or a wetland; a playa is salt
+// flats) in SurfaceColor; a land cell with a biome in BiomeColor darkened
+// for its landform (classify.Shade: rolling plains 94%, hills 84%,
+// mountains 68%, plateaus and volcanic highlands 90%); a salt lake in
+// SaltLakeColor, a salt inland sea its depth band's blue mixed with
+// SaltSeaTint, other salt water by its depth band, and any other cell
+// (such as land in a world without biomes) by classify.LandformColor.
 func CellColor(c *world.Cell) color.RGBA {
 	switch {
 	case c.HasFlag(world.FlagRim):
 		return IceColor
-	case c.HasFlag(world.FlagPlaya):
-		return PlayaColor
+	case c.Surface != world.SurfaceNone:
+		return SurfaceColor(c.Surface)
+	case c.Biome != world.BiomeNone:
+		l, ok := landforms[c.Landform]
+		if !ok {
+			return UnknownColor
+		}
+		return classify.Shade(BiomeColor(c.Biome), l)
 	case c.Water == world.Lake && c.HasFlag(world.FlagSalt):
 		return SaltLakeColor
 	case c.Water == world.InlandSea && c.HasFlag(world.FlagSalt):
 		return mix(LandformColor(c.Landform, c.Depth), SaltSeaTint)
 	}
 	return LandformColor(c.Landform, c.Depth)
+}
+
+// BiomeColor returns the fill of biome b, the classification stage's
+// biome render's (classify.BiomeColor), or UnknownColor for a biome not in
+// the codebook.
+func BiomeColor(b world.Biome) color.RGBA {
+	cb, ok := biomes[b]
+	if !ok {
+		return UnknownColor
+	}
+	return classify.BiomeColor(cb)
+}
+
+// SurfaceColor returns the fill of surface s, the classification stage's
+// (classify.SurfaceColor), or UnknownColor for a surface not in the
+// codebook.
+func SurfaceColor(s world.Surface) color.RGBA {
+	cs, ok := surfaces[s]
+	if !ok {
+		return UnknownColor
+	}
+	return classify.SurfaceColor(cs)
 }
 
 // mix returns the even mix of a and b, rounded down, opaque.

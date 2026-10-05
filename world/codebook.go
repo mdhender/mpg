@@ -61,6 +61,65 @@ const (
 // Waters lists the water kinds.
 var Waters = []Water{Ocean, Lake, InlandSea}
 
+// Biome is a playable land cell's ecology, in hmz2bio's vocabulary plus
+// polar desert, from the biome table world.json's outcomes name
+// (Outcomes.BiomeTable). It is empty on water and rim cells.
+type Biome string
+
+// The biomes.
+const (
+	BiomeNone           Biome = ""
+	Clear               Biome = "clear" // under permanent ice: exactly the cells whose surface is glacier or ice-field
+	PolarDesert         Biome = "polar-desert"
+	Tundra              Biome = "tundra"
+	Alpine              Biome = "alpine"
+	Desert              Biome = "desert"
+	Scrubland           Biome = "scrubland"
+	Steppe              Biome = "steppe"
+	Grassland           Biome = "grassland"
+	Savanna             Biome = "savanna"
+	BorealForest        Biome = "boreal-forest"
+	TemperateForest     Biome = "temperate-forest"
+	TemperateRainforest Biome = "temperate-rainforest"
+	TropicalDryForest   Biome = "tropical-dry-forest"
+	TropicalRainforest  Biome = "tropical-rainforest"
+	CloudForest         Biome = "cloud-forest"
+)
+
+// Biomes lists the biomes.
+var Biomes = []Biome{Clear, PolarDesert, Tundra, Alpine, Desert, Scrubland, Steppe, Grassland, Savanna,
+	BorealForest, TemperateForest, TemperateRainforest, TropicalDryForest, TropicalRainforest, CloudForest}
+
+// Surface is what covers a cell: permanent ice on land, pack ice on
+// playable water, or a wetland on land. It is empty on bare ground, open
+// water, and rim cells.
+type Surface string
+
+// The surfaces.
+const (
+	SurfaceNone Surface = ""
+	Glacier     Surface = "glacier"   // permanent ice on a mountain cell, or reaching down from one
+	IceField    Surface = "ice-field" // permanent ice on broad cold ground
+	PackIce     Surface = "pack-ice"  // sea, lake, or inland-sea ice
+	Marshes     Surface = "marshes"
+	Swamps      Surface = "swamps"
+	Bogs        Surface = "bogs"
+	Mangroves   Surface = "mangroves"  // on an ocean coast
+	SaltFlats   Surface = "salt-flats" // dry wetland ground, and every playa
+)
+
+// Surfaces lists the surfaces.
+var Surfaces = []Surface{Glacier, IceField, PackIce, Marshes, Swamps, Bogs, Mangroves, SaltFlats}
+
+// IsIce reports whether the surface is permanent land ice.
+func (s Surface) IsIce() bool { return s == Glacier || s == IceField }
+
+// IsWetland reports whether the surface is a wetland: marshes, swamps,
+// bogs, mangroves, or salt flats.
+func (s Surface) IsWetland() bool {
+	return s == Marshes || s == Swamps || s == Bogs || s == Mangroves || s == SaltFlats
+}
+
 // Direction is one of the 8 compass points. A cell gives each of its
 // neighbors a different one.
 type Direction string
@@ -162,6 +221,8 @@ type Codebooks struct {
 	Landforms    []Landform   `json:"landforms"`
 	Depths       []Depth      `json:"depths"`
 	Waters       []Water      `json:"waters"`
+	Biomes       []Biome      `json:"biomes"`
+	Surfaces     []Surface    `json:"surfaces"`
 	Directions   []Direction  `json:"directions"`
 	RiverClasses []RiverClass `json:"river_classes"`
 	CellFlags    []CellFlag   `json:"cell_flags"`
@@ -174,6 +235,8 @@ func DefaultCodebooks() Codebooks {
 		Landforms:    slices.Clone(Landforms),
 		Depths:       slices.Clone(Depths),
 		Waters:       slices.Clone(Waters),
+		Biomes:       slices.Clone(Biomes),
+		Surfaces:     slices.Clone(Surfaces),
 		Directions:   slices.Clone(Directions),
 		RiverClasses: slices.Clone(RiverClasses),
 		CellFlags:    slices.Clone(CellFlags),
@@ -186,6 +249,8 @@ func (c *Codebooks) equal(d *Codebooks) bool {
 	return slices.Equal(c.Landforms, d.Landforms) &&
 		slices.Equal(c.Depths, d.Depths) &&
 		slices.Equal(c.Waters, d.Waters) &&
+		slices.Equal(c.Biomes, d.Biomes) &&
+		slices.Equal(c.Surfaces, d.Surfaces) &&
 		slices.Equal(c.Directions, d.Directions) &&
 		slices.Equal(c.RiverClasses, d.RiverClasses) &&
 		slices.Equal(c.CellFlags, d.CellFlags) &&

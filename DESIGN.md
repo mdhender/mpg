@@ -242,7 +242,7 @@ Stage 7 computes climate on the raster with the cell mask drawn onto it: each ra
 
 **Final pass with lakes (S29).** Inland seas recharge the air like the ocean; lakes do not (see "Climate coupling").
 
-**Open (deferred).** hmz2bio's biome rules use warmest and coldest month (1 + 0.33·|lat| °C split about the mean), which must be reconciled with "no seasons" before M8.
+**Seasons (resolved, S32).** The climate stays seasonless. Only the biome table uses hmz2bio's synthetic annual range, 1 + 0.33·|lat°| °C split about the mean, for its warmest- and coldest-month rules and the snowfall ramp (see "Surface and biome"). The range is never stored.
 
 ### Basins and lakes
 
@@ -261,7 +261,7 @@ Stage 7 computes climate on the raster with the cell mask drawn onto it: each ra
   - **Order:** top-level basin trees by descending spill level (ties by id); within a tree, children before parents. A full child's surplus goes to its non-full sibling with the lowest surface (ties by id), or, once all children are full, the parent continues the flood as one surface over them. A full top-level basin overflows through its spill corner and runs down to the sea or to a lower basin, which receives it as inflow (passing on through basins already full).
   - **Conservation** is checked in real cell area × mm/yr: runoff + lake precipitation = evaporation + seepage + overflow to the sea + unplaced water (playa inflow and partial-fill remainders), to a relative 10⁻⁹ (measured ≈ 3·10⁻¹⁵).
 - **Surplus at the spill** overflows through **one spill corner**, which became a wgvc rule for good reason, and continues downstream.
-- **No stable level** means the basin stays dry land with surface `playa` and is a **dry sink** for rivers.
+- **No stable level** means the basin stays dry land (flag `playa`, surface `salt-flats` from S32) and is a **dry sink** for rivers.
   - That is a leaf basin whose inflow is less than d of its bottom cell. Only the bottom cell is `playa`; its lowest corner by corner height (ties by id) is the dry sink. A partly filled basin is a lake plus ordinary land; a dry parent whose children hold lakes is plain land.
 - **Classification:**
   - lake: 1 to `inland_sea_min_cells` − 1 cells (one-cell lakes are fine);
@@ -349,11 +349,35 @@ Use the hm* codebooks where they fit, so the engine and converter tools stay fam
   - `volcanic-highlands`: a `plateaus` cell within `volcanic_radius_km` of a volcano (`hmz2ter`'s rule, default 25 km). At 25 km this falls inside the cone and rarely fires; that is accepted as a possible, not forced outcome.
 - **Landform (water):** `salt-water` (ocean, inland sea) and `fresh-water` (lake). Salinity is a flag.
 - **Depth (salt water):** `shallow`, `open`, `deep`, from distance in cell steps to the nearest non-salt-water cell, as in `hmz2ter`. The bands are play rules, so they are retuned in cells: shallow ≤ 3 steps, open ≤ 8, deep beyond (S21; `hmz2ter`'s 12 / 19 made over half the sea shallow). Rim cells are deep salt water and are not stepped through.
-- **Surface and biome:**
-  - From temperature, precipitation and aridity, and wetness. The lookup table is versioned and uses `hmz2bio`'s vocabulary. Initial candidates: polar desert, tundra, boreal forest, temperate forest, temperate rainforest, grassland, steppe, desert, savanna, tropical seasonal forest, tropical rainforest, and alpine vegetation.
-  - Glacier and ice field are **surfaces** on land cells. Permanent ice needs cold plus enough snowfall, so cold dry land can stay bare. Ice fields cover broad cold high ground; a glacier is permanent ice on a mountain cell, or reaching down from one. Neither is placed on purpose.
-  - Pack ice is a surface on water.
-  - Wetlands need a hydrological wetness signal: river edges, a lake shore, or low relief with surplus.
+- **Surface and biome** (S32). The table `hmz2bio-0.3.0+mpg.1` is Go constants in `internal/classify`, recorded in world.json's `biome_table` outcome; it is not in the config.
+  - **Seasons for the table only:** warmest/coldest month = T ± (1 + 0.33·|lat°|)/2. Snowfall = P·clamp((range/2 − T)/range, 0, 1).
+  - **Biome** (playable land only; first row wins; Köppen aridity limit L = 20·T + 280 mm):
+    1. warmest < 0 °C and snowfall ≥ 300 mm → permanent ice, biome `clear`;
+    2. warmest < 0 °C → `polar-desert`, bare (cold dry land stays bare);
+    3. warmest < 10 °C → `tundra` if the sea-level warmest month at that latitude is below 10 °C too, else `alpine`;
+    4. P < ½L → `desert`; P < L → `scrubland` if T ≥ 18 °C, else `steppe`;
+    5. T < 18 °C on hills, mountains, plateaus or volcanic highlands, sea-level coldest month ≥ 15 °C, lift ≥ 100 m, P ≥ 1,000 mm → `cloud-forest`; otherwise T < 18 °C with sea-level coldest ≥ 18 °C (tropical montane) → `temperate-forest`;
+    6. T ≥ 18 °C → `tropical-rainforest` (P ≥ 2,000), `tropical-dry-forest` (P ≥ 1,200), else `savanna`;
+    7. T < 4 °C → `boreal-forest`; P ≥ 2,000 → `temperate-rainforest`; P < 1.5·L → `grassland`; else `temperate-forest`.
+  - Rows 3–7 are hmz2bio's rules unchanged; rows 1–2 split its glacial ice by snowfall and add `polar-desert`. Deserts come from the Köppen limit. UNEP's arid classes are nearly absent because the convective share floors P, and the climate is not retuned.
+  - **Glacier and ice field** are surfaces on permanent-ice land, and the biome is `clear` exactly under them. In each connected ice body, mountain cells are `glacier`. Non-mountain cells are `ice-field` when the body has ≥ 5 non-mountain cells or no mountain at all, and otherwise `glacier` (tongues reaching down). Neither is placed on purpose.
+  - **Pack ice** is a surface on playable water (ocean, inland seas, and lakes at their surface temperature) whose warmest month is below 0 °C. It is never on the rim, which stays the ice sheet.
+  - **Wetlands** are surfaces on land that is not ice, from a wetness signal: flats beside a `major-river` edge, flats or plains touching a lake or inland sea, or flats with aridity ≥ 2. The kind follows hmz2bio's order: `salt-flats` if P < L, `mangroves` on an ocean coast with coldest month ≥ 15 °C, `bogs` below 10 °C, `swamps` in a forest biome, else `marshes`. Every playa (the flag stays) has surface `salt-flats`.
+  - **world.json:**
+    - cell `biome` (playable land only) and `surface` (omitempty; never on the rim);
+    - codebooks `biomes` and `surfaces`;
+    - outcomes `biome_table`, `glacier_cells`, `ice_field_cells`, `pack_ice_cells`, `wetland_cells`;
+    - the validator checks the pairings and the counts.
+  - **Player map:** fills a cell by its surface, else by its biome darkened by landform (hills 84%, mountains 68%, plateaus 90%, rolling plains 94%). The rim stays the ice sheet.
+  - **Renders:** classify `biome`, `surface`, `wetness`.
+  - **Measured on 12 default worlds:**
+    - desert 0–27% of land, mostly cold (BWk);
+    - polar desert 0–177 cells;
+    - glaciers 0–109 cells, almost all on mountains;
+    - ice fields 0–98 cells;
+    - wetlands 1.7–8.8% of land, with 12.7% on seed 7 cinematic pangaea (mostly bogs on cold flats);
+    - pack ice 13–17% of playable water;
+    - temperate rainforest does not occur (mid-latitude P tops out near 2,000 mm), which is accepted as possible, not forced.
 
 ### Edges
 

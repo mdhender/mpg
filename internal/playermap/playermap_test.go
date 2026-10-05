@@ -315,16 +315,16 @@ func TestPaletteMatchesClassify(t *testing.T) {
 	}
 }
 
-// TestInlandWaterColors checks the flags' colors: playas, salt lakes, and
-// salt inland seas tinted over their depth band; fresh lakes and inland
-// seas keep the landform's colors.
+// TestInlandWaterColors checks the flags' colors: playas (salt flats), salt
+// lakes, and salt inland seas tinted over their depth band; fresh lakes and
+// inland seas keep the landform's colors.
 func TestInlandWaterColors(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		c    world.Cell
 		want color.RGBA
 	}{
-		{"playa", world.Cell{Landform: world.Flats, Flags: []world.CellFlag{world.FlagPlaya}}, playermap.PlayaColor},
+		{"playa", world.Cell{Landform: world.Hills, Biome: world.Desert, Surface: world.SaltFlats, Flags: []world.CellFlag{world.FlagPlaya}}, classify.SurfaceColor(classify.SaltFlats)},
 		{"fresh lake", world.Cell{Landform: world.FreshWater, Water: world.Lake}, classify.LandformColor(classify.FreshWater, classify.DepthNone)},
 		{"salt lake", world.Cell{Landform: world.FreshWater, Water: world.Lake, Flags: []world.CellFlag{world.FlagSalt}}, playermap.SaltLakeColor},
 		{"fresh inland sea", world.Cell{Landform: world.SaltWater, Depth: world.Shallow, Water: world.InlandSea}, classify.LandformColor(classify.SaltWater, classify.Shallow)},
@@ -340,6 +340,93 @@ func TestInlandWaterColors(t *testing.T) {
 	if f == s || s.A != 0xff {
 		t.Errorf("salt inland sea %v, fresh %v: want a distinct opaque tint", s, f)
 	}
+}
+
+// TestBiomeColors checks the biome and surface fills: every code in the
+// classification stage render's color, a biome darkened by its landform
+// (mountains most), a surface drawn flat whatever the landform, pack ice on
+// water, and unknown codes in UnknownColor.
+func TestBiomeColors(t *testing.T) {
+	for _, b := range classify.Biomes {
+		if got, want := playermap.BiomeColor(world.Biome(b.String())), classify.BiomeColor(b); got != want {
+			t.Errorf("biome %s: %v, want %v", b, got, want)
+		}
+		c := world.Cell{Landform: world.Plains, Biome: world.Biome(b.String())}
+		if got, want := playermap.CellColor(&c), classify.BiomeColor(b); got != want {
+			t.Errorf("biome %s on plains: %v, want %v", b, got, want)
+		}
+	}
+	for _, s := range classify.Surfaces {
+		if got, want := playermap.SurfaceColor(world.Surface(s.String())), classify.SurfaceColor(s); got != want {
+			t.Errorf("surface %s: %v, want %v", s, got, want)
+		}
+	}
+	plains := world.Cell{Landform: world.Plains, Biome: world.TemperateForest}
+	hills := world.Cell{Landform: world.Hills, Biome: world.TemperateForest}
+	mtn := world.Cell{Landform: world.Mountains, Biome: world.TemperateForest}
+	p, h, m := playermap.CellColor(&plains), playermap.CellColor(&hills), playermap.CellColor(&mtn)
+	if !(m.G < h.G && h.G < p.G) || m != classify.Shade(classify.BiomeColor(classify.TemperateForest), classify.Mountains) {
+		t.Errorf("forest on plains %v, hills %v, mountains %v: want darker with relief", p, h, m)
+	}
+	glacier := world.Cell{Landform: world.Mountains, Biome: world.Clear, Surface: world.Glacier}
+	if got := playermap.CellColor(&glacier); got != classify.SurfaceColor(classify.Glacier) {
+		t.Errorf("glacier on mountains: %v, want the glacier color unshaded", got)
+	}
+	pack := world.Cell{Landform: world.SaltWater, Depth: world.Deep, Water: world.Ocean, Surface: world.PackIce}
+	if got := playermap.CellColor(&pack); got != classify.SurfaceColor(classify.PackIce) {
+		t.Errorf("pack ice: %v", got)
+	}
+	for _, c := range []world.Cell{{Landform: world.Plains, Biome: "jungle"}, {Landform: world.Plains, Biome: world.Desert, Surface: "lava"}} {
+		if got := playermap.CellColor(&c); got != playermap.UnknownColor {
+			t.Errorf("%+v: %v, want UnknownColor", c, got)
+		}
+	}
+}
+
+// TestPlayerMapShowsBiomes is S32's done-when for the player map: on a
+// generated world every land cell has a biome, and the full render paints
+// land cells' sites in their biome (or surface) colors, not their
+// landform's; at least two biomes show.
+func TestPlayerMapShowsBiomes(t *testing.T) {
+	w := loadWorld(t)
+	img, l := full(t, w, 4)
+	seen := map[world.Biome]bool{}
+	checked := 0
+	for i := range w.Cells {
+		c := &w.Cells[i]
+		if c.HasFlag(world.FlagRim) || !c.Landform.IsLand() {
+			continue
+		}
+		if c.Biome == world.BiomeNone {
+			t.Fatalf("land cell %d has no biome", i)
+		}
+		if c.HasFlag(world.FlagCoast) || c.HasFlag(world.FlagVolcano) {
+			continue
+		}
+		want := playermap.SurfaceColor(c.Surface)
+		if c.Surface == world.SurfaceNone {
+			lf, _ := classifyLandform(c.Landform)
+			want = classify.Shade(playermap.BiomeColor(c.Biome), lf)
+		}
+		x, y := int(fmath.Mul(c.Site.X, l.SX)), int(fmath.Mul(c.Site.Y, l.SY))
+		if got := img.RGBAAt(x, y); got == want {
+			seen[c.Biome] = true
+			checked++
+		}
+	}
+	if checked == 0 || len(seen) < 2 {
+		t.Errorf("%d land sites in biome colors, %d biomes: want biomes on the map", checked, len(seen))
+	}
+}
+
+// classifyLandform returns the classify landform named l.
+func classifyLandform(l world.Landform) (classify.Landform, bool) {
+	for _, k := range classify.Landforms {
+		if k.String() == string(l) {
+			return k, true
+		}
+	}
+	return classify.LandformNone, false
 }
 
 func TestLatticeWindow(t *testing.T) {

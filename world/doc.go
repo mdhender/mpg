@@ -30,8 +30,10 @@
 //     and wraps; y runs south in [0, H] and does not. A Point is written as
 //     [x, y].
 //   - A Cell has its landform, depth band (salt water only), water kind
-//     (playable water only), altitude (the median of its raster samples:
-//     the one height), and flags; its site and centroid; its polygon as
+//     (playable water only), biome (playable land only), surface (glacier,
+//     ice field or a wetland on land, pack ice on playable water; none on
+//     the rim), altitude (the median of its raster samples: the one
+//     height), and flags; its site and centroid; its polygon as
 //     clockwise corner ids (Corners, from the lowest id), the edge along
 //     each side (Sides), and the same polygon unwrapped about the site in
 //     km (Polygon), so a cell across the seam draws without special cases;
@@ -59,12 +61,13 @@
 //     by main stem, each edge with its class.
 //   - Outcomes hold the sea level, the land (after lakes), ocean, dry
 //     basin, lake and inland-sea cell counts, the lake, inland-sea, salt
-//     and playa counts, the target and tolerance, whether it was met and
-//     why the land-target search ended, its policy, budget, expected lake
-//     cells and trace (each probe with its lake cells), the climate passes,
-//     the elevation pre-pass's lake cells and datum land share, and the
-//     deferred pipeline stages. Outcomes
-//     never go in config.json.
+//     and playa counts, the biome table and the glacier, ice-field,
+//     pack-ice and wetland cell counts, the target and tolerance, whether
+//     it was met and why the land-target search ended, its policy, budget,
+//     expected lake cells and trace (each probe with its lake cells), the
+//     climate passes, the elevation pre-pass's lake cells and datum land
+//     share, and the deferred pipeline stages. Outcomes never go in
+//     config.json.
 //
 // # Units and precision
 //
@@ -84,9 +87,11 @@
 // Version 0 is the first playable export (milestone 4); lakes, inland
 // seas, the salt and playa cell flags, the sink corner flag and the lake
 // outcomes came with milestone 6 (S29), and rivers (edge classes, river
-// polylines, corner mouths) with milestone 7 (S31). Surface and biome come
-// with milestone 8; the codebooks already list the values. The schema is frozen as version 1 in milestone 9; until
-// then it may change without migration.
+// polylines, corner mouths) with milestone 7 (S31), and biomes and
+// surfaces (the cell fields, the biomes and surfaces codebooks, and the
+// biome table and surface counts in the outcomes) with milestone 8 (S32).
+// The schema is frozen as version 1 in milestone 9; until then it may
+// change without migration.
 //
 // # Determinism
 //
