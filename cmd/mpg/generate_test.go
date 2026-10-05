@@ -241,7 +241,7 @@ func TestGenerateRendersDir(t *testing.T) {
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	if !slices.Equal(names, []string{"02-layout.png", "03-elevation.png", "04-mesh-area.png", "04-mesh-short.png", "04-mesh.png", "05-cells-relief.png", "05-cells.png", "06-sea-level.png", "07-climate-mask.png", "07-climate.png", "11-classify.png", "12-edges-compass.png", "12-edges-passability.png", "12-edges.png", "14-export.png"}) {
-		t.Errorf("renders = %q, want the layout, elevation, mesh area, mesh short-edge, mesh, cell relief, cell altitude, sea level, climate mask, temperature, landform, compass, passability, incline and player map renders", names)
+	if !slices.Equal(names, []string{"02-layout.png", "03-elevation.png", "04-mesh-area.png", "04-mesh-short.png", "04-mesh.png", "05-cells-relief.png", "05-cells.png", "06-sea-level.png", "07-climate-aridity.png", "07-climate-mask.png", "07-climate-moisture.png", "07-climate-pet.png", "07-climate-precip.png", "07-climate-runoff.png", "07-climate.png", "11-classify.png", "12-edges-compass.png", "12-edges-passability.png", "12-edges.png", "14-export.png"}) {
+		t.Errorf("renders = %q, want the layout, elevation, mesh area, mesh short-edge, mesh, cell relief, cell altitude, sea level, aridity, climate mask, moisture, PET, precipitation, runoff, temperature, landform, compass, passability, incline and player map renders", names)
 	}
 }

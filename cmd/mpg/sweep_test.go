@@ -12,7 +12,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mdhender/mpg/internal/climate"
 	"github.com/mdhender/mpg/internal/config"
+	"github.com/mdhender/mpg/internal/mesh"
 	"github.com/mdhender/mpg/internal/pipeline"
 	"github.com/mdhender/mpg/internal/render"
 )
@@ -91,7 +93,7 @@ func TestParseSweepStages(t *testing.T) {
 		in   string
 		last int
 		ok   bool
-	}{{"config", 0, true}, {"layout,config", 1, true}, {"config,elevation", 2, true}, {"elevation,mesh", 3, true}, {"mesh,cells", 4, true}, {"cells:relief", 4, true}, {"cells,sea-level", 5, true}, {"sea-level", 5, true}, {"sea-level,climate", 6, true}, {"climate", 6, true}, {"climate:mask", 6, true}, {"climate,basins", -1, false},
+	}{{"config", 0, true}, {"layout,config", 1, true}, {"config,elevation", 2, true}, {"elevation,mesh", 3, true}, {"mesh,cells", 4, true}, {"cells:relief", 4, true}, {"cells,sea-level", 5, true}, {"sea-level", 5, true}, {"sea-level,climate", 6, true}, {"climate", 6, true}, {"climate:mask", 6, true}, {"climate:precip,climate:moisture,climate:pet,climate:runoff,climate:aridity", 6, true}, {"climate,basins", -1, false},
 		{"classify", 10, true}, {"sea-level,classify", 10, true}, {"rivers,classify", -1, false}, {"classify,edges", 11, true}, {"edges:passability", 11, true}, {"edges,measures", -1, false}} {
 		cols, err := parseSweepStages(tc.in, registry)
 		if err != nil {
@@ -267,19 +269,19 @@ func TestSweepPresets(t *testing.T) {
 }
 
 // TestSweepSeaLevel checks that a sweep runs through the sea level stage
-// and the climate (temperature and mask), and on to classification and
+// and the climate (temperature, mask, precipitation and aridity), and on to classification and
 // the edges, past the deferred stages, and
 // gives the same sheet twice.
 func TestSweepSeaLevel(t *testing.T) {
 	dir := t.TempDir()
 	var hashes []string
 	for _, name := range []string{"a.png", "b.png"} {
-		code, stdout, stderr := sweep(t, "--seeds", "1,2", "--stage", "cells,sea-level,climate,climate:mask,classify,edges,edges:passability", "--land-cells", "600",
+		code, stdout, stderr := sweep(t, "--seeds", "1,2", "--stage", "cells,sea-level,climate,climate:mask,climate:precip,climate:aridity,classify,edges,edges:passability", "--land-cells", "600",
 			"--tile", "64", "--output", filepath.Join(dir, name))
 		if code != 0 {
 			t.Fatalf("exit %d; stderr %q", code, stderr)
 		}
-		if !strings.Contains(stdout, "stages  cells, sea-level, climate, climate:mask, classify, edges, edges:passability") || !strings.Contains(stderr, "climate: rim temperature ") || !strings.Contains(stderr, "sea-level: level ") ||
+		if !strings.Contains(stdout, "stages  cells, sea-level, climate, climate:mask, climate:precip, climate:aridity, classify, edges, edges:passability") || !strings.Contains(stderr, "climate: rim temperature ") || !strings.Contains(stderr, "sea-level: level ") ||
 			!strings.Contains(stderr, "classify: land: ") || !strings.Contains(stderr, "edges: direction error ") {
 			t.Errorf("stdout %q, stderr %q", stdout, stderr)
 		}
@@ -288,5 +290,33 @@ func TestSweepSeaLevel(t *testing.T) {
 	}
 	if hashes[0] != hashes[1] {
 		t.Errorf("two sweeps differ: %q, %q", hashes[0], hashes[1])
+	}
+}
+
+// TestClimateCaption checks the climate tile captions by variant on a
+// three-cell world: a rim cell and two land cells.
+func TestClimateCaption(t *testing.T) {
+	cells := []mesh.Cell{{Rim: true}, {}, {}}
+	r := &climate.Result{
+		Ocean:         []bool{true, false, false},
+		Temperature:   []float64{-20, 10, 20},
+		Precipitation: []float64{150, 300, 1200},
+		PET:           []float64{0, 589.3, 1178.6},
+		Runoff:        []float64{150, 20, 400},
+		Moisture:      []float64{1, 0.25, 0.75},
+		Aridity:       []float64{10, 300 / 589.3, 1200 / 1178.6},
+	}
+	for _, tc := range []struct{ variant, want string }{
+		{"", "rim -20..-20 land 10..20 ~20 C"},
+		{"mask", "rim -20..-20 land 10..20 ~20 C"},
+		{"precip", "land P 300/300/1200 mm"},
+		{"pet", "land PET 589/589/1179 mm"},
+		{"runoff", "land R 20/20/400 mm"},
+		{"moisture", "land moisture 0.25/0.25/0.75"},
+		{"aridity", "ha0 a0 sa0 ds50 hu50 %"},
+	} {
+		if got := climateCaption(cells, r, tc.variant); got != tc.want {
+			t.Errorf("variant %q: caption %q, want %q", tc.variant, got, tc.want)
+		}
 	}
 }

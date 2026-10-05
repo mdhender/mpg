@@ -556,7 +556,7 @@ func TestClimateStage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want, err := climate.Compute(p.Mesh, p.Cells, &p.SeaLevel.Flood, model)
+	want, err := climate.Compute(p.Elevation, p.Mesh, p.Cells, &p.SeaLevel.Flood, model, uint64(c.Config.Seed))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -565,12 +565,12 @@ func TestClimateStage(t *testing.T) {
 	if !bytes.Equal(a, b) {
 		t.Error("stage product differs from climate.Compute")
 	}
-	for _, name := range []string{"07-climate.png", "07-climate-mask.png"} {
+	for _, name := range []string{"07-climate.png", "07-climate-mask.png", "07-climate-precip.png", "07-climate-moisture.png", "07-climate-pet.png", "07-climate-runoff.png", "07-climate-aridity.png"} {
 		if _, err := os.Stat(filepath.Join(c.RendersDir, name)); err != nil {
 			t.Error(err)
 		}
 	}
-	for _, s := range []string{"climate: mask: ", "climate: rim temperature ", "climate: ocean temperature ", "climate: land temperature "} {
+	for _, s := range []string{"climate: mask: ", "climate: rim temperature ", "climate: ocean temperature ", "climate: land temperature ", "climate: land precipitation p5 ", "climate: land PET ", "climate: land runoff ", "climate: land aridity: hyper-arid "} {
 		if !strings.Contains(log.String(), s) {
 			t.Errorf("log lacks %q:\n%s", s, log.String())
 		}

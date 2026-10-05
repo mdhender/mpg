@@ -123,14 +123,17 @@ func TestNewModelErrors(t *testing.T) {
 			t.Errorf("%s: NewModel = %v, want an error containing %q", tc.name, err, tc.want)
 		}
 	}
-	if _, err := Compute(nil, nil, nil, Model{}); err == nil {
+	if _, err := Compute(nil, nil, nil, nil, Model{}, 0); err == nil {
 		t.Error("Compute with nil inputs succeeded")
 	}
 }
 
 // TestNoFusedMultiplyAdd compiles this package for the architectures whose Go
 // compilers fuse a*b+c into one instruction and fails if any fused
-// multiply-add or multiply-subtract appears in its code.
+// multiply-add or multiply-subtract appears in its code: the temperature
+// model, the upwind trace, the precipitation formula, PET and Budyko's
+// curve. Package math is compiled alongside as a positive control, proving
+// the pattern would see fusion if it were there.
 func TestNoFusedMultiplyAdd(t *testing.T) {
 	if testing.Short() {
 		t.Skip("compiles for several architectures")
@@ -141,18 +144,25 @@ func TestNoFusedMultiplyAdd(t *testing.T) {
 	}
 	fusedOp := regexp.MustCompile(`\tV?FN?M(ADD|SUB)`)
 	const pkg = "github.com/mdhender/mpg/internal/climate"
-	for _, tg := range []struct{ arch, env string }{{"arm64", ""}, {"amd64", "GOAMD64=v3"}} {
+	for _, tg := range []struct{ arch, env string }{{"arm64", ""}, {"amd64", "GOAMD64=v3"}, {"ppc64le", ""}, {"s390x", ""}, {"riscv64", ""}, {"loong64", ""}} {
 		t.Run(tg.arch, func(t *testing.T) {
-			cmd := exec.Command(goTool, "build", "-gcflags="+pkg+"=-S", pkg)
-			cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH="+tg.arch, "CGO_ENABLED=0")
-			if tg.env != "" {
-				cmd.Env = append(cmd.Env, tg.env)
+			asm := func(target string) string {
+				t.Helper()
+				cmd := exec.Command(goTool, "build", "-gcflags="+target+"=-S", target)
+				cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH="+tg.arch, "CGO_ENABLED=0")
+				if tg.env != "" {
+					cmd.Env = append(cmd.Env, tg.env)
+				}
+				out, err := cmd.CombinedOutput()
+				if err != nil {
+					t.Fatalf("go build %s: %v\n%s", target, err, out)
+				}
+				return string(out)
 			}
-			out, err := cmd.CombinedOutput()
-			if err != nil {
-				t.Fatalf("go build %s: %v\n%s", pkg, err, out)
+			if !fusedOp.MatchString(asm("math")) {
+				t.Fatalf("no fused instruction found in package math for %s; the pattern is not measuring anything", tg.arch)
 			}
-			if m := fusedOp.FindAllString(string(out), -1); len(m) != 0 {
+			if m := fusedOp.FindAllString(asm(pkg), -1); len(m) != 0 {
 				t.Errorf("%s: %d fused multiply-add instructions in %s", tg.arch, len(m), pkg)
 			}
 		})

@@ -216,7 +216,7 @@ func TestDeterminism(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := climate.Compute(m, s, &sl.Flood, model)
+	r, err := climate.Compute(f, m, s, &sl.Flood, model, uint64(ctx.Config.Seed))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,10 +266,10 @@ func TestComputeErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	short := &cells.Flood{Ocean: sl.Ocean[1:], Land: sl.Land[1:]}
-	if _, err := climate.Compute(m, s, short, model); err == nil {
+	if _, err := climate.Compute(ctx.Products.Elevation, m, s, short, model, 1); err == nil {
 		t.Error("short flood accepted")
 	}
-	if _, err := climate.Compute(m, s, &sl.Flood, climate.Model{}); err == nil {
+	if _, err := climate.Compute(ctx.Products.Elevation, m, s, &sl.Flood, climate.Model{}, 1); err == nil {
 		t.Error("zero model accepted")
 	}
 }

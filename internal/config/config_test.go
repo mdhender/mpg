@@ -159,7 +159,10 @@ func TestPartialFileGetsDefaults(t *testing.T) {
 
 // TestClimatePartial checks that a partial climate group keeps the default
 // curve, that a curve in the file replaces the default one whole, and that
-// a misspelled point field is rejected with its path.
+// a misspelled point field is rejected with its path; and the same for the
+// precipitation settings: a windward table replaces the default whole, the
+// other settings keep their defaults, and a misspelled or out-of-range
+// setting is rejected.
 func TestClimatePartial(t *testing.T) {
 	c, err := Decode(strings.NewReader(`{"schema": 1, "climate": {"lapse_rate_c_per_km": 5}}`))
 	if err != nil {
@@ -179,6 +182,22 @@ func TestClimatePartial(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "temp") {
 		t.Errorf("misspelled curve field: %v", err)
 	}
+	c, err = Decode(strings.NewReader(`{"schema": 1, "climate": {"rainout_km": 700, "windward_precip_mm": [{"lat_deg": 0, "mm": 900}]}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []LatPrecip{{0, 900}}; !reflect.DeepEqual(c.Climate.WindwardPrecipMm, want) || c.Climate.RainoutKm != 700 ||
+		!reflect.DeepEqual(c.Climate.ConvectiveShare, DefaultClimate().ConvectiveShare) || c.Climate.OrographicM != 1200 {
+		t.Errorf("climate = %+v, want the windward table %v, rainout 700 and the other defaults", c.Climate, want)
+	}
+	_, err = Decode(strings.NewReader(`{"schema": 1, "climate": {"rainout": 700}}`))
+	if err == nil || !strings.Contains(err.Error(), "rainout") {
+		t.Errorf("misspelled climate field: %v", err)
+	}
+	_, err = Decode(strings.NewReader(`{"schema": 1, "climate": {"precip_noise_amp": 1.5}}`))
+	if err == nil || !strings.Contains(err.Error(), "precip_noise_amp") {
+		t.Errorf("out-of-range noise amplitude: %v", err)
+	}
 }
 
 func TestHash(t *testing.T) {
@@ -187,7 +206,7 @@ func TestHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = "26db8ec1ed4d728153452aa914be66aa03ad3417f41c0bbdfb3eac2b48e0978b"
+	const want = "a94d88cd17f4c88ac481456ea950c621d3a2a274446397056770cee7dddbe1e3"
 	if h != want {
 		t.Errorf("Hash = %s, want %s", h, want)
 	}
@@ -359,6 +378,35 @@ func TestValidate(t *testing.T) {
 		{"climate temp huge", func(c *Config) { c.Climate.SeaLevelTempC = []LatTemp{{0, 200}, {90, -20}} }, "climate.sea_level_temp_c[0].temp_c 200"},
 		{"climate lapse negative", func(c *Config) { c.Climate.LapseRateCPerKm = -1 }, "climate.lapse_rate_c_per_km"},
 		{"climate lapse NaN", func(c *Config) { c.Climate.LapseRateCPerKm = math.NaN() }, "climate.lapse_rate_c_per_km"},
+		{"windward empty", func(c *Config) { c.Climate.WindwardPrecipMm = nil }, "climate.windward_precip_mm has 0 points"},
+		{"windward zero", func(c *Config) { c.Climate.WindwardPrecipMm[2].Mm = 0 }, "climate.windward_precip_mm[2].mm 0 must be in (0, 20000]"},
+		{"windward NaN", func(c *Config) { c.Climate.WindwardPrecipMm[2].Mm = math.NaN() }, "climate.windward_precip_mm[2].mm NaN"},
+		{"windward no equator", func(c *Config) { c.Climate.WindwardPrecipMm[0].LatDeg = 1 }, "climate.windward_precip_mm[0].lat_deg 1 must be 0"},
+		{"windward lat order", func(c *Config) { c.Climate.WindwardPrecipMm[3].LatDeg = 5 }, "climate.windward_precip_mm[3].lat_deg 5 must be greater"},
+		{"share above 1", func(c *Config) { c.Climate.ConvectiveShare[1].Share = 1.5 }, "climate.convective_share[1].share 1.5 must be in [0, 1]"},
+		{"share lat range", func(c *Config) { c.Climate.ConvectiveShare[3].LatDeg = 95 }, "climate.convective_share[3].lat_deg 95 must be in [0, 90]"},
+		{"trades bearing", func(c *Config) { c.Climate.TradesFromDeg = 360 }, "climate.trades_from_deg 360 must be in [0, 360)"},
+		{"polar bearing NaN", func(c *Config) { c.Climate.PolarFromDeg = math.NaN() }, "climate.polar_from_deg NaN"},
+		{"bands order", func(c *Config) { c.Climate.WesterliesMinLatDeg = 20 }, "climate.westerlies_min_lat_deg 20 must not be less than climate.trades_max_lat_deg 27"},
+		{"bands range", func(c *Config) { c.Climate.PolarMinLatDeg = 91 }, "climate.polar_min_lat_deg 91 must be in [0, 90]"},
+		{"equator blend", func(c *Config) { c.Climate.EquatorBlendDeg = -1 }, "climate.equator_blend_deg -1"},
+		{"wind rays", func(c *Config) { c.Climate.WindRays = 0 }, "climate.wind_rays 0 must be in [1, 32]"},
+		{"wind spread", func(c *Config) { c.Climate.WindSpreadDeg = 91 }, "climate.wind_spread_deg 91"},
+		{"step zero", func(c *Config) { c.Climate.StepKm = 0 }, "climate.step_km 0 must be in (0, 100]"},
+		{"reach below step", func(c *Config) { c.Climate.ReachKm = 1 }, "climate.reach_km 1 must be in [step_km 5, 20000]"},
+		{"too many steps", func(c *Config) { c.Climate.StepKm, c.Climate.ReachKm = 0.5, 20000 }, "must be at most 10000 steps"},
+		{"rainout", func(c *Config) { c.Climate.RainoutKm = 0 }, "climate.rainout_km 0"},
+		{"orographic", func(c *Config) { c.Climate.OrographicM = math.Inf(1) }, "climate.orographic_m +Inf"},
+		{"lift window", func(c *Config) { c.Climate.LiftWindowKm = 2000 }, "climate.lift_window_km 2000 must be in [0, reach_km 1000]"},
+		{"lift gain", func(c *Config) { c.Climate.LiftGainPerKm = -1 }, "climate.lift_gain_per_km -1"},
+		{"noise amp 1", func(c *Config) { c.Climate.PrecipNoiseAmp = 1 }, "climate.precip_noise_amp 1 must be in [0, 1)"},
+		{"noise wavelength", func(c *Config) { c.Climate.PrecipNoiseWavelengthKm = 0 }, "climate.precip_noise_wavelength_km 0"},
+		{"noise octaves", func(c *Config) { c.Climate.PrecipNoiseOctaves = 17 }, "climate.precip_noise_octaves 17 must be in [1, 16]"},
+		{"jitter", func(c *Config) { c.Climate.BandJitterDeg = 50 }, "climate.band_jitter_deg 50"},
+		{"jitter wavelength", func(c *Config) { c.Climate.BandJitterWavelengthKm = -5 }, "climate.band_jitter_wavelength_km -5"},
+		{"jitter octaves", func(c *Config) { c.Climate.BandJitterOctaves = 0 }, "climate.band_jitter_octaves 0"},
+		{"pet", func(c *Config) { c.Climate.PETMmPerC = 0 }, "climate.pet_mm_per_c 0"},
+		{"biotemp", func(c *Config) { c.Climate.BiotempMaxC = math.NaN() }, "climate.biotemp_max_c NaN"},
 		{"schema", func(c *Config) { c.Schema = 2 }, "schema 2 is not supported"},
 		{"preset", func(c *Config) { c.Layout.Preset = "isles" }, "layout.preset"},
 		{"pole margin", func(c *Config) { c.Layout.PoleMargin = -1 }, "layout.pole_margin"},

@@ -10,6 +10,7 @@ import (
 
 	"github.com/mdhender/mpg/internal/cells"
 	"github.com/mdhender/mpg/internal/config"
+	"github.com/mdhender/mpg/internal/field"
 	"github.com/mdhender/mpg/internal/fmath"
 	"github.com/mdhender/mpg/internal/mesh"
 )
@@ -20,12 +21,14 @@ type Model struct {
 	latDeg []float64 // the curve's latitudes in degrees, 0 first, 90 last, increasing
 	tempC  []float64 // the curve's temperatures in °C, not increasing
 	lapse  float64   // °C per km of height above sea level
+	p      precip    // precipitation, evaporation and aridity
 }
 
 // NewModel returns the model of c. It fails when the curve has fewer than
 // two points, does not run from 0° to 90° with latitudes increasing and
 // temperatures not increasing, has a non-finite value, or when the lapse
-// rate is negative or not finite. A resolved config always passes.
+// rate is negative or not finite, and when any other climate input is out
+// of range (config.Climate.Validate). A resolved config always passes.
 func NewModel(c config.Climate) (Model, error) {
 	pts := c.SeaLevelTempC
 	n := len(pts)
@@ -48,6 +51,10 @@ func NewModel(c config.Climate) (Model, error) {
 	if !(m.lapse >= 0) || !finite(m.lapse) {
 		return Model{}, fmt.Errorf("climate: lapse rate %v °C/km is not finite and non-negative", m.lapse)
 	}
+	if err := c.Validate(); err != nil {
+		return Model{}, fmt.Errorf("climate: %w", err)
+	}
+	m.p = newPrecip(c)
 	return m, nil
 }
 
@@ -104,24 +111,57 @@ type Result struct {
 	// HeightM holds, per cell, the height above sea level the lapse rate
 	// applies to, in meters: altitude − Level for a land cell above the
 	// sea, 0 for every other cell (ocean, rim, and dry basin floors at or
-	// below the sea).
+	// below the sea). The wind's orographic rules read it too.
 	HeightM []float64
 	// Temperature holds, per cell, the mean annual temperature in °C:
 	// Model.At(latitude, HeightM).
 	Temperature []float64
+
+	// RasterPrecipitation holds, per raster sample in storage order, the
+	// annual precipitation in mm (see the package documentation).
+	RasterPrecipitation []float64
+	// Precipitation holds, per cell, the annual precipitation in mm: the
+	// mean of its samples' RasterPrecipitation.
+	Precipitation []float64
+	// Moisture holds, per cell, the mean share of the sea air's moisture
+	// the prevailing winds bring to its samples, in (0, 1]; 1 on water.
+	Moisture []float64
+	// LiftM holds, per cell, the mean height in meters the winds climb
+	// onto its samples from the lowest point within the lift window
+	// upwind; 0 on water.
+	LiftM []float64
+	// PET holds, per cell, the potential evapotranspiration in mm per year
+	// (Model.PET of its temperature).
+	PET []float64
+	// Runoff holds, per cell, the annual runoff in mm (Runoff of its
+	// precipitation and PET).
+	Runoff []float64
+	// Aridity holds, per cell, the aridity index P/PET, capped at
+	// AridityCap (AridityIndex); AridityOf gives its UNEP class.
+	Aridity []float64
 }
 
-// Compute returns the cell mask and the cell temperatures of m's cells,
-// with statistics s (altitude, latitude, and each sample's cell) and the
-// sea level stage's land and water fl, under model. It fails when the
-// inputs do not match m or a temperature is not finite.
-func Compute(m *mesh.Mesh, s *cells.Stats, fl *cells.Flood, model Model) (*Result, error) {
-	if m == nil || s == nil || fl == nil {
-		return nil, errors.New("climate: nil mesh, statistics, or flood")
+// Compute returns the climate of m's cells on the raster f (its grid and
+// cylinder; its values are not read), with statistics s (altitude,
+// latitude, and each sample's cell) and the sea level stage's land and
+// water fl, under model, with world the world seed that keys the climate
+// noise. The raster samples are spread over GOMAXPROCS goroutines; the
+// result does not depend on how many. It fails when the inputs do not
+// match or a result is not finite.
+func Compute(f *field.Field, m *mesh.Mesh, s *cells.Stats, fl *cells.Flood, model Model, world uint64) (*Result, error) {
+	return compute(f, m, s, fl, model, world, defaultWorkers())
+}
+
+func compute(f *field.Field, m *mesh.Mesh, s *cells.Stats, fl *cells.Flood, model Model, world uint64, workers int) (*Result, error) {
+	if f == nil || m == nil || s == nil || fl == nil {
+		return nil, errors.New("climate: nil field, mesh, statistics, or flood")
 	}
 	n := len(m.Cells)
-	if s.Len() != n || len(s.Latitude) != n || len(fl.Ocean) != n || len(fl.Land) != n {
+	if s.Len() != n || len(s.Latitude) != n || len(s.Samples) != n || len(fl.Ocean) != n || len(fl.Land) != n {
 		return nil, fmt.Errorf("climate: %d cells, %d statistics, %d ocean flags", n, s.Len(), len(fl.Ocean))
+	}
+	if len(s.Owner) != f.Len() {
+		return nil, fmt.Errorf("climate: %d sample owners for %d raster samples", len(s.Owner), f.Len())
 	}
 	if len(model.latDeg) == 0 {
 		return nil, errors.New("climate: zero Model")
@@ -150,6 +190,19 @@ func Compute(m *mesh.Mesh, s *cells.Stats, fl *cells.Flood, model Model) (*Resul
 		}
 		r.Mask[k] = r.Ocean[c]
 	}
+	g := newGrid(f, s.Owner, r)
+	siteX, siteY := make([]float64, n), make([]float64, n)
+	for i, c := range m.Cells {
+		siteX[i], siteY[i] = c.Site.X, c.Site.Y
+	}
+	r.precipitate(f, g, siteX, siteY, s.Samples, model, world, workers)
+	for _, vs := range [][]float64{r.RasterPrecipitation, r.Precipitation, r.Moisture, r.LiftM, r.PET, r.Runoff, r.Aridity} {
+		for k, v := range vs {
+			if !finite(v) || v < 0 {
+				return nil, fmt.Errorf("climate: value %v at %d is not finite and non-negative", v, k)
+			}
+		}
+	}
 	return r, nil
 }
 
@@ -164,8 +217,13 @@ func Compute(m *mesh.Mesh, s *cells.Stats, fl *cells.Flood, model Model) (*Resul
 //	    Ocean                                    flag
 //	    HeightM, Temperature                     floats
 //	Mask, in sample storage order                flags
+//	per cell, in id order:
+//	    Precipitation, Moisture, LiftM,
+//	    PET, Runoff, Aridity                     floats
+//	RasterPrecipitation, in storage order        floats
 //
-// The error is always nil; the signature is encoding.BinaryAppender's.
+// The first part is S25's encoding unchanged. The error is always nil; the
+// signature is encoding.BinaryAppender's.
 func (r *Result) AppendBinary(b []byte) ([]byte, error) {
 	f := func(v float64) { b = binary.LittleEndian.AppendUint64(b, math.Float64bits(v)) }
 	i := func(v int) { b = binary.LittleEndian.AppendUint64(b, uint64(int64(v))) }
@@ -186,6 +244,17 @@ func (r *Result) AppendBinary(b []byte) ([]byte, error) {
 	}
 	for _, v := range r.Mask {
 		flag(v)
+	}
+	for c := range r.Precipitation {
+		f(r.Precipitation[c])
+		f(r.Moisture[c])
+		f(r.LiftM[c])
+		f(r.PET[c])
+		f(r.Runoff[c])
+		f(r.Aridity[c])
+	}
+	for _, v := range r.RasterPrecipitation {
+		f(v)
 	}
 	return b, nil
 }

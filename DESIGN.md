@@ -203,6 +203,35 @@ Stage 7 computes climate on the raster with the cell mask drawn onto it: each ra
 - No tilt, no seasons.
 - **Rim cells are coldest at sea level:** as open polar water they are colder than every playable cell at sea level. High land near a pole can be colder than the rim (seed 5 portrait pangaea has a cell 2,684 m up at about 69.5° at −25 °C against a rim of −21.8 to −20.2 °C), and that is accepted.
 
+**Precipitation.** Per raster sample, after hmz2bio (`tpty/hmz2bio` climate.go, rules.go, README "Precipitation"): P = W(φ′)·v·(s + (1 − s)·m·(1 + g·lift/1000)) mm/yr.
+- φ′ is the signed latitude, 90·(1 − 2y/H), shifted by up to `band_jitter_deg` (default 4°; 3 octaves of cylinder noise from 2,000 km) so the bands waver with longitude. Temperature is not jittered.
+- W is `windward_precip_mm`, hmz2bio's windward-coast table: 3,100 mm at 0°, 3,300 at 5°, 2,700 at 10°, 2,000 at 15°, 1,400 at 20°, 1,000 at 25°, 850 at 30°, 1,000 at 35°, 1,250 at 40°, 1,400 at 45–50°, 1,250 at 55°, 1,000 at 60°, 500 at 70°, 250 at 80°, 150 at 90°. s is `convective_share`: 0.5 at 0°, 0.45 at 10°, 0.3 at 20°, 0.2 from 30°.
+- v = 1 + `precip_noise_amp`·noise is the periodic variability (default ±0.15, 4 octaves from 800 km; the amplitude must stay below 1). g = `lift_gain_per_km`, 1.5.
+- Ocean samples get W·v.
+
+**Winds.** Bearings are given for the north and mirrored (180° − b) in the south.
+- Trades from 60° up to 27°; westerlies from 255° over 33–57°; polar easterlies from 60° beyond 63°.
+- Neighbouring bands blend linearly, and the hemispheres blend over ±5° of the equator (`equator_blend_deg`). Blending weighs each wind's moisture and lift, never bearings.
+
+**Moisture and rain shadows: a backward trace.** This is the "advection with a fixed iteration count".
+- Each wind is traced along 5 rays spread ±20° about its bearing, stepping upwind 5 km at a time for at most 1,000 km (200 steps). Each step reads the cell under the point; x wraps.
+- The trace stops at ocean (rim included) or off the map, where the air is saturated. With no sea in reach, the air starts at sea one step beyond the last point.
+- Moisture is m = exp(−n·step/`rainout_km` − Σrise/`orographic_m`), defaults 500 km and 1,200 m (hmz2bio's 800 km and 1,500 m gave weaker rain shadows). Lift is the sample's height above the lowest point within 30 km upwind.
+- Heights are cell altitudes above sea level (one height); the raster elevation is not read.
+- Each sample is independent: no sweep order, nothing special at the seam, and results are identical for any worker count.
+- Cell values are the means of their samples.
+
+**Evaporation, runoff, aridity** (per cell).
+- PET (Holdridge) = 58.93 mm per °C of biotemperature, which is T clamped to [0, 30] °C.
+- Runoff follows Budyko (1974): with φ = PET/P, E = P·√(φ·tanh(1/φ)·(1 − e^(−φ))) and R = P − E ≥ 0. With PET = 0 everything runs off.
+- Aridity index AI = P/PET, capped at 10, and 10 when PET = 0. UNEP classes: hyper-arid < 0.05, arid < 0.2, semi-arid < 0.5, dry sub-humid < 0.65, humid otherwise.
+- Biomes may also use hmz2bio's Köppen dry limit, 20·T + 280 mm.
+- Default world, land: P p5/p50/p95 ≈ 330/1,040/2,490 mm; PET p50 ≈ 1,270 mm; runoff p50 ≈ 290 mm. Arid land is nearly absent (the convective share floors P); desert tuning is left to biomes (M8).
+- Windward coasts get ≈ 0.93–0.98 of W at their latitude; lee sides and interiors ≈ 0.33–0.49.
+- Renders: temperature, mask, precip, moisture, pet, runoff, aridity.
+
+**Open (deferred).** In the final climate pass with lakes (S29), inland seas are expected to recharge the air like the ocean and lakes not to. hmz2bio's biome rules use warmest and coldest month (1 + 0.33·|lat| °C split about the mean), which must be reconciled with "no seasons" before M8.
+
 ### Basins and lakes
 
 - **Priority flood.** A priority flood over the cell graph, seeded from ocean cells and using cell altitude, finds depressions, spill cells, spill edges, and the nested hierarchy. Original elevations are never modified.

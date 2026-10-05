@@ -233,7 +233,115 @@
         "temp_c": -22
       }
     ],
-    "lapse_rate_c_per_km": 6.5
+    "lapse_rate_c_per_km": 6.5,
+    "windward_precip_mm": [
+      {
+        "lat_deg": 0,
+        "mm": 3100
+      },
+      {
+        "lat_deg": 5,
+        "mm": 3300
+      },
+      {
+        "lat_deg": 10,
+        "mm": 2700
+      },
+      {
+        "lat_deg": 15,
+        "mm": 2000
+      },
+      {
+        "lat_deg": 20,
+        "mm": 1400
+      },
+      {
+        "lat_deg": 25,
+        "mm": 1000
+      },
+      {
+        "lat_deg": 30,
+        "mm": 850
+      },
+      {
+        "lat_deg": 35,
+        "mm": 1000
+      },
+      {
+        "lat_deg": 40,
+        "mm": 1250
+      },
+      {
+        "lat_deg": 45,
+        "mm": 1400
+      },
+      {
+        "lat_deg": 50,
+        "mm": 1400
+      },
+      {
+        "lat_deg": 55,
+        "mm": 1250
+      },
+      {
+        "lat_deg": 60,
+        "mm": 1000
+      },
+      {
+        "lat_deg": 70,
+        "mm": 500
+      },
+      {
+        "lat_deg": 80,
+        "mm": 250
+      },
+      {
+        "lat_deg": 90,
+        "mm": 150
+      }
+    ],
+    "convective_share": [
+      {
+        "lat_deg": 0,
+        "share": 0.5
+      },
+      {
+        "lat_deg": 10,
+        "share": 0.45
+      },
+      {
+        "lat_deg": 20,
+        "share": 0.3
+      },
+      {
+        "lat_deg": 30,
+        "share": 0.2
+      }
+    ],
+    "trades_from_deg": 60,
+    "westerlies_from_deg": 255,
+    "polar_from_deg": 60,
+    "trades_max_lat_deg": 27,
+    "westerlies_min_lat_deg": 33,
+    "westerlies_max_lat_deg": 57,
+    "polar_min_lat_deg": 63,
+    "equator_blend_deg": 5,
+    "wind_rays": 5,
+    "wind_spread_deg": 20,
+    "step_km": 5,
+    "reach_km": 1000,
+    "rainout_km": 500,
+    "orographic_m": 1200,
+    "lift_window_km": 30,
+    "lift_gain_per_km": 1.5,
+    "precip_noise_amp": 0.15,
+    "precip_noise_wavelength_km": 800,
+    "precip_noise_octaves": 4,
+    "band_jitter_deg": 4,
+    "band_jitter_wavelength_km": 2000,
+    "band_jitter_octaves": 3,
+    "pet_mm_per_c": 58.93,
+    "biotemp_max_c": 30
   },
   "basin": {
     "min_depth_m": 50,

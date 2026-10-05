@@ -40,9 +40,12 @@ const (
 // label shows the land count achieved against N (and UNMET when it misses
 // the 1% tolerance), and
 // each sea-level tile's caption the count against N, the deviation, and the
-// search's reason. Each climate tile's caption gives the temperature
-// range in °C of the rim, the land, and the land's median (land lo..hi
-// ~median). Each classify tile's caption gives the land landform
+// search's reason. Each climate tile's caption depends on its variant: for
+// the temperature and the mask, the temperature range in °C of the rim,
+// the land, and the land's median (land lo..hi ~median); for precip, pet
+// and runoff, the land's p5/p50/p95 in mm; for moisture, the land's
+// p10/p50/p90; for aridity, the land's UNEP class shares in percent (ha, a,
+// sa, ds, hu: hyper-arid to humid). Each classify tile's caption gives the land landform
 // shares in percent (fl, pl, rp, hi, mt, pt, vh: flats to volcanic
 // highlands) and the volcanoes on land (v). Each edges tile's caption gives
 // the direction error's mean, p95 and max in degrees (err), the share of
@@ -209,7 +212,7 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 				tiles[k].Caption[1] = fmt.Sprintf("land %d/%d %+.2f%% %s", sl.LandCells, sl.Target, sl.DeviationPercent(), sl.Reason)
 			}
 			if cr := ctx.Products.Climate; cr != nil && registry[c.index].Name == "climate" {
-				tiles[k].Caption[1] = climateCaption(ctx.Products.Mesh.Cells, cr)
+				tiles[k].Caption[1] = climateCaption(ctx.Products.Mesh.Cells, cr, c.variant)
 			}
 			if cl := ctx.Products.Classes; cl != nil && registry[c.index].Name == "classify" {
 				tiles[k].Caption[1] = fmt.Sprintf("%s v%d", strings.Join(cl.LandShares(true), " "), cl.Volcanoes())
@@ -398,24 +401,64 @@ func checkImplemented(cols []sweepStage, registry []pipeline.Stage) (int, error)
 	return last, nil
 }
 
-// climateCaption returns a climate tile's caption: the rim's and the land's
-// temperature ranges in °C and the land's median.
-func climateCaption(cells []mesh.Cell, r *climate.Result) string {
+// climateCaption returns a climate tile's caption for render variant
+// variant (see runSweep).
+func climateCaption(cells []mesh.Cell, r *climate.Result, variant string) string {
+	land := func(v []float64) []float64 {
+		var out []float64
+		for i, c := range cells {
+			if !c.Rim && !r.Ocean[i] {
+				out = append(out, v[i])
+			}
+		}
+		slices.Sort(out)
+		return out
+	}
+	q := func(v []float64, p int) float64 { return v[max(0, (len(v)*p+99)/100-1)] } // nearest rank
+	switch variant {
+	case "precip", "pet", "runoff":
+		v := land(map[string][]float64{"precip": r.Precipitation, "pet": r.PET, "runoff": r.Runoff}[variant])
+		if len(v) == 0 {
+			return "no land"
+		}
+		name := map[string]string{"precip": "P", "pet": "PET", "runoff": "R"}[variant]
+		return fmt.Sprintf("land %s %.0f/%.0f/%.0f mm", name, q(v, 5), q(v, 50), q(v, 95))
+	case "moisture":
+		v := land(r.Moisture)
+		if len(v) == 0 {
+			return "no land"
+		}
+		return fmt.Sprintf("land moisture %.2f/%.2f/%.2f", q(v, 10), q(v, 50), q(v, 90))
+	case "aridity":
+		v := land(r.Aridity)
+		if len(v) == 0 {
+			return "no land"
+		}
+		var n [climate.NumAridity]int
+		for _, a := range v {
+			n[climate.AridityOf(a)]++
+		}
+		parts := make([]string, climate.NumAridity)
+		for a, name := range []string{"ha", "a", "sa", "ds", "hu"} {
+			parts[a] = fmt.Sprintf("%s%.0f", name, 100*float64(n[a])/float64(len(v)))
+		}
+		return strings.Join(parts, " ") + " %"
+	}
 	rlo, rhi := math.Inf(1), math.Inf(-1)
-	var land []float64
+	var temps []float64
 	for i, c := range cells {
 		t := r.Temperature[i]
 		switch {
 		case c.Rim:
 			rlo, rhi = min(rlo, t), max(rhi, t)
 		case !r.Ocean[i]:
-			land = append(land, t)
+			temps = append(temps, t)
 		}
 	}
 	s := fmt.Sprintf("rim %.0f..%.0f", rlo, rhi)
-	if len(land) > 0 {
-		slices.Sort(land)
-		s += fmt.Sprintf(" land %.0f..%.0f ~%.0f", land[0], land[len(land)-1], land[len(land)/2])
+	if len(temps) > 0 {
+		slices.Sort(temps)
+		s += fmt.Sprintf(" land %.0f..%.0f ~%.0f", temps[0], temps[len(temps)-1], temps[len(temps)/2])
 	}
 	return s + " C"
 }

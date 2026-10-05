@@ -101,8 +101,21 @@
 // proxy's ±1), and the lapse rate in °C per km of altitude above sea level.
 // The curve must run from 0° to 90° with latitudes increasing and
 // temperatures not increasing, and the pole must be colder than the
-// equator, so the rim is always the coldest water. DefaultClimate is
-// hmz2bio's model. See package climate.
+// equator, so the rim is always the coldest water.
+//
+// It also sets the precipitation model (DESIGN.md: "stylized precipitation
+// with winds and rain shadows"): the windward-coast precipitation and the
+// convective share by latitude (tables starting at 0°, held flat beyond
+// their last point); the bearings and latitude bands of the trades,
+// westerlies and polar easterlies, and the blend across the equator; the
+// upwind trace (rays, spread, step, reach) and its rainout and orographic
+// lengths, lift window and lift gain; the periodic variability (the
+// precipitation noise's amplitude, wavelength and octaves, and the band
+// jitter's); and Holdridge's PET (mm per °C of biotemperature, and the
+// biotemperature's ceiling). Bounds only reject values the model cannot
+// use; the noise amplitude must stay below 1 so precipitation stays
+// positive. DefaultClimate is hmz2bio's model with S26's additions and
+// tuning. See package climate.
 //
 // # Classify
 //

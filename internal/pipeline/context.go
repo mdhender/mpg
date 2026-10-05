@@ -77,7 +77,8 @@ type Products struct {
 	// basin cells, and the search's trace and outcome.
 	SeaLevel *cells.SeaLevel
 	// Climate is the climate stage's cell mask (the ocean drawn onto the
-	// raster) and cell temperatures.
+	// raster), cell temperatures, and precipitation, PET, runoff and
+	// aridity.
 	Climate *climate.Result
 	// Classes is the classification stage's landforms, depth bands, and
 	// volcano flags.
@@ -149,6 +150,10 @@ func (c *Context) Render(variant string, img image.Image) error {
 	meta := render.Meta{Stage: strings.TrimSuffix(name, ".png"), ConfigHash: c.ConfigHash}
 	return render.WritePNGFile(filepath.Join(c.RendersDir, name), img, meta)
 }
+
+// rendering reports whether a render would go anywhere: to Sink or to
+// RendersDir. Stages with many renders skip drawing them when it is false.
+func (c *Context) rendering() bool { return c.Sink != nil || c.RendersDir != "" }
 
 // Logf writes one log line, prefixed with the running stage's name.
 func (c *Context) Logf(format string, args ...any) {
