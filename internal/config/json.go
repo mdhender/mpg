@@ -57,7 +57,9 @@ func (c *Config) Encode(w io.Writer) error {
 	return err
 }
 
-// Bytes returns the canonical config.json bytes of c, as Encode writes them.
+// Bytes returns the canonical config.json bytes of c, as Encode writes them:
+// two-space indented JSON in field order, with no HTML escaping, and a
+// trailing newline.
 func (c *Config) Bytes() ([]byte, error) {
 	r := *c
 	if err := r.Resolve(); err != nil {
@@ -66,11 +68,14 @@ func (c *Config) Bytes() ([]byte, error) {
 	if !reflect.DeepEqual(r, *c) {
 		return nil, errors.New("config: not resolved; call Resolve before encoding")
 	}
-	b, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false) // check ops such as "<=" stay readable
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(c); err != nil {
 		return nil, fmt.Errorf("config: encode: %w", err)
 	}
-	return append(b, '\n'), nil
+	return buf.Bytes(), nil
 }
 
 // Hash returns the hex SHA-256 of the canonical config.json bytes of c (see

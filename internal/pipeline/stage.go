@@ -47,8 +47,7 @@ func Stages() []Stage {
 		{Number: 10, Name: "rivers", Run: runRivers},
 		{Number: 11, Name: "classify", Run: runClassify},
 		{Number: 12, Name: "edges", Run: runEdges},
-		// Stage 13 is deferred to milestone 9; export does not need it.
-		{Number: 13, Name: "measures", Deferred: true},
+		{Number: 13, Name: "measures", Run: runMeasures},
 		{Number: 14, Name: "export", Run: runExport},
 	}
 }

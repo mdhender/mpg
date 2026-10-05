@@ -138,6 +138,20 @@
 // and DefaultClassify records how the defaults were retuned from hmz2ter's.
 // See package classify.
 //
+// # Measures
+//
+// The measures group sets the checks run against the playability measures
+// (DESIGN.md, "Playability measures"): measures.checks lists checks
+// {measure, op, value, mode}, each comparing the measure named measure (a
+// "group.field" JSON path of measures.json; world.MeasureNames) with value
+// by op (<=, >=, <, > or ==). A report check's failure is listed and
+// logged; a gate's fails the run after every output is written (mpg
+// generate exits 3). An unknown measure name is rejected when the config
+// resolves, with the closest name suggested. A file that sets the list
+// replaces the defaults as a whole, and [] runs no checks. The defaults
+// (DefaultMeasures) are all report-only, with bounds from measurements of
+// 44 worlds. See package measure.
+//
 // # Versioning
 //
 // The file carries "schema": 1. A file without a schema, or with another

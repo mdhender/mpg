@@ -41,6 +41,7 @@ type Config struct {
 	Basin     Basin     `json:"basin"`
 	River     River     `json:"river"`
 	Classify  Classify  `json:"classify"`
+	Measures  Measures  `json:"measures"`
 }
 
 // Province sizes one province (one Voronoi cell) by the area of a wilderness
@@ -213,6 +214,7 @@ func Default() Config {
 		Basin:     Basin{MinDepthM: 50, InlandSeaMinCells: 20, SeepageMM: 50, SaltEvapShare: 0.5},
 		River:     River{ThresholdKm2: 500, RiverKm2: 2000, MajorRiverKm2: 10_000},
 		Classify:  DefaultClassify(),
+		Measures:  DefaultMeasures(),
 	}
 }
 
@@ -288,6 +290,7 @@ func (c *Config) Validate() error {
 		bad("river.major_river_km2 %v must be finite and greater than river_km2 %v", v, c.River.RiverKm2)
 	}
 	c.Classify.validate(bad)
+	c.Measures.validate(bad)
 	return errors.Join(errs...)
 }
 
@@ -382,6 +385,7 @@ func (c *Config) derive() (Config, error) {
 	if err := d.Layout.derive(cyl); err != nil {
 		return Config{}, err
 	}
+	d.Measures.derive()
 	return d, nil
 }
 

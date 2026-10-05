@@ -82,6 +82,16 @@
 // back exactly), because the land test (altitude above sea level) and the
 // incline are exact rules on them.
 //
+// # measures.json
+//
+// The package also holds the schema of measures.json, the playability
+// report (Measures; MeasuresFile), which is versioned on its own
+// (MeasuresSchemaVersion 0) and is not game data. Measures.Bytes writes it
+// as two-space indented JSON, and DecodeMeasures reads it strictly. Its
+// scalar measures are named by their JSON paths ("land.cells",
+// "directions.error_p95_deg"; MeasureNames), which config.json's checks
+// and seed ranking use. Package internal/measure fills it.
+//
 // # Omitted until later milestones
 //
 // Version 0 is the first playable export (milestone 4); lakes, inland

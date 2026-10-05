@@ -22,11 +22,11 @@ func TestGoldenLayout(t *testing.T) {
 		aspect string
 		want   string
 	}{
-		{"seed42-cinematic-pangaea", 42, "pangaea", "cinematic", "56d5ef103777b0295211e9bd1a6a0ac2a88e328e753a2ee654509cf37320a236"},
-		{"seed42-cinematic-continents", 42, "continents", "cinematic", "28b806af398c885379f93ac02135fc8dd9101f8f7ca443adfa01adb96d8659b2"},
-		{"seed42-cinematic-archipelago", 42, "archipelago", "cinematic", "ce831e2a2a69071d4c6f476f633d9b467715049ac61d95b701ea3cd87054c5fc"},
-		{"seed42-cinematic-islands", 42, "islands", "cinematic", "884676fa4a2565e1c4f81b83b2ac6de827d0b45c5983d65b2d7ce3e2a405c3b7"},
-		{"seed7-square-continents", 7, "continents", "square", "c29c12a2b8cf47ebeeedaf706daf172c6d2e697916b6c7fe99459e6a32d9e931"},
+		{"seed42-cinematic-pangaea", 42, "pangaea", "cinematic", "e053f1172186921ee7e4ff38fba13108fd08a0df7370410cef7fa1cb991bce76"},
+		{"seed42-cinematic-continents", 42, "continents", "cinematic", "89df52faad2c64672d030f46430c4d5b4973ae10ce518b0227b8913913f591a9"},
+		{"seed42-cinematic-archipelago", 42, "archipelago", "cinematic", "b22d6bc7e624043fc4999e94a334b9863f32b6d30b9eb478ca4d8f09c059a782"},
+		{"seed42-cinematic-islands", 42, "islands", "cinematic", "6a2c0a18593c7336a871773cda679ca1e1d020c3951ee1512e4399b304fe5322"},
+		{"seed7-square-continents", 7, "continents", "square", "259b5a85be0c8eb5d8d61e1ce5d2e8b4d51e5b22bba466b41d4e7f6d9c015848"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

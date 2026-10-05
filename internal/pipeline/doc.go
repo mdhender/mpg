@@ -8,10 +8,18 @@
 // reaches one, so a partly built pipeline still produces its early outputs.
 // A stage marked Deferred is the exception: it is not implemented, but the
 // implemented stages after it do not need it yet, so the runner passes over
-// it and lists it in Result.Skipped. Stage 13 (measures) is deferred, so a
-// full run reaches export (14), which writes world.json and records the
-// stages passed over in its outcomes; its render is the player-style map
-// (package playermap), drawn from the world alone.
+// it and lists it in Result.Skipped; export (14) records the stages passed
+// over in its outcomes (none now that every stage is implemented). Export
+// writes world.json; its render is the player-style map (package
+// playermap), drawn from the world alone.
+//
+// # Measures
+//
+// The measures stage (13) measures the world (package measure), runs the
+// configured checks, and writes measures.json and measures.txt. A failed
+// check is not a stage error, so the run still reaches export and writes
+// world.json; the caller reads Products.Measures and decides (mpg generate
+// exits 3 when a gate failed). The stage has no render until S34.
 //
 // # Lakes and the land target
 //

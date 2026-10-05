@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/mdhender/mpg/internal/config"
+	"github.com/mdhender/mpg/internal/measure"
+	"github.com/mdhender/mpg/world"
 )
 
 // generate runs "mpg generate args..." and returns the exit code, stdout,
@@ -57,15 +59,23 @@ func TestGenerateSeed42(t *testing.T) {
 	if strings.Contains(stderr, "stopped") {
 		t.Errorf("stderr = %q, want a run to the end", stderr)
 	}
-	if !strings.Contains(stderr, "skipped measures: not implemented yet") {
-		t.Errorf("stderr = %q, want the deferred stages listed as skipped", stderr)
+	if strings.Contains(stderr, "skipped") || strings.Contains(stderr, "check failed") {
+		t.Errorf("stderr = %q, want no stage skipped and no check failed", stderr)
+	}
+	if !strings.Contains(stderr, "measures: checks   14 checks: 14 pass, 0 report failed, 0 gates failed\n") {
+		t.Errorf("stderr = %q, want the measures summary logged", stderr)
+	}
+	for _, f := range []string{world.File, world.MeasuresFile, measure.SummaryFile} {
+		if _, err := os.Stat(filepath.Join(out, f)); err != nil {
+			t.Error(err)
+		}
 	}
 	if code, vout, verr := validate(t, out); code != 0 {
 		t.Errorf("validate: exit %d, stdout %q, stderr %q", code, vout, verr)
 	}
 	cfg, _ := readConfig(t, out)
 	hash, _ := cfg.Hash()
-	for _, s := range []string{hash, "stages  config, layout, elevation, mesh, cells, sea-level, climate, basins, land-target, rivers, classify, edges, export\n", "33333 playable"} {
+	for _, s := range []string{hash, "stages  config, layout, elevation, mesh, cells, sea-level, climate, basins, land-target, rivers, classify, edges, measures, export\n", "33333 playable", "checks  14 checks: 14 pass, 0 report failed, 0 gates failed\n"} {
 		if !strings.Contains(stdout, s) {
 			t.Errorf("stdout = %q, want it to contain %q", stdout, s)
 		}
@@ -199,12 +209,108 @@ func TestGenerateStopAfter(t *testing.T) {
 		readConfig(t, out)
 	}
 
-	// Stopping after a deferred stage passes over the deferred stages up
-	// to it.
-	code, stdout, stderr := generate(t, "--stop-after", "measures", "--output", t.TempDir())
-	if code != 0 || !strings.Contains(stderr, "skipped measures: not implemented yet") ||
-		!strings.Contains(stderr, "stopped after stage 13 measures") || !strings.Contains(stdout, "stages  config, layout, elevation, mesh, cells, sea-level, climate, basins, land-target, rivers, classify, edges\n") {
+	// Stopping after the measures stage writes the measures but not
+	// world.json.
+	out := t.TempDir()
+	code, stdout, stderr := generate(t, "--stop-after", "measures", "--config", smallConfig(t, 1, nil), "--output", out)
+	if code != 0 || strings.Contains(stderr, "skipped") ||
+		!strings.Contains(stderr, "stopped after stage 13 measures") || !strings.Contains(stdout, "stages  config, layout, elevation, mesh, cells, sea-level, climate, basins, land-target, rivers, classify, edges, measures\n") ||
+		!strings.Contains(stdout, "checks  14 checks:") {
 		t.Errorf("--stop-after measures: exit %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+	for f, want := range map[string]bool{world.MeasuresFile: true, measure.SummaryFile: true, world.File: false} {
+		if _, err := os.Stat(filepath.Join(out, f)); (err == nil) != want {
+			t.Errorf("--stop-after measures: %s written %v, want %v", f, err == nil, want)
+		}
+	}
+}
+
+// smallConfig writes a small world's config (300 land cells) with seed s
+// and, when checks is not nil, those checks, and returns its path.
+func smallConfig(t *testing.T, s uint64, checks []config.Check) string {
+	t.Helper()
+	cfg := config.Default()
+	cfg.Seed = config.Seed(s)
+	cfg.World.LandCells = 300
+	cfg.Rim.FalloffCells = 4
+	if checks != nil {
+		cfg.Measures.Checks = checks
+	}
+	if err := cfg.Resolve(); err != nil {
+		t.Fatal(err)
+	}
+	b, err := cfg.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "in.json")
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// TestGenerateChecks checks the exit codes of the configured checks: a
+// failed gate exits 3 with every output written; a failed report-only check
+// exits 0; both are listed on stderr, and the verdict on stdout.
+func TestGenerateChecks(t *testing.T) {
+	gate := config.Check{Measure: "land.cells", Op: ">", Value: 1e9, Mode: config.ModeGate}
+	report := config.Check{Measure: "directions.error_max_deg", Op: "<", Value: 0, Mode: config.ModeReport}
+	pass := config.Check{Measure: "land.met", Op: "==", Value: 1, Mode: config.ModeGate}
+
+	out := t.TempDir()
+	code, stdout, stderr := generate(t, "--config", smallConfig(t, 2, []config.Check{pass, gate, report}), "--output", out)
+	if code != 3 {
+		t.Fatalf("failed gate: exit %d, want 3; stderr %q", code, stderr)
+	}
+	for _, s := range []string{"mpg generate: gate check failed: land.cells > 1e+09", "mpg generate: report check failed: directions.error_max_deg < 0", "mpg generate: 1 gate checks failed\n", "measures: check    FAIL  gate   land.cells > 1e+09"} {
+		if !strings.Contains(stderr, s) {
+			t.Errorf("failed gate: stderr lacks %q", s)
+		}
+	}
+	if !strings.Contains(stdout, "checks  3 checks: 1 pass, 1 report failed, 1 gates failed\n") || !strings.Contains(stdout, "export\n") {
+		t.Errorf("failed gate: stdout %q", stdout)
+	}
+	for _, f := range []string{"config.json", world.File, world.MeasuresFile, measure.SummaryFile} {
+		if _, err := os.Stat(filepath.Join(out, f)); err != nil {
+			t.Errorf("failed gate: %v", err)
+		}
+	}
+	b, err := os.ReadFile(filepath.Join(out, world.MeasuresFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := world.DecodeMeasuresBytes(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Pass || m.GatesFailed != 1 || m.ReportsFailed != 1 || len(m.Checks) != 3 || !m.Checks[0].Pass {
+		t.Errorf("failed gate: measures.json checks %+v", m.Checks)
+	}
+	if code, vout, verr := validate(t, out); code != 0 {
+		t.Errorf("failed gate: validate: exit %d, stdout %q, stderr %q", code, vout, verr)
+	}
+
+	// The same world with only the failing report check exits 0.
+	out2 := t.TempDir()
+	code, stdout, stderr = generate(t, "--config", smallConfig(t, 2, []config.Check{report}), "--output", out2)
+	if code != 0 || !strings.Contains(stdout, "checks  1 checks: 0 pass, 1 report failed, 0 gates failed\n") ||
+		!strings.Contains(stderr, "mpg generate: report check failed: directions.error_max_deg < 0") || strings.Contains(stderr, "gate checks failed") {
+		t.Errorf("failed report check: exit %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+
+	// An unknown measure fails when the config resolves, before any stage.
+	path := filepath.Join(t.TempDir(), "bad.json")
+	if err := os.WriteFile(path, []byte(`{"schema": 1, "measures": {"checks": [{"measure": "land.cell", "op": "<=", "value": 1, "mode": "gate"}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out3 := t.TempDir()
+	code, _, stderr = generate(t, "--config", path, "--output", out3)
+	if code != 1 || !strings.Contains(stderr, `measures.checks[0].measure "land.cell" is not a measure; did you mean "land.cells"?`) {
+		t.Errorf("unknown measure: exit %d, stderr %q", code, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(out3, "config.json")); err == nil {
+		t.Error("unknown measure: config.json written")
 	}
 }
 

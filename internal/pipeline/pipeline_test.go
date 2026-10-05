@@ -22,6 +22,7 @@ import (
 	"github.com/mdhender/mpg/internal/edges"
 	"github.com/mdhender/mpg/internal/elevation"
 	"github.com/mdhender/mpg/internal/layout"
+	"github.com/mdhender/mpg/internal/measure"
 	"github.com/mdhender/mpg/internal/mesh"
 	"github.com/mdhender/mpg/internal/playermap"
 	"github.com/mdhender/mpg/internal/render"
@@ -244,14 +245,26 @@ func TestConfigStage(t *testing.T) {
 		t.Errorf("config.json differs from the seed-42 example:\n%s", got)
 	}
 
-	// The full registry passes over the deferred stages and runs to the
-	// end, through export.
-	res, err = Run(newTestContext(t, false), Stages(), -1)
-	if err != nil || res.NotImplemented != nil || res.Ran[len(res.Ran)-1].Name != "export" {
-		t.Errorf("full run = %+v, %v; want a run through export", res, err)
+	// The full registry runs every stage, through measures and export,
+	// and skips none.
+	c = newTestContext(t, false)
+	res, err = Run(c, Stages(), -1)
+	if err != nil || res.NotImplemented != nil || len(res.Ran) != len(Stages()) || res.Ran[len(res.Ran)-1].Name != "export" {
+		t.Errorf("full run = %+v, %v; want a run of every stage through export", res, err)
 	}
-	if want := []string{"measures"}; !slices.Equal(names(res.Skipped), want) {
-		t.Errorf("full run skipped %q, want %q", names(res.Skipped), want)
+	if len(res.Skipped) != 0 {
+		t.Errorf("full run skipped %q, want none", names(res.Skipped))
+	}
+	if m := c.Products.Measures; m == nil || !m.Pass {
+		t.Errorf("full run: measures %+v, want a passing report", m)
+	}
+	if w := c.Products.World; w == nil || w.Outcomes.Deferred == nil || len(w.Outcomes.Deferred) != 0 {
+		t.Error("full run: want a world with no deferred stages in its outcomes")
+	}
+	for _, f := range []string{world.File, world.MeasuresFile, measure.SummaryFile} {
+		if _, err := os.Stat(filepath.Join(c.OutputDir, f)); err != nil {
+			t.Errorf("full run: %v", err)
+		}
 	}
 }
 

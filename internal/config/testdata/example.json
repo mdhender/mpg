@@ -364,5 +364,93 @@
     "volcanic_radius_km": 25,
     "shallow_max_cells": 3,
     "open_max_cells": 8
+  },
+  "measures": {
+    "checks": [
+      {
+        "measure": "land.deviation_percent",
+        "op": ">=",
+        "value": -1,
+        "mode": "report"
+      },
+      {
+        "measure": "land.deviation_percent",
+        "op": "<=",
+        "value": 1,
+        "mode": "report"
+      },
+      {
+        "measure": "land.area_per_target",
+        "op": ">=",
+        "value": 0.98,
+        "mode": "report"
+      },
+      {
+        "measure": "land.area_per_target",
+        "op": "<=",
+        "value": 1.02,
+        "mode": "report"
+      },
+      {
+        "measure": "mesh.land_cell_area_cv",
+        "op": "<=",
+        "value": 0.13,
+        "mode": "report"
+      },
+      {
+        "measure": "mesh.edge_p5_km",
+        "op": ">=",
+        "value": 3,
+        "mode": "report"
+      },
+      {
+        "measure": "mesh.degree_cap_hits",
+        "op": "<=",
+        "value": 30,
+        "mode": "report"
+      },
+      {
+        "measure": "directions.error_mean_deg",
+        "op": "<=",
+        "value": 12,
+        "mode": "report"
+      },
+      {
+        "measure": "directions.error_p95_deg",
+        "op": "<=",
+        "value": 23,
+        "mode": "report"
+      },
+      {
+        "measure": "directions.error_max_deg",
+        "op": "<=",
+        "value": 45,
+        "mode": "report"
+      },
+      {
+        "measure": "directions.not_opposite_share",
+        "op": "<=",
+        "value": 0.01,
+        "mode": "report"
+      },
+      {
+        "measure": "grades.land_max_percent",
+        "op": "<=",
+        "value": 50,
+        "mode": "report"
+      },
+      {
+        "measure": "grades.land_cap_edges",
+        "op": "<=",
+        "value": 0,
+        "mode": "report"
+      },
+      {
+        "measure": "water.land_rim_edges",
+        "op": "<=",
+        "value": 0,
+        "mode": "report"
+      }
+    ]
   }
 }

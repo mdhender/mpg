@@ -435,6 +435,13 @@ Write `measures.json` and a short text summary on every run. Configured checks f
 
 Checks begin as report-only. Promote them to gates once tuning shows sensible ranges.
 
+How it is built (S33):
+- **Stage 13** measures every run and writes `measures.json` and `measures.txt` (a one-screen summary, also logged). `measures.json` has schema 0, versioned apart from `world.json`; its exported Go types are in `world/measures.go`. It is two-space indented with full float precision and records the seed and config hash, with no timestamps, paths or generator version, so it is byte-stable and golden-hashed.
+- **Names:** scalar measures are named by their JSON paths (`land.deviation_percent`, `directions.error_p95_deg`). S33 covers land, mesh, directions, grades and water (counts, largest lake and inland sea, coast edges per land cell); later groups join the same way.
+- **Checks:** `config.json` has `measures.checks`, a list of `{measure, op, value, mode}` with op `<=`, `>=`, `<`, `>` or `==` and mode `report` or `gate`. An unknown measure name fails when the config resolves. Config and measures JSON are written without HTML escaping, so ops stay readable.
+- **Defaults:** 14 report-only checks, with bounds from 44 measured worlds: land within ±1% of N and 2% of N·A, land area CV ≤ 0.13, edge p5 ≥ 3 km, ≤ 30 degree-cap collapses, direction error mean ≤ 12°, p95 ≤ 23° and max ≤ 45°, reverse not opposite ≤ 1%, steepest land grade ≤ 50% with none at the cap, and no land–rim edges.
+- **Failures:** a failed report check is listed and logged. A failed gate still writes every output, `world.json` included, and then `mpg generate` exits 3 (1 is a config or stage error, 2 a usage error). Sweeps never stop on a gate: the row label ends in GATE, and a `measures` column shows the check counts.
+
 These are **measurements, not placements**. Starting positions, settlements, resources, and balance are game rules, as in wgvc.
 
 ## Tuning: early and often

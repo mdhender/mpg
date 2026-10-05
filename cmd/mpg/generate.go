@@ -12,12 +12,14 @@ import (
 	"strings"
 
 	"github.com/mdhender/mpg/internal/config"
+	"github.com/mdhender/mpg/internal/measure"
 	"github.com/mdhender/mpg/internal/pipeline"
 )
 
 // runGenerate runs the pipeline. Exit codes: 0 on success (including a run
-// that stops at a stage not implemented yet), 1 on a config or stage error,
-// 2 on a usage error.
+// that stops at a stage not implemented yet, and a run whose report-only
+// checks failed), 1 on a config or stage error, 2 on a usage error, and 3
+// when a gate check failed (every output is still written).
 func runGenerate(args []string, stdout, stderr io.Writer) int {
 	fs := newFlagSet("generate", stderr)
 	var seed uint64
@@ -97,14 +99,27 @@ func runGenerate(args []string, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintf(stderr, "mpg generate: skipped %s: not implemented yet\n", strings.Join(skipped, ", "))
 	}
+	if m := ctx.Products.Measures; m != nil {
+		fmt.Fprintf(stdout, "checks  %s\n", measure.Verdict(m))
+		for _, c := range measure.Failed(m) {
+			fmt.Fprintf(stderr, "mpg generate: %s check failed: %s %s %v (actual %.6g)\n", c.Mode, c.Measure, c.Op, c.Value, c.Actual)
+		}
+	}
 	switch {
 	case res.NotImplemented != nil:
 		fmt.Fprintf(stderr, "mpg generate: stopped: stage %s not implemented yet\n", res.NotImplemented)
 	case last >= 0 && last < len(stages)-1:
 		fmt.Fprintf(stderr, "mpg generate: stopped after stage %s\n", stages[last])
 	}
+	if m := ctx.Products.Measures; m != nil && !m.Pass {
+		fmt.Fprintf(stderr, "mpg generate: %d gate checks failed\n", m.GatesFailed)
+		return exitGate
+	}
 	return 0
 }
+
+// exitGate is generate's exit code when a gate check failed.
+const exitGate = 3
 
 // configFlags are the config-source flags shared by generate and sweep:
 // --config and --land-cells.

@@ -23,6 +23,7 @@ import (
 	"github.com/mdhender/mpg/internal/mesh"
 	"github.com/mdhender/mpg/internal/pipeline"
 	"github.com/mdhender/mpg/internal/render"
+	"github.com/mdhender/mpg/world"
 )
 
 // Sweep limits.
@@ -67,7 +68,12 @@ const (
 // cells (cells). Each edges tile's caption gives
 // the direction error's mean, p95 and max in degrees (err), the share of
 // edges whose reverse direction is not the opposite point (rev), and the
-// coast edges per land cell (coast). Rows run one after another, so the sheet does not
+// coast edges per land cell (coast). The measures stage has no render yet,
+// so a measures tile is blank; its caption gives the checks that passed
+// against those run (ok), the failed report-only checks (rpt), and the
+// failed gates (gate). When the run reaches the measures stage and a gate
+// failed, the row label's land line ends in GATE; a failed gate never
+// stops the sweep. Rows run one after another, so the sheet does not
 // depend on scheduling. Exit codes: 0 on success, 1 on a config error, an
 // unimplemented stage, or a run error, 2 on a usage error.
 func runSweep(args []string, stdout, stderr io.Writer) int {
@@ -256,6 +262,9 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 				}
 				tiles[k].Caption[1] = fmt.Sprintf("err %.0f/%.0f/%.0f rev %.1f%% coast %.2f", es.ErrorMean, es.ErrorP95, es.ErrorMax, rev, es.CoastPerLand())
 			}
+			if ms := ctx.Products.Measures; ms != nil && registry[c.index].Name == "measures" {
+				tiles[k].Caption[1] = measuresCaption(ms)
+			}
 		}
 		label := []string{fmt.Sprintf("seed %d", uint64(row.cfg.Seed)), w.Aspect, row.cfg.Layout.Preset, fmt.Sprintf("%d land", w.LandCells)}
 		if lt := ctx.Products.Target; lt != nil {
@@ -268,6 +277,9 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 			if !sl.Met {
 				label[3] += " UNMET"
 			}
+		}
+		if ms := ctx.Products.Measures; ms != nil && !ms.Pass {
+			label[3] += " GATE"
 		}
 		for _, l := range label {
 			sheet.LabelChars = min(max(sheet.LabelChars, len(l)), maxLabelChars)
@@ -562,4 +574,12 @@ func classifyCaption(cl *classify.Result, variant string) string {
 		return fmt.Sprintf("wet %d (%.1f%%)", cl.WetlandCount(), pct)
 	}
 	return fmt.Sprintf("%s v%d", strings.Join(cl.LandShares(true), " "), cl.Volcanoes())
+}
+
+// measuresCaption summarizes the checks for a measures sweep tile: the
+// checks that passed against those run (ok), the failed report-only checks
+// (rpt), and the failed gates (gate).
+func measuresCaption(m *world.Measures) string {
+	failed := m.GatesFailed + m.ReportsFailed
+	return fmt.Sprintf("ok %d/%d rpt %d gate %d", len(m.Checks)-failed, len(m.Checks), m.ReportsFailed, m.GatesFailed)
 }

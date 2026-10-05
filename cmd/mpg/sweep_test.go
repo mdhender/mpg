@@ -18,6 +18,7 @@ import (
 	"github.com/mdhender/mpg/internal/mesh"
 	"github.com/mdhender/mpg/internal/pipeline"
 	"github.com/mdhender/mpg/internal/render"
+	"github.com/mdhender/mpg/world"
 )
 
 // sweep runs "mpg sweep args..." and returns the exit code, stdout, and
@@ -87,15 +88,14 @@ func TestParseSweepStages(t *testing.T) {
 		t.Errorf("unknown-stage error %q does not list the stages", err)
 	}
 
-	// Config through edges are implemented; measures is deferred (not
-	// implemented, but passed over on the way to export), so it cannot be a
-	// column.
+	// Every stage is implemented, measures (which has no render yet: its
+	// tile is blank, with a caption) included.
 	for _, tc := range []struct {
 		in   string
 		last int
 		ok   bool
 	}{{"config", 0, true}, {"layout,config", 1, true}, {"config,elevation", 2, true}, {"elevation,mesh", 3, true}, {"mesh,cells", 4, true}, {"cells:relief", 4, true}, {"cells,sea-level", 5, true}, {"sea-level", 5, true}, {"sea-level,climate", 6, true}, {"climate", 6, true}, {"climate:mask", 6, true}, {"climate:precip,climate:moisture,climate:pet,climate:runoff,climate:aridity", 6, true}, {"climate,basins", 7, true}, {"basins:depth", 7, true}, {"basins:lakes", 7, true}, {"basins,land-target", 8, true}, {"land-target:lakes", 8, true},
-		{"classify", 10, true}, {"sea-level,classify", 10, true}, {"rivers,classify", 10, true}, {"rivers", 9, true}, {"rivers:catchments", 9, true}, {"measures", -1, false}, {"classify,edges", 11, true}, {"edges:passability", 11, true}, {"edges,measures", -1, false}} {
+		{"classify", 10, true}, {"sea-level,classify", 10, true}, {"rivers,classify", 10, true}, {"rivers", 9, true}, {"rivers:catchments", 9, true}, {"measures", 12, true}, {"classify,edges", 11, true}, {"edges:passability", 11, true}, {"edges,measures", 12, true}} {
 		cols, err := parseSweepStages(tc.in, registry)
 		if err != nil {
 			t.Fatal(err)
@@ -103,6 +103,32 @@ func TestParseSweepStages(t *testing.T) {
 		last, err := checkImplemented(cols, registry)
 		if (err == nil) != tc.ok || last != tc.last {
 			t.Errorf("checkImplemented(%q) = %d, %v", tc.in, last, err)
+		}
+	}
+
+	// A stage that is not implemented cannot be a column, nor lie before
+	// one, unless it is deferred.
+	partial := pipeline.Stages()
+	partial[12].Run = nil
+	for _, tc := range []struct {
+		in       string
+		deferred bool
+		last     int
+		msg      string
+	}{
+		{"measures", false, -1, "stage 13 measures is not implemented yet"},
+		{"edges,export", false, -1, "sweep cannot run through stage 14 export"},
+		{"edges,export", true, 13, ""},
+		{"measures", true, -1, "stage 13 measures is not implemented yet"},
+	} {
+		partial[12].Deferred = tc.deferred
+		cols, err := parseSweepStages(tc.in, partial)
+		if err != nil {
+			t.Fatal(err)
+		}
+		last, err := checkImplemented(cols, partial)
+		if last != tc.last || (tc.msg == "") != (err == nil) || (err != nil && !strings.Contains(err.Error(), tc.msg)) {
+			t.Errorf("partial registry, deferred %v: checkImplemented(%q) = %d, %v; want %d, %q", tc.deferred, tc.in, last, err, tc.last, tc.msg)
 		}
 	}
 }
@@ -122,7 +148,6 @@ func TestSweepErrors(t *testing.T) {
 		{[]string{"--seeds", "1", "--stage", "layout", "--tile", "8", "--output", out}, 2, "--tile"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--aspect", "square,", "--output", out}, 2, "--aspect"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--output", out, "extra"}, 2, "unexpected"},
-		{[]string{"--seeds", "1", "--stage", "elevation,measures", "--output", out}, 1, "stage 13 measures is not implemented"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--aspect", "squarish", "--output", out}, 1, "world.aspect"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--config", "no-such-file.json", "--output", out}, 1, "no-such-file"},
 	} {
@@ -345,5 +370,26 @@ func TestBasinsCaption(t *testing.T) {
 	}
 	if got, want := basinsCaption(r), "dep 3 bas 2 nest 1 cells 2"; got != want {
 		t.Errorf("caption %q, want %q", got, want)
+	}
+}
+
+func TestMeasuresCaption(t *testing.T) {
+	m := &world.Measures{Checks: make([]world.CheckResult, 14), ReportsFailed: 2, GatesFailed: 1}
+	if got, want := measuresCaption(m), "ok 11/14 rpt 2 gate 1"; got != want {
+		t.Errorf("measuresCaption = %q, want %q", got, want)
+	}
+}
+
+// TestSweepMeasures checks that a measures column runs, and that a failed
+// gate does not stop the sweep.
+func TestSweepMeasures(t *testing.T) {
+	path := smallConfig(t, 1, []config.Check{{Measure: "land.cells", Op: "<", Value: 0, Mode: config.ModeGate}})
+	out := filepath.Join(t.TempDir(), "measures.png")
+	code, stdout, stderr := sweep(t, "--config", path, "--seeds", "1,2", "--stage", "edges,measures", "--tile", "64", "--output", out)
+	if code != 0 || !strings.Contains(stdout, "stages  edges, measures\n") {
+		t.Fatalf("exit %d; stdout %q; stderr %q", code, stdout, stderr)
+	}
+	if _, err := os.Stat(out); err != nil {
+		t.Error(err)
 	}
 }

@@ -35,7 +35,7 @@ type Context struct {
 	// ConfigHash is Config.Hash(), recorded in every render.
 	ConfigHash string
 	// OutputDir is the directory that receives config.json, world.json,
-	// and measures.json.
+	// measures.json, and measures.txt.
 	OutputDir string
 	// RendersDir is the directory that receives stage renders, or "" for
 	// none.
@@ -121,6 +121,10 @@ type Products struct {
 	// half-edges, and EdgeStats their statistics.
 	Edges     *edges.Data
 	EdgeStats *edges.Stats
+	// Measures is the measures stage's playability report, with the
+	// configured checks' results (Measures.Pass is false when a gate
+	// failed).
+	Measures *world.Measures
 	// World is the export stage's world.json content, and WorldBytes the
 	// bytes it wrote.
 	World      *world.World
