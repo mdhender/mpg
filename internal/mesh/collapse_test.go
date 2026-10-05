@@ -379,22 +379,33 @@ func TestCollapseRealMeshes(t *testing.T) {
 	}
 }
 
-// TestCollapseDisabled checks min_edge_fraction 0: nothing is collapsed or
-// stretched, and New's mesh is the Voronoi graph.
+// TestCollapseDisabled checks min_edge_fraction 0: nothing is stretched,
+// the only collapses are the degree cap's, and a mesh that needs no cap
+// collapse is the Voronoi graph. Seed 5 needs one (a 9-neighbor cell
+// straight from the Voronoi diagram); seed 6 none.
 func TestCollapseDisabled(t *testing.T) {
-	c := resolved(t, 5, "cinematic", 300)
-	c.Mesh.MinEdgeFraction = 0
-	c.ClearDerived()
-	if err := c.Resolve(); err != nil {
-		t.Fatal(err)
-	}
-	m := build(t, c)
-	if m.Collapses != 0 || m.Stretches != 0 {
-		t.Errorf("%d collapses, %d stretches with the collapse disabled", m.Collapses, m.Stretches)
-	}
-	a, _ := m.AppendBinary(nil)
-	b, _ := voronoiOf(t, c).AppendBinary(nil)
-	if !bytes.Equal(a, b) {
-		t.Error("with the collapse disabled, New differs from the Voronoi graph")
+	for _, tc := range []struct {
+		seed uint64
+		hits int
+	}{{5, 1}, {6, 0}} {
+		c := resolved(t, tc.seed, "cinematic", 300)
+		c.Mesh.MinEdgeFraction = 0
+		c.ClearDerived()
+		if err := c.Resolve(); err != nil {
+			t.Fatal(err)
+		}
+		m := build(t, c)
+		if m.Collapses != tc.hits || m.DegreeCapHits != tc.hits || m.Stretches != 0 {
+			t.Errorf("seed %d: %d collapses, %d degree-cap hits, %d stretches with the collapse disabled; want %d, %d, 0",
+				tc.seed, m.Collapses, m.DegreeCapHits, m.Stretches, tc.hits, tc.hits)
+		}
+		if tc.hits != 0 {
+			continue
+		}
+		a, _ := m.AppendBinary(nil)
+		b, _ := voronoiOf(t, c).AppendBinary(nil)
+		if !bytes.Equal(a, b) {
+			t.Errorf("seed %d: with the collapse disabled, New differs from the Voronoi graph", tc.seed)
+		}
 	}
 }

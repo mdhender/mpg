@@ -279,7 +279,8 @@ func graph(cyl topo.Cylinder, sites []topo.Point, corners []Corner, polys, acros
 			}
 			hes = append(hes, halfEdge{lo: min(a, b), hi: max(a, b), a: a, b: b, cell: i, across: across[k], k: k})
 		}
-		m.Cells[i] = Cell{Site: sites[i], Corners: ids, Edges: make([]int, len(ids))}
+		rim := cyl.InRim(sites[i].Y)
+		m.Cells[i] = Cell{Site: sites[i], Corners: ids, Edges: make([]int, len(ids)), Rim: rim, Impassable: rim}
 		acrossOf[i] = across
 	}
 

@@ -4,7 +4,7 @@
 // 4): the Voronoi diagram of sites on the cylinder, as a graph of cells,
 // corners, and edges with stable ids and wrap-aware geometry, over sites
 // relaxed by Lloyd's algorithm, with its short edges collapsed and its cells
-// held to the degree cap. Rim flags and the mesh checks are later steps.
+// held to the degree cap; its rim cells flagged; and the mesh checks.
 //
 // # Sites
 //
@@ -101,9 +101,9 @@
 // guard is what keeps every corner at 3–4 cells (literal collapse makes a
 // 5-way corner wherever two short edges meet) and keeps a hexagon with
 // three alternating short sides from becoming a triangle well under A/2.
-// In the default worlds about one short edge in a hundred is stretched,
-// and a corner moves at most half of min_edge_km, about 1.35 km, except
-// where moves chain (up to about 2.2 km in the test worlds).
+// In the default worlds one or two short edges in a hundred are
+// stretched, and a corner moves at most half of min_edge_km, about 1.35 km,
+// except where moves chain (up to about 2.7 km in the test worlds).
 //
 // Then the degree cap: while some cell (the lowest id first) has more
 // neighbors than the cap, its shortest edge that may be collapsed (by the
@@ -116,9 +116,43 @@
 // has no edge it may collapse, when an edge is still short, and when a
 // cell's polygon is not simple or has no positive area. Mesh.Collapses,
 // Stretches, DegreeCapHits, MaxShiftKm, and Stretched report the work.
-// Rim cells (InRim, by site y, until the rim flag exists) on the boundary
-// row can have as few as 1 or 2 neighbors, straight from the Voronoi
-// diagram; every other cell keeps 3 to the cap.
+// Rim cells on the boundary row can have as few as 1 or 2 neighbors,
+// straight from the Voronoi diagram; every other cell keeps 3 to the cap.
+//
+// # Rim cells
+//
+// A rim cell is one whose site lies in the north or south rim band (topo
+// Cylinder.InRim of its y; the band is rim.cells × √A deep). Build flags
+// every cell as it assembles the graph: Cell.Rim, and Cell.Impassable,
+// which is the same flag (only rim cells are impassable). The rim is the
+// polar ice sheet: it holds every edge on the rim boundary, and no playable
+// cell reaches y = 0 or y = H. Passable derives an edge's passability from
+// the flags (false on the boundary and beside any rim cell); the edge stage
+// records it for the game.
+//
+// # Mesh checks
+//
+// Check runs the mesh checks (DESIGN.md, "Mesh checks") against Limits
+// from the config and returns a Report: each check's pass or failure with
+// its offender count and first ids, and the numbers a milestone report
+// quotes (area mean and CV, the area range in A, the shortest edge, the
+// neighbor histograms of playable and rim cells, the corner histograms,
+// the collapse counts, and the rim's depth in cells). The checks are the
+// edge length (min_edge_km), the area bounds (area_min·A to area_max·A),
+// neighbor counts (playable 3 to degree_cap, rim 1 to degree_cap), corners
+// (3–4 cells, 2–4 on the map edge), the rim flags, and the rim seal: no
+// playable cell has a corner on the map's north or south edge. The
+// pipeline's mesh stage fails when any check fails.
+//
+// # Renders
+//
+// StageRender draws the playable cells' outlines blended over the
+// elevation, with the rim as a pale ice sheet behind a steel-blue ice
+// front; AreaRender, the cell-area heatmap; ShortRender, over the faded
+// elevation, the 4-way corners the collapse made as blue dots and each
+// stretched edge as a red disc about a cell across. Outlines are blended
+// and the marks scale with the cell size, so the renders still read when
+// a sweep sheet shrinks them tenfold.
 //
 // # Ids and graph
 //

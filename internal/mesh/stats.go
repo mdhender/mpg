@@ -6,8 +6,8 @@ import (
 	"math"
 )
 
-// Stats summarizes a mesh for logs and tuning. The mesh checks proper
-// (DESIGN.md, "Mesh checks") come later; these are report-only.
+// Stats summarizes a mesh for logs and tuning. It is report-only; Check
+// runs the mesh checks (DESIGN.md, "Mesh checks") and carries a Stats.
 type Stats struct {
 	Cells, Corners, Edges int
 	// BoundaryEdges counts the edges on the rim boundary.
@@ -16,9 +16,9 @@ type Stats struct {
 	SeamCells int
 	// NeighborMin and NeighborMax bound the neighbor counts, and
 	// Neighbors[k] counts the cells with k neighbors (the last entry
-	// collects any with more). RimCells counts the cells whose site lies in
-	// the rim (InRim), and PlayableNeighborMin and PlayableNeighborMax
-	// bound the neighbor counts of the others.
+	// collects any with more). RimCells counts the rim cells (Cell.Rim),
+	// and PlayableNeighborMin and PlayableNeighborMax bound the neighbor
+	// counts of the others.
 	NeighborMin, NeighborMax                 int
 	Neighbors                                [12]int
 	RimCells                                 int

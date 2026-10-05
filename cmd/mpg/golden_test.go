@@ -97,9 +97,9 @@ func TestGoldenElevation(t *testing.T) {
 // Each case hashes, in order, the resolved config.json bytes
 // (golden.Hasher.Bytes, length-prefixed), then the mesh's canonical
 // encoding (mesh.Mesh.AppendBinary: W and H; the counts; each cell's site,
-// corner ids, edge ids and neighbor ids; each corner's position, boundary
-// flag, cell ids and edge ids; each edge's cells and corners; all in id
-// order).
+// corner ids, edge ids, neighbor ids, and rim and impassable flags; each
+// corner's position, boundary flag, cell ids and edge ids; each edge's
+// cells and corners; all in id order).
 func TestGoldenMesh(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -107,10 +107,10 @@ func TestGoldenMesh(t *testing.T) {
 		aspect string
 		want   string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "4c5ac4ed16e2fd23e94056341503fe9050f508c2ca0ed32ff9f3e8d0835bb3db"},
-		{"seed42-square", 42, "square", "547af7d85178e4cd6c90556771acbad40c9112ca4ea905eca7193a839aae7234"},
-		{"seed7-cinematic", 7, "cinematic", "fc50094d8f92436f9b4a522c4243b90a3541cc0d4da807ba46ca1825078d00f0"},
-		{"seed7-portrait", 7, "portrait", "96c46f83f16d72fe7609dca2bffb4f6fb657a9b45e4c18bee559a79064129622"},
+		{"seed42-cinematic", 42, "cinematic", "a2090c832cfe41a172265cf9477cc7207c101dbe444514a270b97f7e43d0e90d"},
+		{"seed42-square", 42, "square", "2cfa32af4a83ab8a3507e8a53527cc0ef33bac827e78175a03fc352ec59421c2"},
+		{"seed7-cinematic", 7, "cinematic", "8e3d66379ead5f4986d3d7d1d1d9ea56a2a1d2f121a0d3e216d0596af878f75b"},
+		{"seed7-portrait", 7, "portrait", "7c8a382c3e8cad181fa15192373eaa1cf356a693a7627910d87c0f793fbc44f3"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

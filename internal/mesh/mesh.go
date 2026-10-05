@@ -28,6 +28,14 @@ type Cell struct {
 	// one, ascending, without duplicates. The rim boundary is not a
 	// neighbor.
 	Neighbors []int
+	// Rim is true for a rim cell: one whose site lies in the north or south
+	// rim band (topo Cylinder.InRim of Site.Y). Rim cells are the polar ice
+	// sheet: they hold every edge on the rim boundary, and no other cell
+	// touches the map's north or south edge (Check verifies it).
+	Rim bool
+	// Impassable is true for a cell the game may not enter. Only rim cells
+	// are impassable, so it equals Rim.
+	Impassable bool
 }
 
 // Corner is a point where cell polygons meet.

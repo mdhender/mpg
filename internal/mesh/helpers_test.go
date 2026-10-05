@@ -165,6 +165,9 @@ func checkMesh(t *testing.T, m *Mesh) {
 		if !(cell.Site.X >= 0 && cell.Site.X < w && cell.Site.Y > 0 && cell.Site.Y < h) {
 			fail("cell %d site (%v, %v) out of range", i, cell.Site.X, cell.Site.Y)
 		}
+		if cell.Rim != cyl.InRim(cell.Site.Y) || cell.Impassable != cell.Rim {
+			fail("cell %d at y %v has Rim %v, Impassable %v", i, cell.Site.Y, cell.Rim, cell.Impassable)
+		}
 		if cell.Corners[0] != slices.Min(cell.Corners) {
 			fail("cell %d polygon does not start at its lowest corner", i)
 		}

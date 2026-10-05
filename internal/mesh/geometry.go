@@ -68,9 +68,17 @@ func areaCentroid(q []topo.Point) (area float64, centroid topo.Point) {
 	return sum / 2, topo.Point{X: cx / (3 * sum), Y: cy / (3 * sum)}
 }
 
-// InRim reports whether cell c's site lies in the rim band (topo
-// Cylinder.InRim of its y). It stands in for the rim flag, which comes later.
-func (m *Mesh) InRim(c int) bool { return m.cyl.InRim(m.Cells[c].Site.Y) }
+// InRim reports whether cell c is a rim cell (Cell.Rim).
+func (m *Mesh) InRim(c int) bool { return m.Cells[c].Rim }
+
+// Passable reports whether edge e may be crossed: false on the rim boundary
+// and across any edge of an impassable (rim) cell (DESIGN.md, "Edges").
+// It is derived from the cell flags, not stored; the edge stage (12) records
+// passability for the game.
+func (m *Mesh) Passable(e int) bool {
+	c := m.Edges[e].Cells
+	return c[1] != Boundary && !m.Cells[c[0]].Impassable && !m.Cells[c[1]].Impassable
+}
 
 // EdgeLength returns edge e's length in km, across the seam if it spans it.
 func (m *Mesh) EdgeLength(e int) float64 {
@@ -91,6 +99,7 @@ func (m *Mesh) EdgeLength(e int) float64 {
 //	    len(Corners), then each corner id             integers
 //	    each edge id (as many as corners)             integers
 //	    len(Neighbors), then each neighbor id         integers
+//	    Rim, Impassable                               integers, 0 or 1
 //	per corner, in id order:
 //	    Point.X, Point.Y                              floats
 //	    Boundary                                      integer, 0 or 1
@@ -103,6 +112,13 @@ func (m *Mesh) EdgeLength(e int) float64 {
 func (m *Mesh) AppendBinary(b []byte) ([]byte, error) {
 	f := func(v float64) { b = binary.LittleEndian.AppendUint64(b, math.Float64bits(v)) }
 	i := func(v int) { b = binary.LittleEndian.AppendUint64(b, uint64(int64(v))) }
+	flag := func(v bool) {
+		if v {
+			i(1)
+		} else {
+			i(0)
+		}
+	}
 	ints := func(vs []int) {
 		i(len(vs))
 		for _, v := range vs {
@@ -122,15 +138,13 @@ func (m *Mesh) AppendBinary(b []byte) ([]byte, error) {
 			i(e)
 		}
 		ints(c.Neighbors)
+		flag(c.Rim)
+		flag(c.Impassable)
 	}
 	for _, c := range m.Corners {
 		f(c.Point.X)
 		f(c.Point.Y)
-		if c.Boundary {
-			i(1)
-		} else {
-			i(0)
-		}
+		flag(c.Boundary)
 		ints(c.Cells)
 		ints(c.Edges)
 	}

@@ -392,3 +392,33 @@ func TestMeshStage(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+// TestMeshStageCheckFails checks that a mesh failing the mesh checks stops
+// the run with an error naming the check, still renders, and leaves no
+// product for the later stages: area bounds of exactly A fail every cell.
+func TestMeshStageCheckFails(t *testing.T) {
+	cfg := config.Default()
+	cfg.Seed = 42
+	cfg.World.LandCells = 2_000
+	cfg.Mesh.AreaMin, cfg.Mesh.AreaMax = 1, 1
+	dir := t.TempDir()
+	c, err := NewContext(cfg, filepath.Join(dir, "out"), "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var variants []string
+	c.Sink = func(st Stage, variant string, img image.Image) error {
+		variants = append(variants, st.String()+"/"+variant)
+		return nil
+	}
+	_, err = Run(c, Stages(), 3)
+	if err == nil || !strings.Contains(err.Error(), "mesh check area failed") {
+		t.Fatalf("Run: %v, want the area check's failure", err)
+	}
+	if c.Products.Mesh != nil {
+		t.Error("a mesh that failed its checks was left as the stage product")
+	}
+	if !slices.Contains(variants, "4 mesh/short") {
+		t.Errorf("renders %q, want the mesh renders before the failure", variants)
+	}
+}
