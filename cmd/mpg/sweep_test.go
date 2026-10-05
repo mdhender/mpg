@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mdhender/mpg/internal/basin"
 	"github.com/mdhender/mpg/internal/climate"
 	"github.com/mdhender/mpg/internal/config"
 	"github.com/mdhender/mpg/internal/mesh"
@@ -86,14 +87,14 @@ func TestParseSweepStages(t *testing.T) {
 		t.Errorf("unknown-stage error %q does not list the stages", err)
 	}
 
-	// Config through climate are implemented, basins to rivers are
+	// Config through basins are implemented, land-target and rivers are
 	// deferred (not implemented, but passed over on the way to classify),
 	// classify and edges are implemented, and measures and later are not.
 	for _, tc := range []struct {
 		in   string
 		last int
 		ok   bool
-	}{{"config", 0, true}, {"layout,config", 1, true}, {"config,elevation", 2, true}, {"elevation,mesh", 3, true}, {"mesh,cells", 4, true}, {"cells:relief", 4, true}, {"cells,sea-level", 5, true}, {"sea-level", 5, true}, {"sea-level,climate", 6, true}, {"climate", 6, true}, {"climate:mask", 6, true}, {"climate:precip,climate:moisture,climate:pet,climate:runoff,climate:aridity", 6, true}, {"climate,basins", -1, false},
+	}{{"config", 0, true}, {"layout,config", 1, true}, {"config,elevation", 2, true}, {"elevation,mesh", 3, true}, {"mesh,cells", 4, true}, {"cells:relief", 4, true}, {"cells,sea-level", 5, true}, {"sea-level", 5, true}, {"sea-level,climate", 6, true}, {"climate", 6, true}, {"climate:mask", 6, true}, {"climate:precip,climate:moisture,climate:pet,climate:runoff,climate:aridity", 6, true}, {"climate,basins", 7, true}, {"basins:depth", 7, true}, {"basins,land-target", -1, false},
 		{"classify", 10, true}, {"sea-level,classify", 10, true}, {"rivers,classify", -1, false}, {"classify,edges", 11, true}, {"edges:passability", 11, true}, {"edges,measures", -1, false}} {
 		cols, err := parseSweepStages(tc.in, registry)
 		if err != nil {
@@ -121,7 +122,7 @@ func TestSweepErrors(t *testing.T) {
 		{[]string{"--seeds", "1", "--stage", "layout", "--tile", "8", "--output", out}, 2, "--tile"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--aspect", "square,", "--output", out}, 2, "--aspect"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--output", out, "extra"}, 2, "unexpected"},
-		{[]string{"--seeds", "1", "--stage", "elevation,basins", "--output", out}, 1, "stage 8 basins is not implemented"},
+		{[]string{"--seeds", "1", "--stage", "elevation,land-target", "--output", out}, 1, "stage 9 land-target is not implemented"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--aspect", "squarish", "--output", out}, 1, "world.aspect"},
 		{[]string{"--seeds", "1", "--stage", "layout", "--config", "no-such-file.json", "--output", out}, 1, "no-such-file"},
 	} {
@@ -269,19 +270,19 @@ func TestSweepPresets(t *testing.T) {
 }
 
 // TestSweepSeaLevel checks that a sweep runs through the sea level stage
-// and the climate (temperature, mask, precipitation and aridity), and on to classification and
+// and the climate (temperature, mask, precipitation and aridity), the basins, and on to classification and
 // the edges, past the deferred stages, and
 // gives the same sheet twice.
 func TestSweepSeaLevel(t *testing.T) {
 	dir := t.TempDir()
 	var hashes []string
 	for _, name := range []string{"a.png", "b.png"} {
-		code, stdout, stderr := sweep(t, "--seeds", "1,2", "--stage", "cells,sea-level,climate,climate:mask,climate:precip,climate:aridity,classify,edges,edges:passability", "--land-cells", "600",
+		code, stdout, stderr := sweep(t, "--seeds", "1,2", "--stage", "cells,sea-level,climate,climate:mask,climate:precip,climate:aridity,basins,basins:depth,classify,edges,edges:passability", "--land-cells", "600",
 			"--tile", "64", "--output", filepath.Join(dir, name))
 		if code != 0 {
 			t.Fatalf("exit %d; stderr %q", code, stderr)
 		}
-		if !strings.Contains(stdout, "stages  cells, sea-level, climate, climate:mask, climate:precip, climate:aridity, classify, edges, edges:passability") || !strings.Contains(stderr, "climate: rim temperature ") || !strings.Contains(stderr, "sea-level: level ") ||
+		if !strings.Contains(stdout, "stages  cells, sea-level, climate, climate:mask, climate:precip, climate:aridity, basins, basins:depth, classify, edges, edges:passability") || !strings.Contains(stderr, "basins: ") || !strings.Contains(stderr, "climate: rim temperature ") || !strings.Contains(stderr, "sea-level: level ") ||
 			!strings.Contains(stderr, "classify: land: ") || !strings.Contains(stderr, "edges: direction error ") {
 			t.Errorf("stdout %q, stderr %q", stdout, stderr)
 		}
@@ -318,5 +319,18 @@ func TestClimateCaption(t *testing.T) {
 		if got := climateCaption(cells, r, tc.variant); got != tc.want {
 			t.Errorf("variant %q: caption %q, want %q", tc.variant, got, tc.want)
 		}
+	}
+}
+
+// TestBasinsCaption checks the basins tile caption on a hand-made
+// hierarchy: a basin nested in another, and a cell in each.
+func TestBasinsCaption(t *testing.T) {
+	r := &basin.Result{
+		Depressions: make([]basin.Basin, 3),
+		Basins:      []basin.Basin{{Parent: 1}, {Parent: basin.None}},
+		Of:          []int{basin.None, 0, 1, basin.None},
+	}
+	if got, want := basinsCaption(r), "dep 3 bas 2 nest 1 cells 2"; got != want {
+		t.Errorf("caption %q, want %q", got, want)
 	}
 }

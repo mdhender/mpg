@@ -235,6 +235,10 @@ Stage 7 computes climate on the raster with the cell mask drawn onto it: each ra
 ### Basins and lakes
 
 - **Priority flood.** A priority flood over the cell graph, seeded from ocean cells and using cell altitude, finds depressions, spill cells, spill edges, and the nested hierarchy. Original elevations are never modified.
+  - The water rises everywhere at once (a merge tree, Barnes et al. 2020): the sea (rim and ocean) is flooded from the start, and every other cell is taken by altitude, ties to the lower cell id, joining the flooded components it touches. A flood from the sea alone fills each depression in one piece and cannot see nesting; the tests check the two agree on every cell's outermost spill level.
+  - Cells of equal altitude are taken as connected flats that act as one cell, so plateaus never split by id and every depth is positive. A flat touching two or more depressions closes them and starts their parent.
+  - A depression's **spill cell** is the pass: the cell outside it at its spill level (a cell of its parent, or free-draining land). Its **spill edge** and **spill corner** are, among the edges between the pass flat and the depression, the one ending at the lowest corner by corner height (mean altitude of the corner's cells), ties to the lower corner id, then edge id.
+  - Measured at 50 m on 37 worlds (N = 10,000): 233–489 depressions become 36–190 basins (2–19% of land cells); 70–80% of depressions are under 50 m deep. Pangaea nests deepest (up to 25 levels).
 - **Water balance** is a discrete fill, because every cell is one whole area unit:
   1. Sort each basin's cells by altitude.
   2. Fill them in that order.

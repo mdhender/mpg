@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mdhender/mpg/internal/basin"
 	"github.com/mdhender/mpg/internal/cells"
 	"github.com/mdhender/mpg/internal/classify"
 	"github.com/mdhender/mpg/internal/climate"
@@ -80,6 +81,10 @@ type Products struct {
 	// raster), cell temperatures, and precipitation, PET, runoff and
 	// aridity.
 	Climate *climate.Result
+	// Basins is the basins stage's hierarchy: every depression of the cell
+	// graph below its spill level, and the basins at least
+	// basin.min_depth_m deep, with their spill cells, edges and corners.
+	Basins *basin.Result
 	// Classes is the classification stage's landforms, depth bands, and
 	// volcano flags.
 	Classes *classify.Result

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mdhender/mpg/internal/basin"
 	"github.com/mdhender/mpg/internal/cells"
 	"github.com/mdhender/mpg/internal/classify"
 	"github.com/mdhender/mpg/internal/climate"
@@ -248,7 +249,7 @@ func TestConfigStage(t *testing.T) {
 	if err != nil || res.NotImplemented != nil || res.Ran[len(res.Ran)-1].Name != "export" {
 		t.Errorf("full run = %+v, %v; want a run through export", res, err)
 	}
-	if want := []string{"basins", "land-target", "rivers", "measures"}; !slices.Equal(names(res.Skipped), want) {
+	if want := []string{"land-target", "rivers", "measures"}; !slices.Equal(names(res.Skipped), want) {
 		t.Errorf("full run skipped %q, want %q", names(res.Skipped), want)
 	}
 }
@@ -577,6 +578,63 @@ func TestClimateStage(t *testing.T) {
 	}
 }
 
+// TestBasinsStage runs the pipeline through the basins stage and checks the
+// product against basin.Find, the renders, the log, and that the stage
+// leaves the cell altitudes as they were.
+func TestBasinsStage(t *testing.T) {
+	c := newTestContext(t, true)
+	var log bytes.Buffer
+	c.Log = &log
+	last, err := Lookup(Stages(), "basins")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var before []float64
+	stages := Stages()
+	run := stages[last].Run
+	stages[last].Run = func(c *Context) error {
+		before = slices.Clone(c.Products.Cells.Altitude)
+		return run(c)
+	}
+	res, err := Run(c, stages, last)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "climate", "basins"}) ||
+		len(res.Skipped) != 0 || res.NotImplemented != nil {
+		t.Errorf("ran %q, skipped %q, stopped at %v", names(res.Ran), names(res.Skipped), res.NotImplemented)
+	}
+	p := c.Products
+	if p.Basins == nil {
+		t.Fatal("basins stage left its product empty")
+	}
+	if !slices.Equal(before, p.Cells.Altitude) {
+		t.Error("basins stage changed the altitudes")
+	}
+	want, err := basin.Find(p.Mesh, p.Cells.Altitude, BasinSeed(p.Mesh, &p.SeaLevel.Flood), c.Config.Basin.MinDepthM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := p.Basins.AppendBinary(nil)
+	b, _ := want.AppendBinary(nil)
+	if !bytes.Equal(a, b) {
+		t.Error("stage product differs from basin.Find")
+	}
+	if len(p.Basins.Basins) == 0 {
+		t.Error("no basins in the default world")
+	}
+	for _, name := range []string{"08-basins.png", "08-basins-depth.png"} {
+		if _, err := os.Stat(filepath.Join(c.RendersDir, name)); err != nil {
+			t.Error(err)
+		}
+	}
+	for _, s := range []string{"basins: ", " depressions; depth 0–10 m ", " basins at least 50 m deep ("} {
+		if !strings.Contains(log.String(), s) {
+			t.Errorf("log lacks %q:\n%s", s, log.String())
+		}
+	}
+}
+
 // TestClassifyStage runs the pipeline through classification, past the
 // deferred stages, and checks the product against classify.Classify, the
 // render, and the log.
@@ -592,8 +650,8 @@ func TestClassifyStage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "climate", "classify"}) ||
-		!slices.Equal(names(res.Skipped), []string{"basins", "land-target", "rivers"}) || res.NotImplemented != nil {
+	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "climate", "basins", "classify"}) ||
+		!slices.Equal(names(res.Skipped), []string{"land-target", "rivers"}) || res.NotImplemented != nil {
 		t.Errorf("ran %q, skipped %q, stopped at %v", names(res.Ran), names(res.Skipped), res.NotImplemented)
 	}
 	p := c.Products
@@ -637,7 +695,7 @@ func TestEdgesStage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "climate", "classify", "edges"}) ||
+	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "climate", "basins", "classify", "edges"}) ||
 		res.NotImplemented != nil {
 		t.Errorf("ran %q, stopped at %v", names(res.Ran), res.NotImplemented)
 	}
