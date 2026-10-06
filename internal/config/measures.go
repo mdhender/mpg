@@ -25,7 +25,8 @@ var CheckOps = []string{"<=", ">=", "<", ">", "=="}
 
 // Measures sets the playability measures (DESIGN.md, "Playability
 // measures"; pipeline stage 13): the landmass classes, the chokepoint and
-// pass parameters, and the checks run against the measures.
+// pass parameters, the coast distance of the usability measures, and the
+// checks run against the measures.
 type Measures struct {
 	// Landmass sets the landmass classes.
 	Landmass Landmass `json:"landmass"`
@@ -33,6 +34,8 @@ type Measures struct {
 	Chokepoints Chokepoints `json:"chokepoints"`
 	// Passes sets the mountain chains and passes.
 	Passes Passes `json:"passes"`
+	// Usability sets the usability measures.
+	Usability Usability `json:"usability"`
 	// Checks lists the checks, run in order. A file that sets the list
 	// replaces the default list as a whole; [] runs none.
 	Checks []Check `json:"checks"`
@@ -80,6 +83,19 @@ type Passes struct {
 	DetourCells int `json:"detour_cells"`
 }
 
+// Usability sets the usability measures.
+type Usability struct {
+	// CoastCells is d: usability.coast_within_cells counts the land cells
+	// at most d cell steps from playable water, a cell touching water
+	// being 1 step away (1 to MaxCoastCells). S35 measured 56 default
+	// worlds: within 3 cells is 30 to 69% of the land (median 56%;
+	// pangaea lowest, islands highest).
+	CoastCells int `json:"coast_cells"`
+}
+
+// MaxCoastCells bounds measures.usability.coast_cells.
+const MaxCoastCells = 1000
+
 // MaxChokepointCells bounds measures.chokepoints.max_cells: a neck's cut
 // is searched over every path of up to that many cells, which grows fast.
 const MaxChokepointCells = 4
@@ -105,8 +121,8 @@ type Check struct {
 }
 
 // DefaultMeasures returns the default landmass classes, chokepoint and
-// pass parameters (S34; see Landmass, Chokepoints and Passes), and the
-// default checks. They are all report-only
+// pass parameters (S34; see Landmass, Chokepoints and Passes), the coast
+// distance (S35; see Usability), and the default checks. They are all report-only
 // (DESIGN.md: "Checks begin as report-only"); their bounds come from S33's
 // measurements of 44 worlds (seeds 1–5 at square and cinematic with every
 // seeded preset, and a few portrait, widescreen and landscape worlds),
@@ -131,6 +147,7 @@ func DefaultMeasures() Measures {
 		Landmass:    Landmass{IsletMaxCells: 9, ContinentMinCells: 1000},
 		Chokepoints: Chokepoints{MaxCells: 3, DetourCells: 20, NeckMinRegionCells: 10},
 		Passes:      Passes{ChainMinCells: 10, MaxCells: 3, MaxGradePercent: 3, DetourCells: 20},
+		Usability:   Usability{CoastCells: 3},
 		Checks: []Check{
 			r("land.deviation_percent", ">=", -1),
 			r("land.deviation_percent", "<=", 1),
@@ -179,6 +196,9 @@ func (m *Measures) validate(bad func(format string, args ...any)) {
 	}
 	if v := m.Passes.DetourCells; v < 1 || v > MaxDetourCells {
 		bad("measures.passes.detour_cells %d must be in [1, %d]", v, MaxDetourCells)
+	}
+	if v := m.Usability.CoastCells; v < 1 || v > MaxCoastCells {
+		bad("measures.usability.coast_cells %d must be in [1, %d]", v, MaxCoastCells)
 	}
 	names := world.MeasureNames()
 	for k, c := range m.Checks {

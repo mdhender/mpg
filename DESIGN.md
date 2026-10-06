@@ -452,6 +452,28 @@ How it is built (S34):
 - **Render:** stage 13 draws the landmass and chokepoint map, with landmasses by class, chains darkened, and straits (red; green within one landmass), necks (magenta) and passes (orange) marked. The sweep measures tile is captioned `LM n (c/i/.) str all/major neck n pass n`, plus the check counts.
 - **Measured** on 24 default worlds: 0–14 major straits, 0–13 necks and 5–46 passes. The stage costs 47–112 ms per world.
 
+How it is built (S35):
+- **Features** (`features`): every depression of the land target's basin hierarchy goes into a depth histogram (0-10, 10-25, 25-50, 50-100, 100-200, 200-500, 500-1000, 1000+ m), and those shallower than `basin.min_depth_m` are also counted on their own. Basins are reported by water state, with the deepest.
+  - A **dry basin** is a basin with no water in it or in any basin nested in it, whose parent holds water: the largest waterless closed ground. Each holds at least one playa.
+  - Dry basins are reported with count, cells, largest, deepest, and a list. The cells measure is `dry_basin_area_cells`, which is not world.json's `outcomes.dry_basin_cells` (land at or below sea level).
+  - Also reported: glacier, ice-field, polar-desert and pack-ice cells; hotspots, volcanoes on land, and volcanic-highland cells.
+- **Rivers** (`rivers`) restate the river stage's `NetworkStats`:
+  - edges by class, and per land cell;
+  - km per 1,000 km², and the share of land touching a river;
+  - polylines, mouth corners, and polyline ends by terminal;
+  - the longest polyline and flow path, seam edges, and the largest drainage and discharge.
+- **Usability** (`usability`): habitable land is not under permanent ice, not polar desert or desert, and not mountains. Wetlands are habitable and are reported separately.
+  - A land cell's coast distance is its steps through land to playable water (ocean, lake or inland sea; 1 when touching it).
+  - `measures.usability.coast_cells` (d, default 3) sets the share reported within d. The full distance histogram and the biome and landform histograms are listed too.
+- **Water** gains lake and inland-sea size histograms.
+- **Measured** on 56 default worlds (seeds 1–7, square and cinematic, four presets):
+  - habitable land: 76–95%;
+  - wetlands: 0.6–12.7%, above 7% only on cinematic pangaea;
+  - rivers: 0.14–0.32 river edges per land cell, touching 17–35% of land; 149–263 mouths; longest river 17–75 edges;
+  - within 3 cells of the coast: 30–69% (pangaea lowest, islands highest);
+  - dry basins: 0–11.
+- **Outputs:** there is no new render and no new default check. The sweep measures tile gains two caption lines, `hab … wet … c<d> … riv … mo … L…` and `dep … bas … dry … pl … ice … v on-land/hotspots`.
+
 These are **measurements, not placements**. Starting positions, settlements, resources, and balance are game rules, as in wgvc.
 
 ## Tuning: early and often

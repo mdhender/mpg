@@ -196,3 +196,81 @@ func TestGateIsNotAStageError(t *testing.T) {
 		t.Errorf("checks %+v", m.Checks)
 	}
 }
+
+// TestWorldFeatureMeasures checks the feature, river and usability measures
+// (S35) of small worlds against the stage products and world.json's
+// outcomes: the ice, pack-ice, wetland and playa counts agree with the
+// outcomes, the river measures restate the river stage's statistics, and
+// the histograms add up.
+func TestWorldFeatureMeasures(t *testing.T) {
+	for _, tc := range []struct {
+		seed   uint64
+		preset string
+	}{{1, "continents"}, {3, "pangaea"}, {4, "islands"}} {
+		c := config.Default()
+		c.Seed = config.Seed(tc.seed)
+		c.Layout.Preset = tc.preset
+		c.World.LandCells = 600
+		c.Rim.FalloffCells = 4
+		ctx, err := pipeline.NewContext(c, t.TempDir(), "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stages := pipeline.Stages()
+		last, err := pipeline.Lookup(stages, "export")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pipeline.Run(ctx, stages, last); err != nil {
+			t.Fatal(err)
+		}
+		p := ctx.Products
+		m, o, tg := p.Measures, p.World.Outcomes, p.Target
+		f, r, u := m.Features, m.Rivers, m.Usability
+
+		if f.GlacierCells != o.GlacierCells || f.IceFieldCells != o.IceFieldCells || f.PackIceCells != o.PackIceCells ||
+			u.WetlandCells != o.WetlandCells || f.Playas != o.Playas {
+			t.Errorf("seed %d: features %+v, wetlands %d against outcomes %+v", tc.seed, f, u.WetlandCells, o)
+		}
+		if f.Depressions != len(tg.Basins.Depressions) || f.Basins != len(tg.Basins.Basins) || f.Basins+f.DepressionsBelowMin != f.Depressions ||
+			sum(f.Depths) != f.Depressions || f.BasinsFull+f.BasinsPartial+f.BasinsDry != f.Basins || f.MinDepthM != c.Basin.MinDepthM ||
+			f.DryBasins != len(f.DryBasinList) || f.DryBasins > f.Playas || (f.Playas > 0) != (f.DryBasins > 0) {
+			t.Errorf("seed %d: basins %+v", tc.seed, f)
+		}
+		for _, d := range f.DryBasinList {
+			if d.DepthM < f.MinDepthM || d.Cells < 1 || !tg.Land[d.Bottom] {
+				t.Errorf("seed %d: dry basin %+v", tc.seed, d)
+			}
+		}
+		if f.Hotspots != len(p.Hotspots) || f.Volcanoes != p.Classes.Volcanoes() || f.Volcanoes > f.Hotspots {
+			t.Errorf("seed %d: volcanoes %+v", tc.seed, f)
+		}
+
+		s := p.RiverStats
+		if r.RiverEdges != s.RiverEdges || r.StreamEdges+r.RiverClassEdges+r.MajorRiverEdges != r.RiverEdges || r.EdgesPerLandCell != s.EdgesPerLandCell() ||
+			r.KmPer1000Km2 != s.KmPer1000Km2() || r.TouchShare != s.TouchShare() || r.Mouths != s.Mouths || r.Polylines != s.Paths ||
+			r.EndsOcean+r.EndsLake+r.EndsSink+r.EndsConfluence != r.Polylines || r.LongestEdges != s.LongestEdges || r.LongestFlowEdges != s.FlowEdges {
+			t.Errorf("seed %d: rivers %+v against %+v", tc.seed, r, s)
+		}
+
+		land := tg.LandCells
+		if sum(u.CoastDistance)+u.CoastUnreachedCells != land || u.CoastDistance[0] != 0 || len(u.CoastDistance) != u.CoastDistanceMax+1 ||
+			u.CoastWithinCells > land || u.CoastCells != c.Measures.Usability.CoastCells || u.HabitableCells > land ||
+			sum(u.Biomes) != land || sum(u.Landforms) != land || u.HabitableShare <= 0 || u.HabitableShare > 1 {
+			t.Errorf("seed %d: usability %+v", tc.seed, u)
+		}
+		within := 0
+		for k, n := range u.CoastDistance {
+			if k <= u.CoastCells {
+				within += n
+			}
+		}
+		if within != u.CoastWithinCells {
+			t.Errorf("seed %d: within %d cells %d, histogram says %d", tc.seed, u.CoastCells, u.CoastWithinCells, within)
+		}
+		w := m.Water
+		if sum(w.LakeSizes) != w.Lakes || sum(w.InlandSeaSizes) != w.InlandSeas {
+			t.Errorf("seed %d: water sizes %+v", tc.seed, w)
+		}
+	}
+}

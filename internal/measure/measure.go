@@ -15,6 +15,7 @@ import (
 	"github.com/mdhender/mpg/internal/edges"
 	"github.com/mdhender/mpg/internal/fmath"
 	"github.com/mdhender/mpg/internal/mesh"
+	"github.com/mdhender/mpg/internal/river"
 	"github.com/mdhender/mpg/world"
 )
 
@@ -31,18 +32,23 @@ type Input struct {
 	Mesh *mesh.Mesh
 	// Search is the land-target search's record, Land marks the land
 	// cells after lakes, LandAreaKm2 is their area, OceanCells counts the
-	// ocean cells, and Lakes is the water balance at the chosen level.
+	// ocean cells, and Basins and Lakes are the basin hierarchy and its
+	// water balance at the chosen level (LandTarget's, not the basins
+	// stage's at the first sea level).
 	Search      *cells.Record
 	Land        []bool
 	LandAreaKm2 float64
 	OceanCells  int
+	Basins      *basin.Result
 	Lakes       *basin.Lakes
 	// Edges is the edge data and EdgeStats its statistics (edges.Summarize).
 	Edges     *edges.Data
 	EdgeStats *edges.Stats
-	// Landform is each cell's landform (classification); the mountain
-	// cells make the chains that passes cross.
-	Landform []classify.Landform
+	// Classes is the classification: landforms (the mountain cells make
+	// the chains that passes cross), biomes, surfaces and volcanoes.
+	Classes *classify.Result
+	// RiverStats is the river network's statistics (river.Network.Stats).
+	RiverStats *river.NetworkStats
 }
 
 // Compute measures the world described by in and runs the configured checks
@@ -55,11 +61,15 @@ func Compute(in Input) (*world.Measures, error) {
 // Analyze is Compute, also returning the Map that the landmass and
 // chokepoint render draws.
 func Analyze(in Input) (*world.Measures, *Map, error) {
-	if in.Mesh == nil || in.Search == nil || in.Lakes == nil || in.Edges == nil || in.EdgeStats == nil {
+	if in.Mesh == nil || in.Search == nil || in.Basins == nil || in.Lakes == nil || in.Edges == nil || in.EdgeStats == nil ||
+		in.Classes == nil || in.RiverStats == nil {
 		return nil, nil, errors.New("measure: missing stage products")
 	}
 	if len(in.Land) != len(in.Mesh.Cells) {
 		return nil, nil, errors.New("measure: land mask does not match the mesh")
+	}
+	if len(in.Lakes.Water) != len(in.Basins.Basins) {
+		return nil, nil, errors.New("measure: water balance does not match the basins")
 	}
 	g, err := newGraph(in)
 	if err != nil {
@@ -80,6 +90,9 @@ func Analyze(in Input) (*world.Measures, *Map, error) {
 	m.Landmasses = landmassMeasures(lm, m.Land.Cells, in.Config.Measures.Landmass)
 	var cm chokeMap
 	m.Chokepoints, cm = chokepointMeasures(g, lm, in.Config.Measures)
+	m.Features = features(in)
+	m.Rivers = riverMeasures(in.RiverStats)
+	m.Usability = usability(in, g)
 	if err := Evaluate(m, in.Config.Measures.Checks); err != nil {
 		return nil, nil, err
 	}
@@ -236,6 +249,7 @@ func water(in Input) world.WaterMeasures {
 			out.LargestLakeCells = max(out.LargestLakeCells, n)
 		}
 	}
+	waterSizes(&out, in.Lakes.Lakes)
 	return out
 }
 

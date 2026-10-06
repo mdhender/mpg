@@ -388,16 +388,59 @@ func TestChokepointCaption(t *testing.T) {
 	}
 }
 
-// TestSweepMeasures checks that a measures column runs, and that a failed
+// TestMeasuresTileCaption checks a measures tile's caption lines: the
+// usability and rivers line and the features line (S35) follow the
+// chokepoint and check lines.
+func TestMeasuresTileCaption(t *testing.T) {
+	m := &world.Measures{Checks: make([]world.CheckResult, 14)}
+	m.Usability = world.UsabilityMeasures{HabitableShare: 0.877, WetlandShare: 0.026, CoastCells: 3, CoastWithinShare: 0.56}
+	m.Rivers = world.RiverMeasures{EdgesPerLandCell: 0.201, Mouths: 234, LongestEdges: 35}
+	m.Features = world.FeatureMeasures{Depressions: 320, Basins: 62, DryBasins: 2, Playas: 2, GlacierCells: 9, IceFieldCells: 2, Volcanoes: 4, Hotspots: 6}
+	got := measuresTileCaption(m)
+	want := []string{chokepointCaption(m), measuresCaption(m), "hab 88% wet 3% c3 56% riv .20 mo 234 L35", "dep 320 bas 62 dry 2 pl 2 ice 11 v 4/6"}
+	if !slices.Equal(got, want) {
+		t.Errorf("measuresTileCaption = %q, want %q", got, want)
+	}
+	m.Usability.CoastCells = 5
+	m.Rivers.EdgesPerLandCell = 1.234
+	if got := usabilityCaption(m); got != "hab 88% wet 3% c5 56% riv 1.23 mo 234 L35" {
+		t.Errorf("usabilityCaption = %q", got)
+	}
+	for _, line := range got {
+		if len(line) > 320/render.LabelAdvance {
+			t.Errorf("caption %q is wider than a default tile", line)
+		}
+	}
+}
+
+// TestSweepMeasures checks that a measures column runs, that its tiles
+// get five caption lines (the feature, river and usability measures among
+// them: S35's "measures appear in sweep tile labels"), and that a failed
 // gate does not stop the sweep.
 func TestSweepMeasures(t *testing.T) {
 	path := smallConfig(t, 1, []config.Check{{Measure: "land.cells", Op: "<", Value: 0, Mode: config.ModeGate}})
-	out := filepath.Join(t.TempDir(), "measures.png")
-	code, stdout, stderr := sweep(t, "--config", path, "--seeds", "1,2", "--stage", "edges,measures", "--tile", "64", "--output", out)
-	if code != 0 || !strings.Contains(stdout, "stages  edges, measures\n") {
-		t.Fatalf("exit %d; stdout %q; stderr %q", code, stdout, stderr)
+	dir := t.TempDir()
+	height := func(stages string) int {
+		t.Helper()
+		out := filepath.Join(dir, strings.ReplaceAll(stages, ",", "-")+".png")
+		code, stdout, stderr := sweep(t, "--config", path, "--seeds", "1,2", "--stage", stages, "--tile", "64", "--output", out)
+		if code != 0 || !strings.Contains(stdout, "stages  "+strings.ReplaceAll(stages, ",", ", ")+"\n") {
+			t.Fatalf("exit %d; stdout %q; stderr %q", code, stdout, stderr)
+		}
+		f, err := os.Open(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+		cfg, err := png.DecodeConfig(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return cfg.Height
 	}
-	if _, err := os.Stat(out); err != nil {
-		t.Error(err)
+	// Two rows, each with three caption lines more than an edges sheet's
+	// two.
+	if a, b := height("edges"), height("edges,measures"); b-a != 2*3*render.LabelHeight {
+		t.Errorf("sheet heights %d and %d: want %d more with a measures column", a, b, 2*3*render.LabelHeight)
 	}
 }

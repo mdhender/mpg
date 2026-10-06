@@ -150,7 +150,10 @@
 // resolves, with the closest name suggested. A file that sets the list
 // replaces the defaults as a whole, and [] runs no checks. The defaults
 // (DefaultMeasures) are all report-only, with bounds from measurements of
-// 44 worlds. See package measure.
+// 44 worlds. The landmass classes, the chokepoint and pass parameters, and
+// measures.usability.coast_cells (d, default 3: the coast distance that
+// usability.coast_within_cells counts to) tune the measures themselves.
+// See package measure.
 //
 // # Versioning
 //

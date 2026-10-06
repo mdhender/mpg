@@ -14,12 +14,17 @@ import (
 func TestMeasureNames(t *testing.T) {
 	names := MeasureNames()
 	for _, want := range []string{"land.cells", "land.met", "mesh.edge_p5_km", "directions.error_p95_deg", "grades.land_max_percent", "water.coast_edges_per_land_cell",
-		"landmasses.count", "landmasses.continents", "landmasses.islets", "landmasses.largest_share", "chokepoints.straits", "chokepoints.straits_major", "chokepoints.necks", "chokepoints.passes"} {
+		"landmasses.count", "landmasses.continents", "landmasses.islets", "landmasses.largest_share", "chokepoints.straits", "chokepoints.straits_major", "chokepoints.necks", "chokepoints.passes",
+		"features.depressions", "features.depressions_below_min", "features.basins", "features.dry_basins", "features.dry_basin_area_cells", "features.playas",
+		"features.glacier_cells", "features.ice_field_cells", "features.volcanoes", "features.hotspots",
+		"rivers.edges_per_land_cell", "rivers.mouths", "rivers.longest_edges", "rivers.touch_share", "rivers.ends_ocean",
+		"usability.habitable_share", "usability.wetland_share", "usability.coast_within_share", "usability.coast_distance_max"} {
 		if !slices.Contains(names, want) {
 			t.Errorf("no measure %q", want)
 		}
 	}
-	for _, not := range []string{"schema", "pass", "mesh.neighbors_land", "grades.buckets", "checks", "landmasses.sizes", "landmasses.list", "chokepoints.strait_list", "chokepoints.neck_widths"} {
+	for _, not := range []string{"schema", "pass", "mesh.neighbors_land", "grades.buckets", "checks", "landmasses.sizes", "landmasses.list", "chokepoints.strait_list", "chokepoints.neck_widths",
+		"features.depths", "features.depth_buckets", "features.dry_basin_list", "features.dry_basin_cells", "usability.coast_distance", "usability.biomes", "water.lake_sizes"} {
 		if slices.Contains(names, not) {
 			t.Errorf("%q is named", not)
 		}

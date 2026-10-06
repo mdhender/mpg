@@ -62,6 +62,17 @@ func landmassClass(size int, c config.Landmass) string {
 // landmassSizeFloors are the smallest sizes of world.LandmassSizeBuckets.
 var landmassSizeFloors = []int{1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000}
 
+// sizeBucket returns the bucket of world.LandmassSizeBuckets holding a size
+// of s ≥ 1 cells.
+func sizeBucket(s int) int {
+	for b := len(landmassSizeFloors) - 1; b > 0; b-- {
+		if s >= landmassSizeFloors[b] {
+			return b
+		}
+	}
+	return 0
+}
+
 // landmassMeasures measures the landmasses lm of a world with landCells
 // land cells.
 func landmassMeasures(lm landmasses, landCells int, c config.Landmass) world.LandmassMeasures {
@@ -84,12 +95,7 @@ func landmassMeasures(lm landmasses, landCells int, c config.Landmass) world.Lan
 			out.Islets++
 		}
 		out.LargestCells = max(out.LargestCells, s)
-		for b := len(landmassSizeFloors) - 1; b >= 0; b-- {
-			if s >= landmassSizeFloors[b] {
-				out.Sizes[b]++
-				break
-			}
-		}
+		out.Sizes[sizeBucket(s)]++
 		out.List[id] = world.Landmass{Cells: s, Class: class, FirstCell: lm.first[id]}
 	}
 	out.LargestShare = ratio(float64(out.LargestCells), float64(landCells))

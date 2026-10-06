@@ -14,6 +14,7 @@ import (
 // stage's log.
 func Lines(m *world.Measures) []string {
 	l, me, d, g, w, lm, cp := m.Land, m.Mesh, m.Directions, m.Grades, m.Water, m.Landmasses, m.Chokepoints
+	f, r, u := m.Features, m.Rivers, m.Usability
 	met := "met"
 	if !l.Met {
 		met = "UNMET"
@@ -31,11 +32,22 @@ func Lines(m *world.Measures) []string {
 		"grade    land-land " + shares(g.Buckets, g.LandLand) +
 			fmt.Sprintf("; max %.1f%%, p95 %.1f%%, %d at the cap", g.LandMaxPercent, g.LandP95Percent, g.LandCapEdges),
 		fmt.Sprintf("water    %d ocean cells; %d lakes (%d cells, largest %d), %d inland seas (%d cells, largest %d); coast %.3f edges per land cell; %d land-rim edges",
-			w.OceanCells, w.Lakes, w.LakeCells, w.LargestLakeCells, w.InlandSeas, w.InlandSeaCells, w.LargestInlandSeaCells, w.CoastEdgesPerLandCell, w.LandRimEdges),
+			w.OceanCells, w.Lakes, w.LakeCells, w.LargestLakeCells, w.InlandSeas, w.InlandSeaCells, w.LargestInlandSeaCells, w.CoastEdgesPerLandCell, w.LandRimEdges) +
+			"; lake sizes " + named(w.SizeBuckets, w.LakeSizes) + "; inland-sea sizes " + named(w.SizeBuckets, w.InlandSeaSizes),
 		fmt.Sprintf("landmass %d: %d continents, %d islands, %d islets; largest %d cells (%.1f%% of land)",
 			lm.Count, lm.Continents, lm.Islands, lm.Islets, lm.LargestCells, 100*lm.LargestShare),
 		fmt.Sprintf("choke    k %d: %d straits (%d between, %d within, %d major; %d cells), %d necks (%d cells); %d chains (%d cells), %d passes (%d cells) on %d chains",
 			cp.MaxCells, cp.Straits, cp.StraitsBetween, cp.StraitsWithin, cp.StraitsMajor, cp.StraitCells, cp.Necks, cp.NeckCells, cp.Chains, cp.ChainCells, cp.Passes, cp.PassCells, cp.ChainsWithPass),
+		fmt.Sprintf("feature  %d depressions (%d below %.0f m), %d basins (%d full, %d partial, %d dry; deepest %.0f m); depths m %s; %d dry basins (%d cells, largest %d, deepest %.0f m), %d playas; %d glacier, %d ice-field, %d polar-desert, %d pack-ice cells; %d of %d hotspots on land, %d volcanic-highland cells",
+			f.Depressions, f.DepressionsBelowMin, f.MinDepthM, f.Basins, f.BasinsFull, f.BasinsPartial, f.BasinsDry, f.DeepestBasinM, named(f.DepthBuckets, f.Depths),
+			f.DryBasins, f.DryBasinAreaCells, f.LargestDryBasinCells, f.DeepestDryBasinM, f.Playas, f.GlacierCells, f.IceFieldCells, f.PolarDesertCells, f.PackIceCells,
+			f.Volcanoes, f.Hotspots, f.VolcanicHighlandCells),
+		fmt.Sprintf("rivers   %d edges (%d stream, %d river, %d major), %.3f per land cell, %.1f km per 1000 km² of land, %.1f%% of land cells touching; %d polylines, %d mouths (ends: %d ocean, %d lake, %d sink, %d confluence); longest %d edges (%.0f km), flow %d edges (%.0f km)",
+			r.RiverEdges, r.StreamEdges, r.RiverClassEdges, r.MajorRiverEdges, r.EdgesPerLandCell, r.KmPer1000Km2, 100*r.TouchShare, r.Polylines, r.Mouths,
+			r.EndsOcean, r.EndsLake, r.EndsSink, r.EndsConfluence, r.LongestEdges, r.LongestKm, r.LongestFlowEdges, r.LongestFlowKm),
+		fmt.Sprintf("usable   habitable %d (%.1f%%), wetland %d (%.1f%%), desert %d, mountains %d; within %d cells of the coast %d (%.1f%%); coast distance max %d, mean %.2f, %d unreached",
+			u.HabitableCells, 100*u.HabitableShare, u.WetlandCells, 100*u.WetlandShare, u.DesertCells, u.MountainCells,
+			u.CoastCells, u.CoastWithinCells, 100*u.CoastWithinShare, u.CoastDistanceMax, u.CoastDistanceMean, u.CoastUnreachedCells),
 	}
 	for _, c := range m.Checks {
 		out = append(out, "check    "+CheckLine(c))
@@ -56,6 +68,21 @@ func histogram(counts []int) string {
 		if n != 0 {
 			parts = append(parts, fmt.Sprintf("%d:%d", k, n))
 		}
+	}
+	return strings.Join(parts, " ")
+}
+
+// named formats counts against bucket names as "name:count" pairs,
+// skipping zeros, or "none" when every count is 0.
+func named(names []string, counts []int) string {
+	var parts []string
+	for k, n := range counts {
+		if n != 0 && k < len(names) {
+			parts = append(parts, fmt.Sprintf("%s:%d", names[k], n))
+		}
+	}
+	if len(parts) == 0 {
+		return "none"
 	}
 	return strings.Join(parts, " ")
 }

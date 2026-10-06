@@ -14,8 +14,8 @@ import (
 
 // MeasuresSchemaVersion is the version of measures.json's layout that this
 // package reads and writes. It is versioned apart from world.json: the
-// measures grow through milestone 9 (features, rivers and usability join
-// the groups below) without touching the game data.
+// measures grew through milestone 9 (landmasses and chokepoints in S34;
+// features, rivers and usability in S35) without touching the game data.
 const MeasuresSchemaVersion = 0
 
 // MeasuresFile is the name of the playability report in a world's output
@@ -27,7 +27,7 @@ const MeasuresFile = "measures.json"
 // checks against it. It never changes the world; it describes it.
 //
 // Each group (Land, Mesh, ...) holds scalars and histograms, and the
-// landmass and chokepoint groups lists as well. A scalar is
+// landmass, chokepoint and feature groups lists as well. A scalar is
 // named by its JSON path, "group.field" (as "directions.error_p95_deg");
 // MeasureNames lists them and Measures.Value reads one. Checks in
 // config.json and seed ranking refer to measures by these names. Booleans
@@ -59,6 +59,9 @@ type Measures struct {
 	Water       WaterMeasures      `json:"water"`
 	Landmasses  LandmassMeasures   `json:"landmasses"`
 	Chokepoints ChokepointMeasures `json:"chokepoints"`
+	Features    FeatureMeasures    `json:"features"`
+	Rivers      RiverMeasures      `json:"rivers"`
+	Usability   UsabilityMeasures  `json:"usability"`
 }
 
 // CheckResult is one configured check and its outcome.
@@ -191,6 +194,12 @@ type WaterMeasures struct {
 	CoastEdges            int     `json:"coast_edges"`
 	CoastEdgesPerLandCell float64 `json:"coast_edges_per_land_cell"`
 	LandRimEdges          int     `json:"land_rim_edges"`
+	// SizeBuckets names the buckets of the size histograms in cells
+	// (LandmassSizeBuckets), and LakeSizes and InlandSeaSizes count the
+	// lakes and the inland seas in each.
+	SizeBuckets    []string `json:"size_buckets"`
+	LakeSizes      []int    `json:"lake_sizes"`
+	InlandSeaSizes []int    `json:"inland_sea_sizes"`
 }
 
 // Landmass classes, by cell count (config measures.landmass): an islet has
@@ -305,6 +314,165 @@ type Chokepoint struct {
 	// Cells lists the chokepoint's cells, ascending: a strait's water
 	// cells, a neck's land cells, a pass's chain cells.
 	Cells []int `json:"cells"`
+}
+
+// DepthBuckets names the buckets of FeatureMeasures.Depths: depression
+// depths in meters, "10-25" counting depressions at least 10 m and less
+// than 25 m deep, and so on. The default basin.min_depth_m, 50 m, is a
+// bucket edge.
+var DepthBuckets = []string{"0-10", "10-25", "25-50", "50-100", "100-200", "200-500", "500-1000", "1000+"}
+
+// FeatureMeasures measures the features that are possible, not forced:
+// depressions and basins, dry basins and playas, permanent ice, and
+// volcanoes. They are reported, never required.
+//
+// The basins are those of the land-target stage's chosen sea level. A dry
+// basin is a basin with no water in it or in any basin nested in it, whose
+// parent (if any) holds water: the largest waterless closed ground. Every
+// dry basin holds at least one playa. Its cells are not world.json's
+// outcomes.dry_basin_cells, which counts the land at or below the sea
+// level.
+type FeatureMeasures struct {
+	// MinDepthM is basin.min_depth_m, recorded for readers. Depressions
+	// counts every depression of the cell graph, DepressionsBelowMin those
+	// shallower than MinDepthM, and Basins the rest. BasinsFull,
+	// BasinsPartial and BasinsDry count the basins by water state, and
+	// DeepestBasinM is the deepest basin's depth (0 with none).
+	MinDepthM           float64 `json:"min_depth_m"`
+	Depressions         int     `json:"depressions"`
+	DepressionsBelowMin int     `json:"depressions_below_min"`
+	Basins              int     `json:"basins"`
+	BasinsFull          int     `json:"basins_full"`
+	BasinsPartial       int     `json:"basins_partial"`
+	BasinsDry           int     `json:"basins_dry"`
+	DeepestBasinM       float64 `json:"deepest_basin_m"`
+	// DepthBuckets names the buckets (DepthBuckets), and Depths counts
+	// every depression, those below the minimum included, in each.
+	DepthBuckets []string `json:"depth_buckets"`
+	Depths       []int    `json:"depths"`
+	// Playas counts the playas (dry leaf basins; one cell each). DryBasins
+	// counts the dry basins, DryBasinAreaCells their cells (nested basins
+	// included), LargestDryBasinCells the largest's cells, and
+	// DeepestDryBasinM the deepest's depth (0 with none).
+	Playas               int     `json:"playas"`
+	DryBasins            int     `json:"dry_basins"`
+	DryBasinAreaCells    int     `json:"dry_basin_area_cells"`
+	LargestDryBasinCells int     `json:"largest_dry_basin_cells"`
+	DeepestDryBasinM     float64 `json:"deepest_dry_basin_m"`
+	// DryBasinList lists the dry basins by basin id.
+	DryBasinList []DryBasin `json:"dry_basin_list"`
+	// GlacierCells and IceFieldCells count the land cells under permanent
+	// ice by surface, PolarDesertCells the land cells of biome
+	// polar-desert, and PackIceCells the playable water cells with pack
+	// ice (as world.json's outcomes).
+	GlacierCells     int `json:"glacier_cells"`
+	IceFieldCells    int `json:"ice_field_cells"`
+	PolarDesertCells int `json:"polar_desert_cells"`
+	PackIceCells     int `json:"pack_ice_cells"`
+	// Hotspots counts the volcanic hotspots, Volcanoes those whose peak is
+	// on land, and VolcanicHighlandCells the cells of landform
+	// volcanic-highlands.
+	Hotspots              int `json:"hotspots"`
+	Volcanoes             int `json:"volcanoes"`
+	VolcanicHighlandCells int `json:"volcanic_highland_cells"`
+}
+
+// DryBasin is one dry basin: its basin id (among the basins at least the
+// minimum depth deep), its cells (nested basins included), its depth, and
+// its bottom cell.
+type DryBasin struct {
+	Basin  int     `json:"basin"`
+	Cells  int     `json:"cells"`
+	DepthM float64 `json:"depth_m"`
+	Bottom int     `json:"bottom"`
+}
+
+// RiverMeasures measures the river network (the river stage's
+// statistics; DESIGN.md, "Rivers on edges").
+type RiverMeasures struct {
+	// RiverEdges counts the river edges, and StreamEdges,
+	// RiverClassEdges and MajorRiverEdges them by class;
+	// EdgesPerLandCell is RiverEdges per land cell.
+	RiverEdges       int     `json:"river_edges"`
+	StreamEdges      int     `json:"stream_edges"`
+	RiverClassEdges  int     `json:"river_class_edges"`
+	MajorRiverEdges  int     `json:"major_river_edges"`
+	EdgesPerLandCell float64 `json:"edges_per_land_cell"`
+	// Km is the river edges' length, and KmPer1000Km2 that per 1,000 km²
+	// of land. TouchCells counts the land cells with a river edge on their
+	// border, and TouchShare their share of the land cells.
+	Km           float64 `json:"km"`
+	KmPer1000Km2 float64 `json:"km_per_1000_km2"`
+	TouchCells   int     `json:"touch_cells"`
+	TouchShare   float64 `json:"touch_share"`
+	// Polylines counts the river polylines and Mouths the mouth corners
+	// (several polylines may end at one). EndsOcean, EndsLake and EndsSink
+	// count the polylines ending at a mouth on the sea, a lake or a dry
+	// sink, and EndsConfluence those ending on another polyline;
+	// Confluences counts the corners where they do. OutletSources counts
+	// the polylines starting at a lake's outlet.
+	Polylines      int `json:"polylines"`
+	Mouths         int `json:"mouths"`
+	EndsOcean      int `json:"ends_ocean"`
+	EndsLake       int `json:"ends_lake"`
+	EndsSink       int `json:"ends_sink"`
+	EndsConfluence int `json:"ends_confluence"`
+	Confluences    int `json:"confluences"`
+	OutletSources  int `json:"outlet_sources"`
+	// LongestEdges and LongestKm size the longest polyline, by edges (ties
+	// to the longer); LongestFlowEdges and LongestFlowKm the longest path
+	// from a polyline's source down the drainage tree to where its water
+	// ends.
+	LongestEdges     int     `json:"longest_edges"`
+	LongestKm        float64 `json:"longest_km"`
+	LongestFlowEdges int     `json:"longest_flow_edges"`
+	LongestFlowKm    float64 `json:"longest_flow_km"`
+	// SeamEdges counts the river edges crossing the east–west seam;
+	// MaxDrainageKm2 and MaxDischargeM3s are the largest drainage and
+	// discharge on any drainage tree edge.
+	SeamEdges       int     `json:"seam_edges"`
+	MaxDrainageKm2  float64 `json:"max_drainage_km2"`
+	MaxDischargeM3s float64 `json:"max_discharge_m3s"`
+}
+
+// UsabilityMeasures measures how usable the land is. Shares are of the
+// land cells (land after lakes).
+type UsabilityMeasures struct {
+	// HabitableCells counts the land cells that are not under permanent
+	// ice (biome clear: glacier or ice field), not polar-desert or desert,
+	// and not mountains; wetlands are habitable. HabitableShare is their
+	// share. WetlandCells counts the land cells with a wetland surface,
+	// and WetlandShare their share; DesertCells and MountainCells count
+	// the land cells of biome desert and of landform mountains.
+	HabitableCells int     `json:"habitable_cells"`
+	HabitableShare float64 `json:"habitable_share"`
+	WetlandCells   int     `json:"wetland_cells"`
+	WetlandShare   float64 `json:"wetland_share"`
+	DesertCells    int     `json:"desert_cells"`
+	MountainCells  int     `json:"mountain_cells"`
+	// A land cell's coast distance is the fewest steps through land from
+	// it to playable water (ocean, lake or inland sea; never the rim): 1
+	// for a land cell touching water. CoastCells is d
+	// (measures.usability.coast_cells); CoastWithinCells counts the land
+	// cells at most d from the coast, and CoastWithinShare their share.
+	CoastCells       int     `json:"coast_cells"`
+	CoastWithinCells int     `json:"coast_within_cells"`
+	CoastWithinShare float64 `json:"coast_within_share"`
+	// CoastDistance[k] counts the land cells at coast distance k (index 0
+	// is always 0); CoastDistanceMax and CoastDistanceMean are the largest
+	// and the mean over the land cells that reach water.
+	// CoastUnreachedCells counts the land cells with no land path to
+	// water (0 on every world measured).
+	CoastDistance       []int   `json:"coast_distance"`
+	CoastDistanceMax    int     `json:"coast_distance_max"`
+	CoastDistanceMean   float64 `json:"coast_distance_mean"`
+	CoastUnreachedCells int     `json:"coast_unreached_cells"`
+	// BiomeNames and LandformNames name the land's biomes and landforms in
+	// code order, and Biomes and Landforms count the land cells of each.
+	BiomeNames    []string `json:"biome_names"`
+	Biomes        []int    `json:"biomes"`
+	LandformNames []string `json:"landform_names"`
+	Landforms     []int    `json:"landforms"`
 }
 
 // Bytes returns the canonical encoding of m: two-space indented JSON in the

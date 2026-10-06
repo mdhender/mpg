@@ -118,14 +118,16 @@ func TestMeasuresParameters(t *testing.T) {
 	d := DefaultMeasures()
 	if d.Landmass != (Landmass{IsletMaxCells: 9, ContinentMinCells: 1000}) ||
 		d.Chokepoints != (Chokepoints{MaxCells: 3, DetourCells: 20, NeckMinRegionCells: 10}) ||
-		d.Passes != (Passes{ChainMinCells: 10, MaxCells: 3, MaxGradePercent: 3, DetourCells: 20}) {
-		t.Errorf("defaults %+v %+v %+v", d.Landmass, d.Chokepoints, d.Passes)
+		d.Passes != (Passes{ChainMinCells: 10, MaxCells: 3, MaxGradePercent: 3, DetourCells: 20}) ||
+		d.Usability != (Usability{CoastCells: 3}) {
+		t.Errorf("defaults %+v %+v %+v %+v", d.Landmass, d.Chokepoints, d.Passes, d.Usability)
 	}
 	c, err := Decode(strings.NewReader(`{"schema": 1, "measures": {"chokepoints": {"max_cells": 2}}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if c.Measures.Chokepoints.MaxCells != 2 || c.Measures.Chokepoints.DetourCells != 20 || c.Measures.Landmass != d.Landmass || c.Measures.Passes != d.Passes ||
+		c.Measures.Usability != d.Usability ||
 		!slices.Equal(c.Measures.Checks, d.Checks) {
 		t.Errorf("one parameter set: %+v", c.Measures)
 	}
@@ -144,6 +146,8 @@ func TestMeasuresParameters(t *testing.T) {
 		{"pass cells", func(m *Measures) { m.Passes.MaxCells = MaxPassCells + 1 }, "measures.passes.max_cells 17"},
 		{"grade", func(m *Measures) { m.Passes.MaxGradePercent = math.NaN() }, "measures.passes.max_grade_percent NaN"},
 		{"pass detour", func(m *Measures) { m.Passes.DetourCells = MaxDetourCells + 1 }, "measures.passes.detour_cells 1001"},
+		{"coast low", func(m *Measures) { m.Usability.CoastCells = 0 }, "measures.usability.coast_cells 0"},
+		{"coast high", func(m *Measures) { m.Usability.CoastCells = MaxCoastCells + 1 }, "measures.usability.coast_cells 1001"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c := Default()

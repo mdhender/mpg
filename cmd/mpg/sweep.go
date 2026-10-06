@@ -70,12 +70,18 @@ const (
 // edges whose reverse direction is not the opposite point (rev), and the
 // coast edges per land cell (coast). Each measures tile is the landmass
 // and chokepoint map; when a column is the measures stage, every tile gets
-// a third caption line. A measures tile's second line gives the landmasses
+// five caption lines. A measures tile's second line gives the landmasses
 // (LM) with their continents, islands and islets (c/i/. — the font is
 // ASCII, so "." stands for the islets), the straits and the major straits
 // (str, those with no islet shore), the necks (neck), and the passes
 // (pass); its third the checks that passed against those run (ok), the
-// failed report-only checks (rpt), and the failed gates (gate). When the run reaches the measures stage and a gate
+// failed report-only checks (rpt), and the failed gates (gate); its fourth
+// the habitable (hab) and wetland (wet) shares of the land, the share
+// within d cells of the coast (c<d>, d from measures.usability.coast_cells),
+// the river edges per land cell (riv), the mouths (mo), and the longest
+// river in edges (L); its fifth the depressions (dep), basins (bas), dry
+// basins (dry), playas (pl), permanent ice cells (ice: glacier and ice
+// field), and the volcanoes on land against the hotspots (v). When the run reaches the measures stage and a gate
 // failed, the row label's land line ends in GATE; a failed gate never
 // stops the sweep. Rows run one after another, so the sheet does not
 // depend on scheduling. Exit codes: 0 on success, 1 on a config error, an
@@ -197,7 +203,7 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 	for _, c := range cols {
 		sheet.Columns = append(sheet.Columns, c.name)
 		if registry[c.index].Name == "measures" {
-			sheet.CaptionLines = captionLines + 1
+			sheet.CaptionLines = 1 + len(measuresTileCaption(&world.Measures{}))
 		}
 	}
 	start := time.Now()
@@ -270,8 +276,7 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 				tiles[k].Caption[1] = fmt.Sprintf("err %.0f/%.0f/%.0f rev %.1f%% coast %.2f", es.ErrorMean, es.ErrorP95, es.ErrorMax, rev, es.CoastPerLand())
 			}
 			if ms := ctx.Products.Measures; ms != nil && registry[c.index].Name == "measures" {
-				tiles[k].Caption[1] = chokepointCaption(ms)
-				tiles[k].Caption = append(tiles[k].Caption, measuresCaption(ms))
+				tiles[k].Caption = append(tiles[k].Caption[:1], measuresTileCaption(ms)...)
 			}
 		}
 		label := []string{fmt.Sprintf("seed %d", uint64(row.cfg.Seed)), w.Aspect, row.cfg.Layout.Preset, fmt.Sprintf("%d land", w.LandCells)}
@@ -584,12 +589,39 @@ func classifyCaption(cl *classify.Result, variant string) string {
 	return fmt.Sprintf("%s v%d", strings.Join(cl.LandShares(true), " "), cl.Volcanoes())
 }
 
+// measuresTileCaption returns a measures sweep tile's caption lines after
+// the first: the landmasses and chokepoints, the checks, the usability and
+// rivers, and the features.
+func measuresTileCaption(m *world.Measures) []string {
+	return []string{chokepointCaption(m), measuresCaption(m), usabilityCaption(m), featuresCaption(m)}
+}
+
 // chokepointCaption summarizes the landmasses and chokepoints for a
 // measures sweep tile: landmasses with their continents, islands and
 // islets, straits and major straits, necks, and passes.
 func chokepointCaption(m *world.Measures) string {
 	l, c := m.Landmasses, m.Chokepoints
 	return fmt.Sprintf("LM %d (%dc/%di/%d.) str %d/%d neck %d pass %d", l.Count, l.Continents, l.Islands, l.Islets, c.Straits, c.StraitsMajor, c.Necks, c.Passes)
+}
+
+// usabilityCaption summarizes the usability and river measures for a
+// measures sweep tile: habitable and wetland shares, the share within d
+// cells of the coast, river edges per land cell, mouths, and the longest
+// river in edges.
+func usabilityCaption(m *world.Measures) string {
+	u, r := m.Usability, m.Rivers
+	riv := strings.TrimPrefix(fmt.Sprintf("%.2f", r.EdgesPerLandCell), "0")
+	return fmt.Sprintf("hab %.0f%% wet %.0f%% c%d %.0f%% riv %s mo %d L%d",
+		100*u.HabitableShare, 100*u.WetlandShare, u.CoastCells, 100*u.CoastWithinShare, riv, r.Mouths, r.LongestEdges)
+}
+
+// featuresCaption summarizes the feature measures for a measures sweep
+// tile: depressions, basins, dry basins, playas, permanent ice cells, and
+// volcanoes on land against hotspots.
+func featuresCaption(m *world.Measures) string {
+	f := m.Features
+	return fmt.Sprintf("dep %d bas %d dry %d pl %d ice %d v %d/%d",
+		f.Depressions, f.Basins, f.DryBasins, f.Playas, f.GlacierCells+f.IceFieldCells, f.Volcanoes, f.Hotspots)
 }
 
 // measuresCaption summarizes the checks for a measures sweep tile: the

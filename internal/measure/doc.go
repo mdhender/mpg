@@ -12,7 +12,7 @@
 // Summary) to SummaryFile, measures.txt, and to the log. Measures never
 // change the world or its hashes; they describe it.
 //
-// The groups so far (S33 and S34):
+// The groups (S33 to S35):
 //
 //   - land: the land cell count against N, its deviation and tolerance,
 //     whether the contract is met, and the land area against N·A;
@@ -40,9 +40,36 @@
 //     its share of the land, and counts by class from config
 //     measures.landmass (islet ≤ 9 cells, continent ≥ 1000, island
 //     between, by default), with a list of every landmass;
-//   - chokepoints (S34): straits, necks and mountain passes (below).
+//   - chokepoints (S34): straits, necks and mountain passes (below);
+//   - water also gains (S35) lake and inland-sea size histograms in the
+//     landmass size buckets;
+//   - features (S35): every depression of the land target's basin
+//     hierarchy, those shallower than basin.min_depth_m counted apart, in a
+//     depth histogram (world.DepthBuckets, meters); the basins by water
+//     state and the deepest; the playas and the dry basins, a dry basin
+//     being a basin with no water in it or in any basin nested in it whose
+//     parent holds water (count, cells, largest, deepest, and a list); the
+//     glacier, ice-field, polar-desert and pack-ice cells; the hotspots,
+//     the volcanoes on land, and the volcanic-highland cells. Report only:
+//     each may be 0;
+//   - rivers (S35): package river's NetworkStats restated: river edges by
+//     class and per land cell, km per 1,000 km² of land, the land cells
+//     touching a river, polylines, mouth corners and polyline ends by
+//     terminal, the longest polyline and flow, seam edges, and the largest
+//     drainage and discharge;
+//   - usability (S35): habitable land (not biome clear, polar-desert or
+//     desert, and not mountains; wetlands count) and wetlands with their
+//     shares, desert and mountain cells, the coast distance (below), and
+//     the land's biome and landform histograms.
 //
-// Features, rivers and usability (S35) join as further groups.
+// # Coast distance
+//
+// A land cell's coast distance is the fewest steps through land to
+// playable water (ocean, lake or inland sea, as the coast flag counts it;
+// never the rim), 1 for a cell touching water: a breadth-first search from
+// every coastal cell at once. usability.coast_within_cells counts the land
+// within d = measures.usability.coast_cells (default 3) of the coast, and
+// coast_distance is the whole histogram (index = distance).
 //
 // # Chokepoints
 //

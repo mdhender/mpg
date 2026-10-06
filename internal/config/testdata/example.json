@@ -381,6 +381,9 @@
       "max_grade_percent": 3,
       "detour_cells": 20
     },
+    "usability": {
+      "coast_cells": 3
+    },
     "checks": [
       {
         "measure": "land.deviation_percent",

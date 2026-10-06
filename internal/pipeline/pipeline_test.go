@@ -874,7 +874,8 @@ func TestMeasuresStage(t *testing.T) {
 	}
 	p := c.Products
 	want, err := measure.Compute(measure.Input{Config: c.Config, ConfigHash: c.ConfigHash, Mesh: p.Mesh, Search: p.Target.Search, Land: p.Target.Land,
-		LandAreaKm2: p.Target.LandAreaKm2, OceanCells: p.Target.OceanCells, Lakes: p.Target.Lakes, Edges: p.Edges, EdgeStats: p.EdgeStats, Landform: p.Classes.Landform})
+		LandAreaKm2: p.Target.LandAreaKm2, OceanCells: p.Target.OceanCells, Basins: p.Target.Basins, Lakes: p.Target.Lakes, Edges: p.Edges, EdgeStats: p.EdgeStats,
+		Classes: p.Classes, RiverStats: p.RiverStats})
 	if err != nil {
 		t.Fatal(err)
 	}

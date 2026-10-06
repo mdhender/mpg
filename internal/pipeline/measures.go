@@ -12,7 +12,8 @@ import (
 )
 
 // runMeasures is stage 13. It computes the playability measures (package
-// measure) from the land target, the mesh and the edge data, runs the
+// measure) from the land target (its basins and lakes included), the mesh,
+// the river statistics, the classification and the edge data, runs the
 // configured checks, writes measures.json and the text summary
 // (measure.SummaryFile), and logs the summary. A failed check, gate or
 // not, is not a stage error: the run goes on to export, and the caller
@@ -29,10 +30,12 @@ func runMeasures(c *Context) error {
 		Land:        p.Target.Land,
 		LandAreaKm2: p.Target.LandAreaKm2,
 		OceanCells:  p.Target.OceanCells,
+		Basins:      p.Target.Basins,
 		Lakes:       p.Target.Lakes,
 		Edges:       p.Edges,
 		EdgeStats:   p.EdgeStats,
-		Landform:    p.Classes.Landform,
+		Classes:     p.Classes,
+		RiverStats:  p.RiverStats,
 	})
 	if err != nil {
 		return err

@@ -25,11 +25,12 @@ type graph struct {
 }
 
 // newGraph builds the graph of in's mesh: its neighbors, the edge data's
-// inclines, the land mask, and the landforms.
+// inclines, the land mask, and the landforms. It checks that the
+// classification matches the mesh.
 func newGraph(in Input) (*graph, error) {
 	m := in.Mesh
 	n := len(m.Cells)
-	if len(in.Landform) != n || len(in.Edges.Cells) != n {
+	if len(in.Classes.Landform) != n || len(in.Classes.Biome) != n || len(in.Classes.Surface) != n || len(in.Edges.Cells) != n {
 		return nil, errors.New("measure: landforms or edge data do not match the mesh")
 	}
 	g := &graph{
@@ -50,7 +51,7 @@ func newGraph(in Input) (*graph, error) {
 			g.grade[i][k] = int(h.Incline.Abs())
 		}
 		g.water[i] = !c.Rim && !in.Land[i]
-		g.mountain[i] = in.Land[i] && in.Landform[i] == classify.Mountains
+		g.mountain[i] = in.Land[i] && in.Classes.Landform[i] == classify.Mountains
 	}
 	return g, nil
 }
