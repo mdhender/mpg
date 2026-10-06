@@ -84,7 +84,20 @@ const (
 // field), and the volcanoes on land against the hotspots (v). When the run reaches the measures stage and a gate
 // failed, the row label's land line ends in GATE; a failed gate never
 // stops the sweep. Rows run one after another, so the sheet does not
-// depend on scheduling. Exit codes: 0 on success, 1 on a config error, an
+// depend on scheduling.
+//
+// With --rank, the run goes through the measures stage whatever the
+// columns, and the rows are ranked by a weighted score of the named
+// measures (see rankItems): against the other rows of their aspect and
+// preset block (--rank-scope group, the default) or against every row
+// (all). Rows whose gates failed rank last; ties keep the run order. The
+// sheet's rows are reordered by rank within each block (over the whole
+// sheet for scope all), each label's first line gains the rank (#n) and a
+// fifth line gives the score; the PNG records the spec as mpg:rank and
+// mpg:rows in sheet order. A Markdown rank table (rank, seed, aspect,
+// preset, score, pass, land met, and each key's raw value) goes to --table,
+// by default the --output path with .rank.md in place of its extension.
+// Exit codes: 0 on success, 1 on a config error, an
 // unimplemented stage, or a run error, 2 on a usage error.
 func runSweep(args []string, stdout, stderr io.Writer) int {
 	fs := newFlagSet("sweep", stderr)
@@ -95,6 +108,9 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 	cf := addConfigFlags(fs)
 	output := fs.String("output", "", "write the contact sheet PNG to `file` (required)")
 	tile := fs.Int("tile", defaultTile, "tile width in `pixels`; the height follows the world's shape")
+	rankFlag := fs.String("rank", "", "rank the rows by `measures`: \"default\" or comma-separated measure[:max|:min|:~X][*weight] items (runs through the measures stage)")
+	rankScope := fs.String("rank-scope", rankScopeGroup, "rank each row against its aspect and preset block (\"group\") or every row (\"all\")")
+	tablePath := fs.String("table", "", "write the rank table (Markdown) to `file`; default: the --output path with .rank.md in place of its extension")
 	if code, stop := parse(fs, args); stop {
 		return code
 	}
@@ -126,6 +142,21 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return usageErr("--stage: %v", err)
 	}
+	var rankKeys []rankKey
+	if isSet(fs, "rank") {
+		if rankKeys, err = parseRankSpec(*rankFlag); err != nil {
+			return usageErr("--rank: %v", err)
+		}
+		if *rankScope != rankScopeGroup && *rankScope != rankScopeAll {
+			return usageErr("--rank-scope %q must be %s or %s", *rankScope, rankScopeGroup, rankScopeAll)
+		}
+	} else if isSet(fs, "rank-scope") || isSet(fs, "table") {
+		return usageErr("--rank-scope and --table need --rank")
+	}
+	table := *tablePath
+	if rankKeys != nil && table == "" {
+		table = strings.TrimSuffix(*output, filepath.Ext(*output)) + ".rank.md"
+	}
 	var aspects, presets []string
 	if isSet(fs, "aspect") {
 		if aspects, err = parseList(*aspectsFlag, maxSweepAspects); err != nil {
@@ -145,6 +176,16 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 	last, err := checkImplemented(cols, registry)
 	if err != nil {
 		return fail("%v", err)
+	}
+	if rankKeys != nil {
+		// Ranking needs the measures, whatever the columns.
+		mi, err := pipeline.Lookup(registry, "measures")
+		if err != nil {
+			return fail("%v", err)
+		}
+		if last, err = checkImplemented(append(slices.Clone(cols), sweepStage{index: mi}), registry); err != nil {
+			return fail("%v", err)
+		}
 	}
 
 	// Resolve the base config and every row's config before doing work.
@@ -166,12 +207,13 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 		presets = []string{base.Layout.Preset}
 	}
 	type sweepRow struct {
-		cfg  config.Config
-		hash string
+		cfg   config.Config
+		hash  string
+		block int // aspect and preset block, for --rank-scope group
 	}
 	var rows []sweepRow
-	for _, aspect := range aspects {
-		for _, preset := range presets {
+	for a, aspect := range aspects {
+		for p, preset := range presets {
 			for _, seed := range seeds {
 				cfg := base
 				cfg.Seed = config.Seed(seed)
@@ -186,7 +228,7 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 				if err != nil {
 					return fail("%v", err)
 				}
-				rows = append(rows, sweepRow{cfg, hash})
+				rows = append(rows, sweepRow{cfg, hash, a*len(presets) + p})
 			}
 		}
 	}
@@ -206,6 +248,8 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 			sheet.CaptionLines = 1 + len(measuresTileCaption(&world.Measures{}))
 		}
 	}
+	ranked := make([]rankItem, len(rows))
+	landMet := make([]bool, len(rows))
 	start := time.Now()
 	for n, row := range rows {
 		t0 := time.Now()
@@ -294,11 +338,47 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 		if ms := ctx.Products.Measures; ms != nil && !ms.Pass {
 			label[3] += " GATE"
 		}
+		if ms := ctx.Products.Measures; ms != nil && rankKeys != nil {
+			ranked[n] = rankItem{group: row.block, pass: ms.Pass}
+			if *rankScope == rankScopeAll {
+				ranked[n].group = 0
+			}
+			for _, k := range rankKeys {
+				v, _ := ms.Value(k.measure) // parseRankSpec checked the name
+				ranked[n].values = append(ranked[n].values, v)
+			}
+			landMet[n] = ms.Land.Met
+		}
 		for _, l := range label {
 			sheet.LabelChars = min(max(sheet.LabelChars, len(l)), maxLabelChars)
 		}
 		sheet.Rows = append(sheet.Rows, render.SheetRow{Label: label, TileHeight: tileH, Tiles: tiles})
 		fmt.Fprintf(stderr, "sweep: [%d/%d] seed %d %s %s: %.1fs\n", n+1, len(rows), uint64(row.cfg.Seed), w.Aspect, row.cfg.Layout.Preset, time.Since(t0).Seconds())
+	}
+
+	order := make([]int, len(rows)) // sheet row order
+	for n := range order {
+		order[n] = n
+	}
+	var rankRows []rankRow
+	if rankKeys != nil {
+		res := rankItems(ranked, rankKeys)
+		order = res.order
+		sheetRows := make([]render.SheetRow, len(rows))
+		sheet.LabelChars = 0
+		for n, i := range order {
+			r := sheet.Rows[i]
+			r.Label[0] = fmt.Sprintf("#%d %s", res.rank[i], r.Label[0])
+			r.Label = append(r.Label, fmt.Sprintf("score %.1f", res.score[i]))
+			for _, l := range r.Label {
+				sheet.LabelChars = min(max(sheet.LabelChars, len(l)), maxLabelChars)
+			}
+			sheetRows[n] = r
+			c := rows[i].cfg
+			rankRows = append(rankRows, rankRow{seed: uint64(c.Seed), aspect: c.World.Aspect, preset: c.Layout.Preset,
+				rank: res.rank[i], score: res.score[i], pass: ranked[i].pass, landMet: landMet[i], values: ranked[i].values})
+		}
+		sheet.Rows = sheetRows
 	}
 
 	img := sheet.Image()
@@ -307,7 +387,8 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 		seedText[k] = strconv.FormatUint(s, 10)
 	}
 	var rowText []string
-	for _, row := range rows {
+	for _, i := range order {
+		row := rows[i]
 		rowText = append(rowText, fmt.Sprintf("%d %s %s %s", uint64(row.cfg.Seed), row.cfg.World.Aspect, row.cfg.Layout.Preset, row.hash))
 	}
 	meta := render.Meta{
@@ -322,6 +403,9 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 			{Key: "mpg:rows", Value: strings.Join(rowText, "\n")},
 		},
 	}
+	if rankKeys != nil {
+		meta.Extra = append(meta.Extra, render.Text{Key: "mpg:rank", Value: rankSpecString(rankKeys) + " scope " + *rankScope})
+	}
 	if dir := filepath.Dir(*output); dir != "" {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return fail("%v", err)
@@ -330,6 +414,16 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 	if err := render.WritePNGFile(*output, img, meta); err != nil {
 		return fail("%v", err)
 	}
+	if rankKeys != nil {
+		if dir := filepath.Dir(table); dir != "" {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return fail("%v", err)
+			}
+		}
+		if err := os.WriteFile(table, []byte(rankTable(rankKeys, *rankScope, baseHash, rankRows)), 0o644); err != nil {
+			return fail("%v", err)
+		}
+	}
 	fmt.Fprintf(stdout, "sheet   %s (%d x %d px)\n", *output, img.Rect.Dx(), img.Rect.Dy())
 	fmt.Fprintf(stdout, "config  %s\n", baseHash)
 	fmt.Fprintf(stdout, "seeds   %d: %s\n", len(seeds), *seedsFlag)
@@ -337,6 +431,10 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "aspects %s\n", strings.Join(aspects, ", "))
 	fmt.Fprintf(stdout, "presets %s\n", strings.Join(presets, ", "))
 	fmt.Fprintf(stdout, "pixels  %s\n", render.PixelHash(img))
+	if rankKeys != nil {
+		fmt.Fprintf(stdout, "rank    %s (scope %s)\n", rankSpecString(rankKeys), *rankScope)
+		fmt.Fprintf(stdout, "table   %s\n", table)
+	}
 	fmt.Fprintf(stderr, "sweep: %d rows x %d stages in %.1fs\n", len(rows), len(cols), time.Since(start).Seconds())
 	return 0
 }

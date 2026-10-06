@@ -485,6 +485,15 @@ The tuning tool was wgvb's most valuable artifact, and it came too late. Here it
 - `mpg sweep --seeds 1-16 --stage elevation,cells,biomes --output sheet.png` builds a contact sheet: seeds × stages, each tile labeled with its key measures. Use it to compare presets and parameter changes side by side.
 - Each render records the config hash and stage, so an image always traces back to its inputs.
 - Renders never change data or hashes.
+- `mpg sweep --rank SPEC` ranks the rows by measures (S36). SPEC is `default` or a comma-separated list of `measure[:max|:min|:~X][*weight]`: higher, lower, or closest to X is better, and the weight defaults to 1.
+  - `default` is `usability.habitable_share*2, rivers.touch_share, chokepoints.straits_major, chokepoints.necks, usability.coast_within_share`.
+  - A ranking belongs to a sweep, not a world, so it is a flag and never part of `config.json`. Ranking runs every world through the measures stage.
+- **Score:** a row's score is 100 · Σ w·p / Σ w, where p is its mid-rank percentile on each key among the rows it is ranked against. Ties count half, and a lone row scores 50.
+  - By default, rows are ranked within their aspect × preset block (`--rank-scope group`), because most measures follow the preset; pooling ranks islands above pangaea. `--rank-scope all` pools every row.
+  - Rows with a failed gate rank last, and ties keep run order.
+- **Outputs:** the sheet reorders rows by rank within each block. Each label starts `#n seed s` and ends with `score …`, and the PNG records `mpg:rank` and the ranked `mpg:rows`.
+  - A Markdown table goes to `<output>.rank.md` (or `--table PATH`), with rank, seed, aspect, preset, score, pass, land met, and each key's raw value.
+- **Cost:** 20 default worlds take about 69 s; the ranking itself adds nothing measurable.
 
 ## Outputs
 
