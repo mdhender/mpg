@@ -46,12 +46,12 @@ func TestGoldenElevation(t *testing.T) {
 		preset string
 		want   string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "continents", "61248c1fe77b97bd4f450a529294ce64ca5c3b74bf7cff25d7fa26a7e4eabda9"},
-		{"seed42-square", 42, "square", "continents", "98562b81c506aa663dd8b91576ff59f91baefcaaedd47f06f1662ec7a8204124"},
-		{"seed7-cinematic", 7, "cinematic", "continents", "0cc989126b528d7092c501f259d0d8a735d71ba53447473dd55dd38fca9ad1e7"},
-		{"seed7-square", 7, "square", "continents", "283dbd7d3722f31c669b924e84ee64ba7f5f802a38d61512e23940beb706b004"},
-		{"seed7-cinematic-pangaea", 7, "cinematic", "pangaea", "374f6c3b6d662bc1cdc6dd543803e2db28658a0be1cf2d78138fcf3e2b052264"},
-		{"seed42-square-islands", 42, "square", "islands", "89acda0dcee0be6f82b0ad14290d3b3b8288ab805c8130ef32c3ebfe725f3404"},
+		{"seed42-cinematic", 42, "cinematic", "continents", "9ce30584c0b072ec2e0832ced59713ea25814be2784615f89d890d87ad6b368f"},
+		{"seed42-square", 42, "square", "continents", "795e2ca726d45bbf0738b8a46a01decb7b5fb9d300fb7fd862e9829aabd289c5"},
+		{"seed7-cinematic", 7, "cinematic", "continents", "9d69ea3580c324c4dcdeb07de5dae54bb9141144a7d132d6579ab29c40d2c43d"},
+		{"seed7-square", 7, "square", "continents", "098a3733d0b15447bd106a863d401c46114c9919e5febc714cfe7966c0af2c9f"},
+		{"seed7-cinematic-pangaea", 7, "cinematic", "pangaea", "ea024d5c49f17097be786f200ad8d3052c8ec3137513e42a786b09cd75f1eddc"},
+		{"seed42-square-islands", 42, "square", "islands", "b78a06d923173c49a0c808c36c187642619af83b8459f2ca932d7cbcb2eb0463"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -111,10 +111,10 @@ func TestGoldenMesh(t *testing.T) {
 		aspect string
 		want   string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "2ae47409c3c2fafca13a7f6afefd6ae0fea658a2ea6d52739e29ee81f3ef3a7d"},
-		{"seed42-square", 42, "square", "35e7daaf45ca12b9a8d8f063cea61bbc0c7750a911abf37827dc80ef6bc14f16"},
-		{"seed7-cinematic", 7, "cinematic", "ed072305e7adae034a92534cf181016b02040c7a1852f68b6e08230e08a672b7"},
-		{"seed7-portrait", 7, "portrait", "f02ca5ed53ed91c0a655704fc0f76281e43270a113bdf4664a93d081c79980e9"},
+		{"seed42-cinematic", 42, "cinematic", "7df631c5c3eb0e1dc68ca95b88b28c42cc886ad3c8044b270876d6a667efed2d"},
+		{"seed42-square", 42, "square", "77b4abe92f8d9d7fada50cca7978ad6dcab095893ca558c2856873f4a9a5f892"},
+		{"seed7-cinematic", 7, "cinematic", "9f970fcccb7747a00d99803454bee24248e0c8a704a8c7a99a71b58105659da3"},
+		{"seed7-portrait", 7, "portrait", "3af650358c8e2c12beb17e66b879a16b15c4d818e5a0c22b96aa4cb3acaeb7e6"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -167,10 +167,10 @@ func TestGoldenCells(t *testing.T) {
 		aspect string
 		want   string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "a300bb70eb521481bf6c1fc82680548232abe9e1274bf8fdbf518eaaa955de50"},
-		{"seed42-square", 42, "square", "0885239f2aff54b3272397083eccf8c98de69496e9352cca5e58271f9b7dacfe"},
-		{"seed7-cinematic", 7, "cinematic", "2f7134089a46caa272563b28b43adb06bef785531239b108fde315eed49d2a2a"},
-		{"seed7-portrait", 7, "portrait", "4365f3aa351a7573eacbc41b743cd4b6e7d4c3897216555c168799053fe549ea"},
+		{"seed42-cinematic", 42, "cinematic", "7386b9d0b20629091c1c2368bfa23597d0e904419b338392b6f44ef85a7f5e61"},
+		{"seed42-square", 42, "square", "0c345304abf1d9c10b362810915cae64819f74b31bab303165961b9c85af4e5f"},
+		{"seed7-cinematic", 7, "cinematic", "d09f80d9348626118e09bc1b06d71f319fc4bbb050a421d39206830f3af986f6"},
+		{"seed7-portrait", 7, "portrait", "d16068b4ff8180ecc24b683e4833f74bdf04e671663a79ad004a32518884953f"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -226,12 +226,12 @@ func TestGoldenSeaLevel(t *testing.T) {
 		preset string
 		want   string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "continents", "c739543aa2869e5ca304ca2a9eeed0756cc2b65dd871c038eb38600ed1b533e3"},
-		{"seed42-square", 42, "square", "continents", "816f5e23a78fd7cecf036fa37681d8303a2b1662009c7101306223ff6063baa7"},
-		{"seed7-cinematic", 7, "cinematic", "continents", "89dd4074267bb62e1fba1976ba7b9946478d41835a84f2ea11026e668a2d8f61"},
-		{"seed7-portrait", 7, "portrait", "continents", "ffbd7865264c14c8e559f9cd9f9396ce16085b878e9fa57fed723c591a601646"},
-		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "b3375ad80de4b8cb0d0d121e041e6a1e8ae8b905b1dee9b4c8837f6b02b290a8"},
-		{"seed6-cinematic-pangaea", 6, "cinematic", "pangaea", "65cffb0f35e21d16f7ff7d93759df84bfb9524edcbffa34afedfdd38fb8f979d"}, // gallops
+		{"seed42-cinematic", 42, "cinematic", "continents", "5a961aeb7ad34f2657c6c29447a46615ec21a69c5d655e95dda3ae06c8de5f5b"},
+		{"seed42-square", 42, "square", "continents", "4abea651a81e787f12b205f53be023c2825108b01fb65d6d48014f6d79a2a225"},
+		{"seed7-cinematic", 7, "cinematic", "continents", "345f5233948c727ff961d27db1a78ee84931cc0e63d8084def6834414a3f0ce4"},
+		{"seed7-portrait", 7, "portrait", "continents", "f7b80c388ae28b87ab550c9d02d3e0f8f4d9b647f8e1f719b74b4a3662a6f086"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "9ef4dbb079b6149650ade7ffc767b0b0b7c81a48b6955f3c5d0c26ac43f878f8"},
+		{"seed6-cinematic-pangaea", 6, "cinematic", "pangaea", "289e6d2e4ee744cc42acb89924f8d14cd22ccff968b19f5ba0e4c486bcf3a3e9"}, // gallops
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -288,10 +288,10 @@ func TestGoldenClimate(t *testing.T) {
 		preset string
 		want   string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "continents", "3c9e9cbc55b80335c448af7d76cada8475b45a15b6c2fd59d907bd17fa28a9e7"},
-		{"seed7-square", 7, "square", "continents", "546172311694709b7240bdd28d4fa86d7cd76e5491ccde435c00f1dc35d6ef05"},
-		{"seed7-portrait", 7, "portrait", "continents", "225e404c728b40481eadb79f7e41312e1175813cea8f7170a67f917abf5102eb"},
-		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "0bd0a51b9adca32374d31f61090e4d4dc3ce1cef5092c7de9bd9bf4959a2e22a"},
+		{"seed42-cinematic", 42, "cinematic", "continents", "9e419b62bcc005cfe022eba8729870fe3930cac41f1715ea59723771c573e371"},
+		{"seed7-square", 7, "square", "continents", "4197456cb2c2504d9af9e22b9add7b58510053913824512ab8bec3db11d64212"},
+		{"seed7-portrait", 7, "portrait", "continents", "b6d20824d0a16f964f692fc84fa420e31eb5b9f0a0444752b1a5ba6092ee7137"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "8dc5b5a31237b54eaa0ff3517cd8c497ff0fb53b44336683a6ca445d8229367a"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -347,11 +347,11 @@ func TestGoldenBasins(t *testing.T) {
 		preset string
 		want   string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "continents", "83421494345ab9b8a39f33f270b6a9a48a1a89f177533354902c4f8fc7b91e70"},
-		{"seed42-square", 42, "square", "continents", "c415c1ded5f94bf3e1faac1412c2de4f7de8a869a2a98932f3bcf121820f3460"},
-		{"seed7-portrait", 7, "portrait", "continents", "8f1448efab3de626e208868ba1eb5cba29b661e33a56738b548e1d9728b655d7"},
-		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "1474555b5e181ad9b86eccb7ca6e6655756c5d348ad35274fc453ea49e3c6ece"},
-		{"seed7-cinematic-pangaea", 7, "cinematic", "pangaea", "9ca70c4f948102b72836d4c859aa344e2c8ad2a6ab6e6bd2931643e96af9d546"},
+		{"seed42-cinematic", 42, "cinematic", "continents", "eba5227f369ed7c5cbf0640251a95036ae9f6ff73553e4ad9e37884ce48e5742"},
+		{"seed42-square", 42, "square", "continents", "849757e0eccfb84aa38a023e3f979e0b8e967d299e0001df54666a551b339485"},
+		{"seed7-portrait", 7, "portrait", "continents", "e10da04a34e832018f1dd86c3052c2824bafa9d2ed9387ec51e4c4a769f2a4ac"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "c5efaa9266032c5e3122e2c9d3e8b02a165ac1238aa1ae14fbb993b91b2792d3"},
+		{"seed7-cinematic-pangaea", 7, "cinematic", "pangaea", "9f8b4826ba6aec9038122c663e4d4667dc0c908fc67cd7c42496b805ea3a292f"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -408,11 +408,11 @@ func TestGoldenLakes(t *testing.T) {
 		preset string
 		want   string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "continents", "da5af4a79ab5d98eea4ece9a5854066f51ef43d058363bbfd0d91b8c297c0067"},
-		{"seed42-square", 42, "square", "continents", "6cfa0fd1c050bf6ee4050bcc0e50642b2120ece07d7611acbd54001e1c43d90d"},
-		{"seed7-portrait", 7, "portrait", "continents", "d8ca54fa68d11130253b9cd58679f2e68538bf4edbb842fcd1682510f6f82b84"},
-		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "2e4d8496d77851d72e498e1f9abc4c0181a40584c53ed67273e0675a9fde8707"},
-		{"seed7-cinematic-pangaea", 7, "cinematic", "pangaea", "1f46065b52b6e2c84c86cda3798dfff239859cc46d3ca98c1d43000b5fc061ae"},
+		{"seed42-cinematic", 42, "cinematic", "continents", "85b9da748a322d795eff00415edd2cb3776d34e756d1884906d6f653c5df678e"},
+		{"seed42-square", 42, "square", "continents", "9e0f364945a93ab1578bcfc83127925258e6951d15f9a43fc0e9e0a0f75a7365"},
+		{"seed7-portrait", 7, "portrait", "continents", "48f4b4ffd5e2a82038368fdf455541432324f4c7a7e71e30a4acaec23602d16c"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "925379fee221bb8f352af5b98d0e37a16a26b874b45a4dd9f4a1ca703c1f91ae"},
+		{"seed7-cinematic-pangaea", 7, "cinematic", "pangaea", "13061872070b56109aff4758ada5f5f786d14cabb18523564e6c235aa223dddb"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -470,10 +470,10 @@ func TestGoldenLandTarget(t *testing.T) {
 		preset string
 		want   string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "continents", "61b53f9781a46182c812f65c43e1a8e75f2a24632d393f8fa4c145e1257830d5"},
-		{"seed7-square", 7, "square", "continents", "3927dac037901da5481b43b88e94f4d536b625349bbe2d42ad75d89daa61a4de"},
-		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "fd90db6b356ccb1a8f593f0056acc2d2825dab7ee8ef7c81791b5cfe719b2370"},
-		{"seed7-cinematic-pangaea", 7, "cinematic", "pangaea", "f154e909216115af8f8cfb061e12df23f5192937213e94ece577478be9450751"},
+		{"seed42-cinematic", 42, "cinematic", "continents", "fc69c3ea43e6b9b9ea0125aade8e60c50ea91a0a41826c30f39459d5f41aac6b"},
+		{"seed7-square", 7, "square", "continents", "9939454c430061e847b1c67c4b2c6c7ea811f6844062a409ea5ce96f2f3442dd"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "b4a069774d9a584a01d0e54d7c31ec63ca443749f3115af0cca45fefde197187"},
+		{"seed7-cinematic-pangaea", 7, "cinematic", "pangaea", "e9fa4047d6403bd5f151725849a984e7a0fdb2dcde08c998d1639243350d7798"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -536,11 +536,11 @@ func TestGoldenRivers(t *testing.T) {
 		preset string
 		want   string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "continents", "1249f2bda1e09b84d3e3e316b86d056f14c9cd4fbf98378d398b852f45840b43"},
-		{"seed42-square", 42, "square", "continents", "b3539d853e8dbd8efb62e47cb0a9964b70cc09511f3076e6e7cb4e7a0f80039a"},
-		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "f888e2363af55c5574eff741ea18bdb4c60b0403b8f2e2df353124d3f8488613"},
-		{"seed7-cinematic-pangaea", 7, "cinematic", "pangaea", "07061fb9fe0d6d458381364de4e72ac2ed4757e34d108375ba31cb630e2b36cb"},
-		{"seed8-square-pangaea", 8, "square", "pangaea", "1728c19086239a51ddc7465919a416d564858573fed9deb8714b986abc7efbc9"},
+		{"seed42-cinematic", 42, "cinematic", "continents", "28a9f8270aceb4624cb45ed94a87163ae17174dbb88bbbaf961cdcb735cdb10f"},
+		{"seed42-square", 42, "square", "continents", "7f038eff3752411c97107ef1afaaa5d676576bfa9535513c0b3965c252aeecd1"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "37a5a7da73620e7d776f3afcd407123a3ee7339b087293bf0930d6a98272edf8"},
+		{"seed7-cinematic-pangaea", 7, "cinematic", "pangaea", "fb6676e83a12ae0590ec6ffa08aabbd1c313150aa0850f43839ea9f507a04cff"},
+		{"seed8-square-pangaea", 8, "square", "pangaea", "4263d756c65f2ff498fc31684198ce006e4e55d26b5b2520ebf4454d9e164ecb"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -600,11 +600,11 @@ func TestGoldenClassify(t *testing.T) {
 		preset string
 		want   string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "continents", "fe4c0323f124c53fbb2faeb3665aa8d8ce8efd09e68846113e9bfdae90a6ee72"},
-		{"seed42-square", 42, "square", "continents", "8ce2a666960ec6295df18517aee58e94a900488d8ee62e32610dd17e59789651"},
-		{"seed7-cinematic", 7, "cinematic", "continents", "939ece078e69449c4f6681580477214c94aceb293788d367226e4d1f640056cb"},
-		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "ae949361a72761490ab05986fbba7c58a2f20473804d57365a6510e5e055c582"},
-		{"seed7-cinematic-pangaea", 7, "cinematic", "pangaea", "f3cbdc5b021742da318c33edcae8295b554a503fcfe43c791aca7c4ca63aafca"}, // volcanic highlands
+		{"seed42-cinematic", 42, "cinematic", "continents", "fead5c6b7b4bede51b917892b85b64d8516d8068bc8a82f2ca11dc7a95960014"},
+		{"seed42-square", 42, "square", "continents", "cf952781ea6b5c012faf06055abb3c5e6c646798f44a8766e9d86b9bd140b59a"},
+		{"seed7-cinematic", 7, "cinematic", "continents", "a47fc767eaf73d132886ba6ca149cf1aea609938def8f71104a208129f48bb3e"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "bd082273b0eb269a5c95844c7619ffd5f153469322f64c4320f44e63c8ea36c8"},
+		{"seed7-cinematic-pangaea", 7, "cinematic", "pangaea", "a9177f116737627f1c47b4e08df47f7fd307e93bf9c1348869d644676060f27d"}, // volcanic highlands
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -660,10 +660,10 @@ func TestGoldenEdges(t *testing.T) {
 		preset string
 		want   string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "continents", "fdc55c131378be1c399dd5e1a1c3d952f620ad0a71cfc004af3967598c463d5e"},
-		{"seed42-square", 42, "square", "continents", "9fbc736e8ac011979fa6cff0c1d5b6aa725f8dfd1bbe0b041b3d857e8597d033"},
-		{"seed7-cinematic", 7, "cinematic", "continents", "84f06992d319b5536d834ea9583206fa95a796f1c0a2fc0e07ecf382a2cb65af"},
-		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "a57b6bd5c758df7599b80a9df99027f697527d93e61fd1961b286664ab04f3f8"},
+		{"seed42-cinematic", 42, "cinematic", "continents", "427a33092d80e91d3f716c0d20d150c6e27334f6359211a9b39afe0071fbb2b4"},
+		{"seed42-square", 42, "square", "continents", "f5eba9a0dd4c8278cc3f80eb3a22d8e8fbdbdce67b340ac0cf4bac1d3a15a60d"},
+		{"seed7-cinematic", 7, "cinematic", "continents", "303cdcf1b1e708d13345375e2912a1a61c26af60405729952c84a8dec8dacf8f"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "37bac3359c7c6329514c61b853f21b147096285b773bd5917325179dbc89faba"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -722,9 +722,9 @@ func TestGoldenWorld(t *testing.T) {
 		player   string
 		measures string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "continents", "ee64ad427bb369b021d6fb90ab8d36a418e63a5a336352938a7ba7dbc83a4dfe", "99833872989f373640030207a900e39fbef19b723f50e2468705faec70b6d061", "a5d20ea7987a5b256dde4629b565d6ed29dc3f633e01ee1f548edd525d50b52e"},
-		{"seed7-square", 7, "square", "continents", "1b6e46159b03ed340e49569954bf97e74995f233938c541d141ae760a30f2824", "630589edcf069e4e2e23548e7cfdccb35899764ea745592937ff5e81069a0e02", "2f16625270efd99cc8b0198a8abbdc0381f5bec496327eb89f25eda080fcafa1"},
-		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "811a7a313b30607e03df3231be7b48c9d563f8baec150f543f4b965532f30ac1", "d214bf8ef7dd5c0605d2c7956754bf7f2b4df4040e5beb8bf4620ce7fe83598f", "6dfd4c4cfd5c67412924ef0e40c188056f4d6f80401ce43eca1b212a6a154808"},
+		{"seed42-cinematic", 42, "cinematic", "continents", "3c00c78e2f4db97f0fa5b26790911517f10aa6f00ca5fd5ea6848ec41ca6c975", "99833872989f373640030207a900e39fbef19b723f50e2468705faec70b6d061", "4d6c5c79833075874438eaecc81dc538bef6c5dd8b6031b183164b612c93b43b"},
+		{"seed7-square", 7, "square", "continents", "8c26f2cee4781ab13ef3a10134f4912cd300004b40fce68d346343d200882102", "630589edcf069e4e2e23548e7cfdccb35899764ea745592937ff5e81069a0e02", "afc5c1231dc2975e9e666b49d09910568678c5bd2dcc8cd9a08abeca019d01b4"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "b97271b95c1a6cf7451809602a14c27b45bcdc8b40695130f8e5999384c2789e", "d214bf8ef7dd5c0605d2c7956754bf7f2b4df4040e5beb8bf4620ce7fe83598f", "8d110eb7cbcd57b75fd53b219b6537cffdd1648f2b6a8199e79ba8a803da66da"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

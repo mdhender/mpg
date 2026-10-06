@@ -10,6 +10,7 @@ import (
 
 	"github.com/mdhender/mpg/internal/basin"
 	"github.com/mdhender/mpg/internal/cells"
+	"github.com/mdhender/mpg/internal/classify"
 	"github.com/mdhender/mpg/internal/config"
 	"github.com/mdhender/mpg/internal/edges"
 	"github.com/mdhender/mpg/internal/fmath"
@@ -39,16 +40,30 @@ type Input struct {
 	// Edges is the edge data and EdgeStats its statistics (edges.Summarize).
 	Edges     *edges.Data
 	EdgeStats *edges.Stats
+	// Landform is each cell's landform (classification); the mountain
+	// cells make the chains that passes cross.
+	Landform []classify.Landform
 }
 
 // Compute measures the world described by in and runs the configured checks
 // (in.Config.Measures.Checks) against the measures.
 func Compute(in Input) (*world.Measures, error) {
+	m, _, err := Analyze(in)
+	return m, err
+}
+
+// Analyze is Compute, also returning the Map that the landmass and
+// chokepoint render draws.
+func Analyze(in Input) (*world.Measures, *Map, error) {
 	if in.Mesh == nil || in.Search == nil || in.Lakes == nil || in.Edges == nil || in.EdgeStats == nil {
-		return nil, errors.New("measure: missing stage products")
+		return nil, nil, errors.New("measure: missing stage products")
 	}
 	if len(in.Land) != len(in.Mesh.Cells) {
-		return nil, errors.New("measure: land mask does not match the mesh")
+		return nil, nil, errors.New("measure: land mask does not match the mesh")
+	}
+	g, err := newGraph(in)
+	if err != nil {
+		return nil, nil, err
 	}
 	m := &world.Measures{
 		Schema:     world.MeasuresSchemaVersion,
@@ -61,10 +76,27 @@ func Compute(in Input) (*world.Measures, error) {
 	m.Directions = directions(in.EdgeStats)
 	m.Grades = grades(in)
 	m.Water = water(in)
+	lm := findLandmasses(g)
+	m.Landmasses = landmassMeasures(lm, m.Land.Cells, in.Config.Measures.Landmass)
+	var cm chokeMap
+	m.Chokepoints, cm = chokepointMeasures(g, lm, in.Config.Measures)
 	if err := Evaluate(m, in.Config.Measures.Checks); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return m, nil
+	inland := make([]bool, len(in.Mesh.Cells))
+	for i, k := range in.Lakes.Lake {
+		inland[i] = k != basin.None
+	}
+	return m, &Map{g: g, lm: lm, cm: cm, inland: inland, rim: rimMask(in), class: in.Config.Measures.Landmass}, nil
+}
+
+// rimMask marks the rim cells of in's mesh.
+func rimMask(in Input) []bool {
+	rim := make([]bool, len(in.Mesh.Cells))
+	for i, c := range in.Mesh.Cells {
+		rim[i] = c.Rim
+	}
+	return rim
 }
 
 // land measures the land contract.

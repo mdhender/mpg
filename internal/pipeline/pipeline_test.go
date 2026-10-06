@@ -857,6 +857,87 @@ func TestEdgesStage(t *testing.T) {
 	}
 }
 
+// TestMeasuresStage checks the measures stage: its report equals
+// measure.Compute's, its log has the landmass and chokepoint lines, and
+// its render, the landmass and chokepoint map, is written at the cell
+// renders' size with the stage's provenance and shows its colors.
+func TestMeasuresStage(t *testing.T) {
+	c := newTestContext(t, true)
+	var log bytes.Buffer
+	c.Log = &log
+	last, err := Lookup(Stages(), "measures")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Run(c, Stages(), last); err != nil {
+		t.Fatal(err)
+	}
+	p := c.Products
+	want, err := measure.Compute(measure.Input{Config: c.Config, ConfigHash: c.ConfigHash, Mesh: p.Mesh, Search: p.Target.Search, Land: p.Target.Land,
+		LandAreaKm2: p.Target.LandAreaKm2, OceanCells: p.Target.OceanCells, Lakes: p.Target.Lakes, Edges: p.Edges, EdgeStats: p.EdgeStats, Landform: p.Classes.Landform})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := p.Measures.Bytes()
+	b, _ := want.Bytes()
+	if !bytes.Equal(a, b) {
+		t.Error("stage report differs from measure.Compute")
+	}
+	for _, s := range []string{"measures: landmass ", "measures: choke    k 3: "} {
+		if !strings.Contains(log.String(), s) {
+			t.Errorf("log lacks %q:\n%s", s, log.String())
+		}
+	}
+	decode := func(name string) (image.Image, render.Meta) {
+		t.Helper()
+		f, err := os.ReadFile(filepath.Join(c.RendersDir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		meta, err := render.ReadMeta(bytes.NewReader(f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		img, err := png.Decode(bytes.NewReader(f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return img, meta
+	}
+	img, meta := decode("13-measures.png")
+	if meta.Stage != "13-measures" || meta.ConfigHash != c.ConfigHash {
+		t.Errorf("meta %+v", meta)
+	}
+	if ref, _ := decode("12-edges.png"); img.Bounds() != ref.Bounds() {
+		t.Errorf("render %v, want the cell renders' %v", img.Bounds(), ref.Bounds())
+	}
+	seen := map[[3]uint32]bool{}
+	bd := img.Bounds()
+	for y := bd.Min.Y; y < bd.Max.Y; y++ {
+		for x := bd.Min.X; x < bd.Max.X; x++ {
+			r, g, b, _ := img.At(x, y).RGBA()
+			seen[[3]uint32{r >> 8, g >> 8, b >> 8}] = true
+		}
+	}
+	has := func(c [3]uint8) bool { return seen[[3]uint32{uint32(c[0]), uint32(c[1]), uint32(c[2])}] }
+	rgb := func(c interface{ RGBA() (r, g, b, a uint32) }) [3]uint8 {
+		r, g, b, _ := c.RGBA()
+		return [3]uint8{uint8(r >> 8), uint8(g >> 8), uint8(b >> 8)}
+	}
+	if !has(rgb(measure.OceanColor)) || !has(rgb(mesh.IceColor)) {
+		t.Error("render lacks the ocean or the ice")
+	}
+	if p.Measures.Chokepoints.StraitsBetween > 0 && !has(rgb(measure.StraitInk)) {
+		t.Error("render lacks the straits")
+	}
+	if p.Measures.Chokepoints.Necks > 0 && !has(rgb(measure.NeckInk)) {
+		t.Error("render lacks the necks")
+	}
+	if p.Measures.Chokepoints.Passes > 0 && !has(rgb(measure.PassInk)) {
+		t.Error("render lacks the passes")
+	}
+}
+
 func TestSeaLevelMeetsTarget(t *testing.T) {
 	type row struct {
 		aspect, preset string

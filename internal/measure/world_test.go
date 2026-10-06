@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"testing"
 
@@ -103,6 +104,35 @@ func TestWorldMeasures(t *testing.T) {
 		if w.OceanCells != tg.OceanCells || w.LakeCells+w.InlandSeaCells != tg.LakeCells || w.Lakes != lakes || w.InlandSeas != seas ||
 			w.CoastEdges != es.Coast || w.LandRimEdges != es.LandRim {
 			t.Errorf("seed %d: water %+v", tc.seed, w)
+		}
+		lm := m.Landmasses
+		cells := 0
+		for _, x := range lm.List {
+			cells += x.Cells
+		}
+		if lm.Count != len(lm.List) || lm.Continents+lm.Islands+lm.Islets != lm.Count || sum(lm.Sizes) != lm.Count || cells != tg.LandCells ||
+			lm.LargestShare <= 0 || lm.LargestShare > 1 {
+			t.Errorf("seed %d: landmasses %+v", tc.seed, lm)
+		}
+		cp := m.Chokepoints
+		if cp.Straits != len(cp.StraitList) || cp.StraitsBetween+cp.StraitsWithin != cp.Straits || cp.StraitsMajor > cp.Straits ||
+			sum(cp.StraitWidths) != cp.Straits || cp.Necks != len(cp.NeckList) || sum(cp.NeckWidths) != cp.Necks ||
+			cp.Passes != len(cp.PassList) || cp.ChainsWithPass > cp.Chains {
+			t.Errorf("seed %d: chokepoints %+v", tc.seed, cp)
+		}
+		for _, x := range cp.StraitList {
+			for _, c := range x.Cells {
+				if tg.Land[c] || p.Mesh.Cells[c].Rim {
+					t.Errorf("seed %d: strait cell %d is not playable water", tc.seed, c)
+				}
+			}
+		}
+		for _, x := range slices.Concat(cp.NeckList, cp.PassList) {
+			for _, c := range x.Cells {
+				if !tg.Land[c] {
+					t.Errorf("seed %d: neck or pass cell %d is not land", tc.seed, c)
+				}
+			}
 		}
 		if tg.LandCells+tg.OceanCells+tg.LakeCells != es.Playable {
 			t.Errorf("seed %d: land, ocean and lakes do not cover the playable cells", tc.seed)

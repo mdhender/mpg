@@ -442,6 +442,16 @@ How it is built (S33):
 - **Defaults:** 14 report-only checks, with bounds from 44 measured worlds: land within ±1% of N and 2% of N·A, land area CV ≤ 0.13, edge p5 ≥ 3 km, ≤ 30 degree-cap collapses, direction error mean ≤ 12°, p95 ≤ 23° and max ≤ 45°, reverse not opposite ≤ 1%, steepest land grade ≤ 50% with none at the cap, and no land–rim edges.
 - **Failures:** a failed report check is listed and logged. A failed gate still writes every output, `world.json` included, and then `mpg generate` exits 3 (1 is a config or stage error, 2 a usage error). Sweeps never stop on a gate: the row label ends in GATE, and a `measures` column shows the check counts.
 
+How it is built (S34):
+- **Landmasses** are connected sets of land cells (land after lakes, joined through shared edges; lakes and inland seas are water), with ids by lowest cell. Classes come from `measures.landmass`: islet ≤ 9 cells, continent ≥ 1000, island between. On 24 measured worlds, stray fragments have 1–58 cells and the masses a preset intends have ≥ 100.
+- **Chokepoints** are counted in cells with one shared k = `measures.chokepoints.max_cells` (default 3), adapted from wgvc's `seas.go`:
+  - A **strait** is the water on crossings of at most k playable water cells (ocean, lakes, inland seas; never the rim) joining two landmasses, or two shores of one landmass that no land path of at most `detour_cells` (20) steps joins (wgvc had only the first kind). Crossings group by landmass pair and water adjacency, one strait each. A major strait has no islet shore.
+  - A **neck** is a cut of at most k land cells leaving two regions of at least `neck_min_region_cells` (10) each. Width 1 comes from articulation points; wider cuts are paths whose end cells touch water, kept only when no smaller subset is a cut. Touching cuts merge into one neck.
+  - A **mountain chain** is at least `measures.passes.chain_min_cells` (10) connected mountain cells. A **pass** (new; wgvc has none) is a route through at most 3 chain cells, with every edge |grade| ≤ 3%, between land off every chain that no land path of at most 20 steps avoiding the chain joins. Route cells group per chain by adjacency. Our mountains are compact blobs with gentle grades (median 4%), so grade alone barely separates passes.
+- **measures.json** gains `landmasses` (counts by class, size histogram, largest share, a per-landmass list) and `chokepoints` (counts, width histograms, and strait, neck and pass lists with width, landmass ids and cells). world.json is unchanged, and there are no new default checks.
+- **Render:** stage 13 draws the landmass and chokepoint map, with landmasses by class, chains darkened, and straits (red; green within one landmass), necks (magenta) and passes (orange) marked. The sweep measures tile is captioned `LM n (c/i/.) str all/major neck n pass n`, plus the check counts.
+- **Measured** on 24 default worlds: 0–14 major straits, 0–13 necks and 5–46 passes. The stage costs 47–112 ms per world.
+
 These are **measurements, not placements**. Starting positions, settlements, resources, and balance are game rules, as in wgvc.
 
 ## Tuning: early and often

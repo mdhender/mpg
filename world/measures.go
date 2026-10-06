@@ -14,9 +14,8 @@ import (
 
 // MeasuresSchemaVersion is the version of measures.json's layout that this
 // package reads and writes. It is versioned apart from world.json: the
-// measures grow through milestone 9 (landmasses and chokepoints, features,
-// rivers and usability join the groups below) without touching the game
-// data.
+// measures grow through milestone 9 (features, rivers and usability join
+// the groups below) without touching the game data.
 const MeasuresSchemaVersion = 0
 
 // MeasuresFile is the name of the playability report in a world's output
@@ -27,11 +26,12 @@ const MeasuresFile = "measures.json"
 // "Playability measures"): what the run measured, and the configured
 // checks against it. It never changes the world; it describes it.
 //
-// Each group (Land, Mesh, ...) holds scalars and histograms. A scalar is
+// Each group (Land, Mesh, ...) holds scalars and histograms, and the
+// landmass and chokepoint groups lists as well. A scalar is
 // named by its JSON path, "group.field" (as "directions.error_p95_deg");
 // MeasureNames lists them and Measures.Value reads one. Checks in
 // config.json and seed ranking refer to measures by these names. Booleans
-// read as 0 or 1; histograms have no name. Every measure is defined for
+// read as 0 or 1; histograms and lists have no name. Every measure is defined for
 // every world: a ratio whose denominator is 0 is 0, and a count of 0 is a
 // valid outcome (possible, not forced).
 type Measures struct {
@@ -52,11 +52,13 @@ type Measures struct {
 	// measured value and its verdict.
 	Checks []CheckResult `json:"checks"`
 
-	Land       LandMeasures      `json:"land"`
-	Mesh       MeshMeasures      `json:"mesh"`
-	Directions DirectionMeasures `json:"directions"`
-	Grades     GradeMeasures     `json:"grades"`
-	Water      WaterMeasures     `json:"water"`
+	Land        LandMeasures       `json:"land"`
+	Mesh        MeshMeasures       `json:"mesh"`
+	Directions  DirectionMeasures  `json:"directions"`
+	Grades      GradeMeasures      `json:"grades"`
+	Water       WaterMeasures      `json:"water"`
+	Landmasses  LandmassMeasures   `json:"landmasses"`
+	Chokepoints ChokepointMeasures `json:"chokepoints"`
 }
 
 // CheckResult is one configured check and its outcome.
@@ -189,6 +191,120 @@ type WaterMeasures struct {
 	CoastEdges            int     `json:"coast_edges"`
 	CoastEdgesPerLandCell float64 `json:"coast_edges_per_land_cell"`
 	LandRimEdges          int     `json:"land_rim_edges"`
+}
+
+// Landmass classes, by cell count (config measures.landmass): an islet has
+// at most islet_max_cells cells, a continent at least continent_min_cells,
+// and an island lies between.
+const (
+	ClassContinent = "continent"
+	ClassIsland    = "island"
+	ClassIslet     = "islet"
+)
+
+// LandmassSizeBuckets names the buckets of LandmassMeasures.Sizes: landmass
+// sizes in cells, "2-4" counting landmasses of 2 to 4 cells, and so on.
+var LandmassSizeBuckets = []string{"1", "2-4", "5-9", "10-19", "20-49", "50-99", "100-199", "200-499", "500-999", "1000-1999", "2000-4999", "5000+"}
+
+// LandmassMeasures measures the landmasses: the connected sets of land
+// cells (land after lakes), joined through shared edges. A landmass's id is
+// its rank by lowest cell id, so landmass 0 holds the land cell with the
+// lowest id.
+type LandmassMeasures struct {
+	// Count counts the landmasses, and Continents, Islands and Islets them
+	// by class.
+	Count      int `json:"count"`
+	Continents int `json:"continents"`
+	Islands    int `json:"islands"`
+	Islets     int `json:"islets"`
+	// LargestCells is the largest landmass's cells, and LargestShare that
+	// over the land cells (0 when there is no land).
+	LargestCells int     `json:"largest_cells"`
+	LargestShare float64 `json:"largest_share"`
+	// IsletMaxCells and ContinentMinCells are the class thresholds
+	// configured (measures.landmass), recorded for readers.
+	IsletMaxCells     int `json:"islet_max_cells"`
+	ContinentMinCells int `json:"continent_min_cells"`
+	// SizeBuckets names the buckets (LandmassSizeBuckets), and Sizes
+	// counts the landmasses in each.
+	SizeBuckets []string `json:"size_buckets"`
+	Sizes       []int    `json:"sizes"`
+	// List lists the landmasses by id.
+	List []Landmass `json:"list"`
+}
+
+// Landmass is one landmass: its cell count, its class, and its lowest cell
+// id.
+type Landmass struct {
+	Cells     int    `json:"cells"`
+	Class     string `json:"class"`
+	FirstCell int    `json:"first_cell"`
+}
+
+// ChokepointMeasures measures the chokepoints, in cells (config
+// measures.chokepoints and measures.passes):
+//
+//   - a strait is a water crossing of at most MaxCells playable water cells
+//     (ocean, lake or inland sea; never the rim) between two landmasses, or
+//     between two shores of one landmass that no land path of at most
+//     detour_cells steps joins; the water cells on such crossings, grouped
+//     by landmass pair and by water adjacency, make one strait each;
+//   - a neck is a land isthmus: a cut of at most MaxCells land cells whose
+//     removal splits its landmass into two regions of at least
+//     neck_min_region_cells cells each (a cut of 2 or more cells is a path
+//     whose end cells touch water); touching cuts make one neck;
+//   - a mountain chain is a connected set of at least chain_min_cells
+//     mountain cells, and a pass a route through at most passes.max_cells
+//     of its cells, every edge at most max_grade_percent steep, joining
+//     land off the chain on two sides that no land path of at most
+//     passes.detour_cells steps avoiding the chain joins; the chain cells
+//     on such routes, grouped by adjacency, make one pass each.
+type ChokepointMeasures struct {
+	// MaxCells is k, the widest strait and neck (configured).
+	MaxCells int `json:"max_cells"`
+	// Straits counts the straits: StraitsBetween those between two
+	// landmasses and StraitsWithin those within one; StraitsMajor those
+	// with no islet shore. StraitCells counts the water cells in straits.
+	Straits        int `json:"straits"`
+	StraitsBetween int `json:"straits_between"`
+	StraitsWithin  int `json:"straits_within"`
+	StraitsMajor   int `json:"straits_major"`
+	StraitCells    int `json:"strait_cells"`
+	// Necks counts the necks and NeckCells their cells.
+	Necks     int `json:"necks"`
+	NeckCells int `json:"neck_cells"`
+	// Chains counts the mountain chains and ChainCells their cells;
+	// Passes counts the passes, PassCells their cells, and ChainsWithPass
+	// the chains with at least one.
+	Chains         int `json:"chains"`
+	ChainCells     int `json:"chain_cells"`
+	Passes         int `json:"passes"`
+	PassCells      int `json:"pass_cells"`
+	ChainsWithPass int `json:"chains_with_pass"`
+	// StraitWidths[w−1] and NeckWidths[w−1] count the straits and necks
+	// of width w, 1 to MaxCells.
+	StraitWidths []int `json:"strait_widths"`
+	NeckWidths   []int `json:"neck_widths"`
+	// StraitList, NeckList and PassList list the chokepoints, ordered by
+	// landmass ids and then lowest cell id.
+	StraitList []Chokepoint `json:"strait_list"`
+	NeckList   []Chokepoint `json:"neck_list"`
+	PassList   []Chokepoint `json:"pass_list"`
+}
+
+// Chokepoint is one strait, neck or pass.
+type Chokepoint struct {
+	// Width is the narrowest crossing in cells: the fewest water cells
+	// joining the two shores of a strait, the fewest cells in a cut of a
+	// neck, the fewest chain cells on a pass's route.
+	Width int `json:"width"`
+	// Landmasses holds the ids of the landmasses joined: two (ascending)
+	// for a strait between landmasses, one for a strait within a
+	// landmass, a neck, or a pass (its chain's landmass).
+	Landmasses []int `json:"landmasses"`
+	// Cells lists the chokepoint's cells, ascending: a strait's water
+	// cells, a neck's land cells, a pass's chain cells.
+	Cells []int `json:"cells"`
 }
 
 // Bytes returns the canonical encoding of m: two-space indented JSON in the

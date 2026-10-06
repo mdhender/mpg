@@ -366,6 +366,21 @@
     "open_max_cells": 8
   },
   "measures": {
+    "landmass": {
+      "islet_max_cells": 9,
+      "continent_min_cells": 1000
+    },
+    "chokepoints": {
+      "max_cells": 3,
+      "detour_cells": 20,
+      "neck_min_region_cells": 10
+    },
+    "passes": {
+      "chain_min_cells": 10,
+      "max_cells": 3,
+      "max_grade_percent": 3,
+      "detour_cells": 20
+    },
     "checks": [
       {
         "measure": "land.deviation_percent",

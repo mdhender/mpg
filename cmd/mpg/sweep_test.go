@@ -88,8 +88,7 @@ func TestParseSweepStages(t *testing.T) {
 		t.Errorf("unknown-stage error %q does not list the stages", err)
 	}
 
-	// Every stage is implemented, measures (which has no render yet: its
-	// tile is blank, with a caption) included.
+	// Every stage is implemented, measures included.
 	for _, tc := range []struct {
 		in   string
 		last int
@@ -377,6 +376,15 @@ func TestMeasuresCaption(t *testing.T) {
 	m := &world.Measures{Checks: make([]world.CheckResult, 14), ReportsFailed: 2, GatesFailed: 1}
 	if got, want := measuresCaption(m), "ok 11/14 rpt 2 gate 1"; got != want {
 		t.Errorf("measuresCaption = %q, want %q", got, want)
+	}
+}
+
+func TestChokepointCaption(t *testing.T) {
+	m := &world.Measures{}
+	m.Landmasses = world.LandmassMeasures{Count: 28, Continents: 5, Islands: 7, Islets: 16}
+	m.Chokepoints = world.ChokepointMeasures{Straits: 19, StraitsMajor: 5, Necks: 5, Passes: 29}
+	if got, want := chokepointCaption(m), "LM 28 (5c/7i/16.) str 19/5 neck 5 pass 29"; got != want {
+		t.Errorf("chokepointCaption = %q, want %q", got, want)
 	}
 }
 

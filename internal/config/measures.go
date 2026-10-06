@@ -24,12 +24,71 @@ var CheckModes = []string{ModeReport, ModeGate}
 var CheckOps = []string{"<=", ">=", "<", ">", "=="}
 
 // Measures sets the playability measures (DESIGN.md, "Playability
-// measures"; pipeline stage 13): the checks run against them.
+// measures"; pipeline stage 13): the landmass classes, the chokepoint and
+// pass parameters, and the checks run against the measures.
 type Measures struct {
+	// Landmass sets the landmass classes.
+	Landmass Landmass `json:"landmass"`
+	// Chokepoints sets the straits and necks.
+	Chokepoints Chokepoints `json:"chokepoints"`
+	// Passes sets the mountain chains and passes.
+	Passes Passes `json:"passes"`
 	// Checks lists the checks, run in order. A file that sets the list
 	// replaces the default list as a whole; [] runs none.
 	Checks []Check `json:"checks"`
 }
+
+// Landmass sets the landmass classes by cell count: an islet has at most
+// IsletMaxCells cells, a continent at least ContinentMinCells, and an
+// island lies between. A province is a fixed area, so the thresholds are
+// absolute. S34 measured 24 default worlds: stray fragments have 1 to 58
+// cells, the masses a preset intends at least about 100 (islands 100 to
+// 1,100; archipelago 500 to 3,200; continents 1,500 to 4,600).
+type Landmass struct {
+	IsletMaxCells     int `json:"islet_max_cells"`
+	ContinentMinCells int `json:"continent_min_cells"`
+}
+
+// Chokepoints sets the straits and necks, in cells.
+type Chokepoints struct {
+	// MaxCells is k: a strait crosses at most k water cells, and a neck
+	// is a cut of at most k land cells (1 to MaxChokepointCells).
+	MaxCells int `json:"max_cells"`
+	// DetourCells is the land distance in cell steps beyond which two
+	// shores of one landmass count as its separate parts: a water
+	// crossing between shores that no land path of at most DetourCells
+	// steps joins is a strait.
+	DetourCells int `json:"detour_cells"`
+	// NeckMinRegionCells is the smallest region a neck may join: a cut is
+	// a neck only when the two largest regions it leaves each have at
+	// least this many cells.
+	NeckMinRegionCells int `json:"neck_min_region_cells"`
+}
+
+// Passes sets the mountain chains and passes.
+type Passes struct {
+	// ChainMinCells is the fewest mountain cells, connected, that make a
+	// chain.
+	ChainMinCells int `json:"chain_min_cells"`
+	// MaxCells is the most chain cells a pass's route may cross.
+	MaxCells int `json:"max_cells"`
+	// MaxGradePercent is the steepest |grade| allowed on any edge of a
+	// pass's route, in percent.
+	MaxGradePercent float64 `json:"max_grade_percent"`
+	// DetourCells is the land distance in cell steps, avoiding the chain,
+	// beyond which two cells beside it lie on its two sides.
+	DetourCells int `json:"detour_cells"`
+}
+
+// MaxChokepointCells bounds measures.chokepoints.max_cells: a neck's cut
+// is searched over every path of up to that many cells, which grows fast.
+const MaxChokepointCells = 4
+
+// MaxPassCells bounds measures.passes.max_cells.
+const MaxPassCells = 16
+
+// MaxDetourCells bounds the detour distances.
+const MaxDetourCells = 1000
 
 // Check compares one measure with a bound: it passes when the measured
 // value Op Value holds.
@@ -45,7 +104,9 @@ type Check struct {
 	Mode string `json:"mode"`
 }
 
-// DefaultMeasures returns the default checks. They are all report-only
+// DefaultMeasures returns the default landmass classes, chokepoint and
+// pass parameters (S34; see Landmass, Chokepoints and Passes), and the
+// default checks. They are all report-only
 // (DESIGN.md: "Checks begin as report-only"); their bounds come from S33's
 // measurements of 44 worlds (seeds 1–5 at square and cinematic with every
 // seeded preset, and a few portrait, widescreen and landscape worlds),
@@ -66,28 +127,59 @@ func DefaultMeasures() Measures {
 	r := func(measure, op string, value float64) Check {
 		return Check{Measure: measure, Op: op, Value: value, Mode: ModeReport}
 	}
-	return Measures{Checks: []Check{
-		r("land.deviation_percent", ">=", -1),
-		r("land.deviation_percent", "<=", 1),
-		r("land.area_per_target", ">=", 0.98),
-		r("land.area_per_target", "<=", 1.02),
-		r("mesh.land_cell_area_cv", "<=", 0.13),
-		r("mesh.edge_p5_km", ">=", 3),
-		r("mesh.degree_cap_hits", "<=", 30),
-		r("directions.error_mean_deg", "<=", 12),
-		r("directions.error_p95_deg", "<=", 23),
-		r("directions.error_max_deg", "<=", 45),
-		r("directions.not_opposite_share", "<=", 0.01),
-		r("grades.land_max_percent", "<=", 50),
-		r("grades.land_cap_edges", "<=", 0),
-		r("water.land_rim_edges", "<=", 0),
-	}}
+	return Measures{
+		Landmass:    Landmass{IsletMaxCells: 9, ContinentMinCells: 1000},
+		Chokepoints: Chokepoints{MaxCells: 3, DetourCells: 20, NeckMinRegionCells: 10},
+		Passes:      Passes{ChainMinCells: 10, MaxCells: 3, MaxGradePercent: 3, DetourCells: 20},
+		Checks: []Check{
+			r("land.deviation_percent", ">=", -1),
+			r("land.deviation_percent", "<=", 1),
+			r("land.area_per_target", ">=", 0.98),
+			r("land.area_per_target", "<=", 1.02),
+			r("mesh.land_cell_area_cv", "<=", 0.13),
+			r("mesh.edge_p5_km", ">=", 3),
+			r("mesh.degree_cap_hits", "<=", 30),
+			r("directions.error_mean_deg", "<=", 12),
+			r("directions.error_p95_deg", "<=", 23),
+			r("directions.error_max_deg", "<=", 45),
+			r("directions.not_opposite_share", "<=", 0.01),
+			r("grades.land_max_percent", "<=", 50),
+			r("grades.land_cap_edges", "<=", 0),
+			r("water.land_rim_edges", "<=", 0),
+		}}
 }
 
 // validate appends the problems with the checks through bad: every check
 // must name a measure (world.MeasureNames), use one of CheckOps and
 // CheckModes, and have a finite value.
 func (m *Measures) validate(bad func(format string, args ...any)) {
+	if v := m.Landmass.IsletMaxCells; v < 0 {
+		bad("measures.landmass.islet_max_cells %d must not be negative", v)
+	}
+	if v := m.Landmass.ContinentMinCells; v <= m.Landmass.IsletMaxCells+1 {
+		bad("measures.landmass.continent_min_cells %d must be greater than islet_max_cells + 1 (%d), so islands exist", v, m.Landmass.IsletMaxCells+1)
+	}
+	if v := m.Chokepoints.MaxCells; v < 1 || v > MaxChokepointCells {
+		bad("measures.chokepoints.max_cells %d must be in [1, %d]", v, MaxChokepointCells)
+	}
+	if v := m.Chokepoints.DetourCells; v < 1 || v > MaxDetourCells {
+		bad("measures.chokepoints.detour_cells %d must be in [1, %d]", v, MaxDetourCells)
+	}
+	if v := m.Chokepoints.NeckMinRegionCells; v < 1 {
+		bad("measures.chokepoints.neck_min_region_cells %d must be at least 1", v)
+	}
+	if v := m.Passes.ChainMinCells; v < 1 {
+		bad("measures.passes.chain_min_cells %d must be at least 1", v)
+	}
+	if v := m.Passes.MaxCells; v < 1 || v > MaxPassCells {
+		bad("measures.passes.max_cells %d must be in [1, %d]", v, MaxPassCells)
+	}
+	if v := m.Passes.MaxGradePercent; !(v >= 0 && v <= 100) {
+		bad("measures.passes.max_grade_percent %v must be in [0, 100]", v)
+	}
+	if v := m.Passes.DetourCells; v < 1 || v > MaxDetourCells {
+		bad("measures.passes.detour_cells %d must be in [1, %d]", v, MaxDetourCells)
+	}
 	names := world.MeasureNames()
 	for k, c := range m.Checks {
 		if !slices.Contains(names, c.Measure) {

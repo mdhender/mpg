@@ -17,10 +17,11 @@ import (
 // (measure.SummaryFile), and logs the summary. A failed check, gate or
 // not, is not a stage error: the run goes on to export, and the caller
 // reads Products.Measures (mpg generate exits 3 when a gate failed). The
-// stage has no render yet; the landmass and chokepoint map comes with S34.
+// stage render is the landmass and chokepoint map (measure Map.Render):
+// landmasses by class, mountain chains, straits, necks and passes.
 func runMeasures(c *Context) error {
 	p := &c.Products
-	m, err := measure.Compute(measure.Input{
+	m, mp, err := measure.Analyze(measure.Input{
 		Config:      c.Config,
 		ConfigHash:  c.ConfigHash,
 		Mesh:        p.Mesh,
@@ -31,6 +32,7 @@ func runMeasures(c *Context) error {
 		Lakes:       p.Target.Lakes,
 		Edges:       p.Edges,
 		EdgeStats:   p.EdgeStats,
+		Landform:    p.Classes.Landform,
 	})
 	if err != nil {
 		return err
@@ -47,6 +49,9 @@ func runMeasures(c *Context) error {
 	}
 	for _, line := range measure.Lines(m) {
 		c.Logf("%s", line)
+	}
+	if err := c.Render("", mp.Render(p.Elevation, p.Mesh)); err != nil {
+		return err
 	}
 	p.Measures = m
 	return nil

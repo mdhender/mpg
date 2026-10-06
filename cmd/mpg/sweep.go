@@ -68,10 +68,14 @@ const (
 // cells (cells). Each edges tile's caption gives
 // the direction error's mean, p95 and max in degrees (err), the share of
 // edges whose reverse direction is not the opposite point (rev), and the
-// coast edges per land cell (coast). The measures stage has no render yet,
-// so a measures tile is blank; its caption gives the checks that passed
-// against those run (ok), the failed report-only checks (rpt), and the
-// failed gates (gate). When the run reaches the measures stage and a gate
+// coast edges per land cell (coast). Each measures tile is the landmass
+// and chokepoint map; when a column is the measures stage, every tile gets
+// a third caption line. A measures tile's second line gives the landmasses
+// (LM) with their continents, islands and islets (c/i/. — the font is
+// ASCII, so "." stands for the islets), the straits and the major straits
+// (str, those with no islet shore), the necks (neck), and the passes
+// (pass); its third the checks that passed against those run (ok), the
+// failed report-only checks (rpt), and the failed gates (gate). When the run reaches the measures stage and a gate
 // failed, the row label's land line ends in GATE; a failed gate never
 // stops the sweep. Rows run one after another, so the sheet does not
 // depend on scheduling. Exit codes: 0 on success, 1 on a config error, an
@@ -192,6 +196,9 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 	sheet := render.Sheet{TileWidth: *tile, CaptionLines: captionLines}
 	for _, c := range cols {
 		sheet.Columns = append(sheet.Columns, c.name)
+		if registry[c.index].Name == "measures" {
+			sheet.CaptionLines = captionLines + 1
+		}
 	}
 	start := time.Now()
 	for n, row := range rows {
@@ -263,7 +270,8 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 				tiles[k].Caption[1] = fmt.Sprintf("err %.0f/%.0f/%.0f rev %.1f%% coast %.2f", es.ErrorMean, es.ErrorP95, es.ErrorMax, rev, es.CoastPerLand())
 			}
 			if ms := ctx.Products.Measures; ms != nil && registry[c.index].Name == "measures" {
-				tiles[k].Caption[1] = measuresCaption(ms)
+				tiles[k].Caption[1] = chokepointCaption(ms)
+				tiles[k].Caption = append(tiles[k].Caption, measuresCaption(ms))
 			}
 		}
 		label := []string{fmt.Sprintf("seed %d", uint64(row.cfg.Seed)), w.Aspect, row.cfg.Layout.Preset, fmt.Sprintf("%d land", w.LandCells)}
@@ -574,6 +582,14 @@ func classifyCaption(cl *classify.Result, variant string) string {
 		return fmt.Sprintf("wet %d (%.1f%%)", cl.WetlandCount(), pct)
 	}
 	return fmt.Sprintf("%s v%d", strings.Join(cl.LandShares(true), " "), cl.Volcanoes())
+}
+
+// chokepointCaption summarizes the landmasses and chokepoints for a
+// measures sweep tile: landmasses with their continents, islands and
+// islets, straits and major straits, necks, and passes.
+func chokepointCaption(m *world.Measures) string {
+	l, c := m.Landmasses, m.Chokepoints
+	return fmt.Sprintf("LM %d (%dc/%di/%d.) str %d/%d neck %d pass %d", l.Count, l.Continents, l.Islands, l.Islets, c.Straits, c.StraitsMajor, c.Necks, c.Passes)
 }
 
 // measuresCaption summarizes the checks for a measures sweep tile: the

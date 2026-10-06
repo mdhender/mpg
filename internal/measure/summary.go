@@ -13,7 +13,7 @@ import (
 // and the verdict. It is the content of SummaryFile and the measures
 // stage's log.
 func Lines(m *world.Measures) []string {
-	l, me, d, g, w := m.Land, m.Mesh, m.Directions, m.Grades, m.Water
+	l, me, d, g, w, lm, cp := m.Land, m.Mesh, m.Directions, m.Grades, m.Water, m.Landmasses, m.Chokepoints
 	met := "met"
 	if !l.Met {
 		met = "UNMET"
@@ -32,6 +32,10 @@ func Lines(m *world.Measures) []string {
 			fmt.Sprintf("; max %.1f%%, p95 %.1f%%, %d at the cap", g.LandMaxPercent, g.LandP95Percent, g.LandCapEdges),
 		fmt.Sprintf("water    %d ocean cells; %d lakes (%d cells, largest %d), %d inland seas (%d cells, largest %d); coast %.3f edges per land cell; %d land-rim edges",
 			w.OceanCells, w.Lakes, w.LakeCells, w.LargestLakeCells, w.InlandSeas, w.InlandSeaCells, w.LargestInlandSeaCells, w.CoastEdgesPerLandCell, w.LandRimEdges),
+		fmt.Sprintf("landmass %d: %d continents, %d islands, %d islets; largest %d cells (%.1f%% of land)",
+			lm.Count, lm.Continents, lm.Islands, lm.Islets, lm.LargestCells, 100*lm.LargestShare),
+		fmt.Sprintf("choke    k %d: %d straits (%d between, %d within, %d major; %d cells), %d necks (%d cells); %d chains (%d cells), %d passes (%d cells) on %d chains",
+			cp.MaxCells, cp.Straits, cp.StraitsBetween, cp.StraitsWithin, cp.StraitsMajor, cp.StraitCells, cp.Necks, cp.NeckCells, cp.Chains, cp.ChainCells, cp.Passes, cp.PassCells, cp.ChainsWithPass),
 	}
 	for _, c := range m.Checks {
 		out = append(out, "check    "+CheckLine(c))

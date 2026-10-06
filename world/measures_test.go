@@ -13,12 +13,13 @@ import (
 
 func TestMeasureNames(t *testing.T) {
 	names := MeasureNames()
-	for _, want := range []string{"land.cells", "land.met", "mesh.edge_p5_km", "directions.error_p95_deg", "grades.land_max_percent", "water.coast_edges_per_land_cell"} {
+	for _, want := range []string{"land.cells", "land.met", "mesh.edge_p5_km", "directions.error_p95_deg", "grades.land_max_percent", "water.coast_edges_per_land_cell",
+		"landmasses.count", "landmasses.continents", "landmasses.islets", "landmasses.largest_share", "chokepoints.straits", "chokepoints.straits_major", "chokepoints.necks", "chokepoints.passes"} {
 		if !slices.Contains(names, want) {
 			t.Errorf("no measure %q", want)
 		}
 	}
-	for _, not := range []string{"schema", "pass", "mesh.neighbors_land", "grades.buckets", "checks"} {
+	for _, not := range []string{"schema", "pass", "mesh.neighbors_land", "grades.buckets", "checks", "landmasses.sizes", "landmasses.list", "chokepoints.strait_list", "chokepoints.neck_widths"} {
 		if slices.Contains(names, not) {
 			t.Errorf("%q is named", not)
 		}

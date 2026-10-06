@@ -206,7 +206,7 @@ func TestHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = "04a948db70a207f8c1a5ab8d974f166fa01984b45478b8dd049e8cd1e6028423"
+	const want = "6aaa499146851a8627bf7013786da3f1344749cf8fc4913d1d1c49851d9fe662"
 	if h != want {
 		t.Errorf("Hash = %s, want %s", h, want)
 	}

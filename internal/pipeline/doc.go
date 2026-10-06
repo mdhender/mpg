@@ -19,7 +19,8 @@
 // configured checks, and writes measures.json and measures.txt. A failed
 // check is not a stage error, so the run still reaches export and writes
 // world.json; the caller reads Products.Measures and decides (mpg generate
-// exits 3 when a gate failed). The stage has no render until S34.
+// exits 3 when a gate failed). Its render is the landmass and chokepoint
+// map (package measure, Map.Render).
 //
 // # Lakes and the land target
 //
