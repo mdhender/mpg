@@ -65,8 +65,8 @@
 //     cells' mesh areas in id order), the lake, inland-sea, salt and playa
 //     counts, the biome table (classify.BiomeTableVersion) and the
 //     glacier, ice-field, pack-ice and wetland cell counts, the climate
-//     passes, the elevation pre-pass's lake cells and
-//     datum land share, and the deferred stages the run passed over.
+//     passes, and the elevation pre-pass's lake cells and datum land
+//     share.
 //
 // # Determinism
 //

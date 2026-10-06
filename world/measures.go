@@ -16,7 +16,10 @@ import (
 // package reads and writes. It is versioned apart from world.json: the
 // measures grew through milestone 9 (landmasses and chokepoints in S34;
 // features, rivers and usability in S35) without touching the game data.
-const MeasuresSchemaVersion = 0
+// Version 1 is frozen (S37) under world.json's rules: any change to the
+// layout, even an added field, makes a new version, and with it the
+// measure names that config.json's checks and seed ranking use.
+const MeasuresSchemaVersion = 1
 
 // MeasuresFile is the name of the playability report in a world's output
 // directory.
@@ -492,7 +495,9 @@ func (m *Measures) Bytes() ([]byte, error) {
 
 // DecodeMeasures reads a measures.json strictly: the schema must be present
 // and equal MeasuresSchemaVersion, unknown fields are errors, and nothing
-// but white space may follow the object.
+// but white space may follow the object. A file of another version is
+// rejected with an error naming it, ahead of any field error its layout
+// causes, as Decode does.
 func DecodeMeasures(r io.Reader) (*Measures, error) {
 	m := &Measures{}
 	probe := struct {
@@ -501,17 +506,18 @@ func DecodeMeasures(r io.Reader) (*Measures, error) {
 	}{Measures: m}
 	dec := json.NewDecoder(r)
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(&probe); err != nil {
+	err := dec.Decode(&probe)
+	if probe.Schema != nil && *probe.Schema != MeasuresSchemaVersion {
+		return nil, schemaError("world: measures", "measures", *probe.Schema, MeasuresSchemaVersion)
+	}
+	if err != nil {
 		return nil, fmt.Errorf("world: measures: %w", err)
 	}
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
 		return nil, errors.New("world: measures: data after the top-level object")
 	}
-	switch {
-	case probe.Schema == nil:
+	if probe.Schema == nil {
 		return nil, errors.New("world: measures: no schema version")
-	case *probe.Schema != MeasuresSchemaVersion:
-		return nil, fmt.Errorf("world: measures: schema %d, want %d", *probe.Schema, MeasuresSchemaVersion)
 	}
 	m.Schema = *probe.Schema
 	return m, nil

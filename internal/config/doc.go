@@ -160,4 +160,22 @@
 // The file carries "schema": 1. A file without a schema, or with another
 // version, is rejected: an older schema needs an explicit migration and must
 // never silently adopt this version's defaults.
+//
+// Schema 1 grew with the milestones until world.json's schema froze (S37);
+// from then on it is frozen too, under these rules:
+//
+//   - A new input may join schema 1 only if its default reproduces the
+//     behavior before it, because a file without the field (an older
+//     resolved file, or a partial hand-written one) takes the default.
+//     Otherwise it makes schema 2.
+//   - Removing or renaming an input, or changing its type, unit, or
+//     meaning, makes schema 2, whose migration writes the old value out
+//     explicitly instead of taking a new default.
+//   - Retuning a default stays within schema 1: a resolved file writes
+//     every default out, so it keeps its values; a partial file takes the
+//     defaults of the generator that reads it, as it always has.
+//   - Derived fields follow the same rules as inputs.
+//
+// The config hash identifies the input, not the world: the same config
+// gives the same world.json only from the same generator version.
 package config

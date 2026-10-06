@@ -143,31 +143,6 @@ func TestRunOrderAndStops(t *testing.T) {
 	}
 }
 
-// TestRunDeferred checks that the runner passes over a deferred stage that
-// is not implemented, lists it, and still stops at the next unimplemented
-// stage that is not deferred; Deferred does not stop an implemented stage
-// from running.
-func TestRunDeferred(t *testing.T) {
-	var ran []string
-	stages := fake(&ran)
-	stages[3].Deferred = true                                       // d
-	stages = append(stages, Stage{Number: 6, Name: "f"}, stages[4]) // f stops; e again never runs
-	stages[1].Deferred = true                                       // b is implemented: it runs
-	res, err := Run(newTestContext(t, false), stages, -1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := []string{"a", "b", "c", "e"}; !slices.Equal(ran, want) || !slices.Equal(names(res.Ran), want) {
-		t.Errorf("ran %q, Ran %q, want %q", ran, names(res.Ran), want)
-	}
-	if !slices.Equal(names(res.Skipped), []string{"d"}) {
-		t.Errorf("Skipped = %q, want [d]", names(res.Skipped))
-	}
-	if res.NotImplemented == nil || res.NotImplemented.Name != "f" {
-		t.Errorf("NotImplemented = %v, want f", res.NotImplemented)
-	}
-}
-
 func TestRunStageError(t *testing.T) {
 	boom := errors.New("boom")
 	var ran []string
@@ -245,21 +220,17 @@ func TestConfigStage(t *testing.T) {
 		t.Errorf("config.json differs from the seed-42 example:\n%s", got)
 	}
 
-	// The full registry runs every stage, through measures and export,
-	// and skips none.
+	// The full registry runs every stage, through measures and export.
 	c = newTestContext(t, false)
 	res, err = Run(c, Stages(), -1)
 	if err != nil || res.NotImplemented != nil || len(res.Ran) != len(Stages()) || res.Ran[len(res.Ran)-1].Name != "export" {
 		t.Errorf("full run = %+v, %v; want a run of every stage through export", res, err)
 	}
-	if len(res.Skipped) != 0 {
-		t.Errorf("full run skipped %q, want none", names(res.Skipped))
-	}
 	if m := c.Products.Measures; m == nil || !m.Pass {
 		t.Errorf("full run: measures %+v, want a passing report", m)
 	}
-	if w := c.Products.World; w == nil || w.Outcomes.Deferred == nil || len(w.Outcomes.Deferred) != 0 {
-		t.Error("full run: want a world with no deferred stages in its outcomes")
+	if w := c.Products.World; w == nil || w.Schema != world.SchemaVersion {
+		t.Error("full run: want a world of this schema")
 	}
 	for _, f := range []string{world.File, world.MeasuresFile, measure.SummaryFile} {
 		if _, err := os.Stat(filepath.Join(c.OutputDir, f)); err != nil {
@@ -566,8 +537,8 @@ func TestClimateStage(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "climate"}) ||
-		len(res.Skipped) != 0 || res.NotImplemented != nil {
-		t.Errorf("ran %q, skipped %q, stopped at %v", names(res.Ran), names(res.Skipped), res.NotImplemented)
+		res.NotImplemented != nil {
+		t.Errorf("ran %q, stopped at %v", names(res.Ran), res.NotImplemented)
 	}
 	p := c.Products
 	if p.Climate == nil {
@@ -621,8 +592,8 @@ func TestBasinsStage(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "climate", "basins"}) ||
-		len(res.Skipped) != 0 || res.NotImplemented != nil {
-		t.Errorf("ran %q, skipped %q, stopped at %v", names(res.Ran), names(res.Skipped), res.NotImplemented)
+		res.NotImplemented != nil {
+		t.Errorf("ran %q, stopped at %v", names(res.Ran), res.NotImplemented)
 	}
 	p := c.Products
 	if p.Basins == nil {
@@ -686,8 +657,8 @@ func TestRiversStage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Ran[len(res.Ran)-1].Name != "rivers" || len(res.Skipped) != 0 || res.NotImplemented != nil {
-		t.Errorf("ran %q, skipped %q, stopped at %v", names(res.Ran), names(res.Skipped), res.NotImplemented)
+	if res.Ran[len(res.Ran)-1].Name != "rivers" || res.NotImplemented != nil {
+		t.Errorf("ran %q, stopped at %v", names(res.Ran), res.NotImplemented)
 	}
 	p := c.Products
 	if p.Rivers == nil {
@@ -752,8 +723,8 @@ func TestClassifyStage(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !slices.Equal(names(res.Ran), []string{"config", "layout", "elevation", "mesh", "cells", "sea-level", "climate", "basins", "land-target", "rivers", "classify"}) ||
-		len(res.Skipped) != 0 || res.NotImplemented != nil {
-		t.Errorf("ran %q, skipped %q, stopped at %v", names(res.Ran), names(res.Skipped), res.NotImplemented)
+		res.NotImplemented != nil {
+		t.Errorf("ran %q, stopped at %v", names(res.Ran), res.NotImplemented)
 	}
 	p := c.Products
 	if p.Classes == nil {

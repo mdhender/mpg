@@ -6,11 +6,7 @@
 // DESIGN.md ("Pipeline"); Stages returns them. A stage whose Run is nil is
 // registered but not implemented yet: the runner stops cleanly when it
 // reaches one, so a partly built pipeline still produces its early outputs.
-// A stage marked Deferred is the exception: it is not implemented, but the
-// implemented stages after it do not need it yet, so the runner passes over
-// it and lists it in Result.Skipped; export (14) records the stages passed
-// over in its outcomes (none now that every stage is implemented). Export
-// writes world.json; its render is the player-style map (package
+// Every stage is implemented now. Export (14) writes world.json; its render is the player-style map (package
 // playermap), drawn from the world alone.
 //
 // # Measures

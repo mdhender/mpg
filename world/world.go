@@ -3,10 +3,10 @@
 package world
 
 // SchemaVersion is the version of world.json's layout that this package
-// reads and writes. Version 0 is the first playable export (milestone 4);
-// it is not frozen, and may change without migration until version 1
-// (milestone 9).
-const SchemaVersion = 0
+// reads and writes. Version 1 is frozen (milestone 9): any change to the
+// layout, even an added field, makes a new version. See the package
+// documentation, "Versions and migration".
+const SchemaVersion = 1
 
 // File is the name of the game data file in a world's output directory.
 const File = "world.json"
@@ -233,12 +233,6 @@ type Edge struct {
 	// rim cell; Water is then the water side's kind.
 	Coast bool  `json:"coast,omitzero"`
 	Water Water `json:"water,omitempty"`
-	// Biome is the biome of a playable land cell, empty otherwise.
-	Biome Biome `json:"biome,omitempty"`
-	// Surface is the cell's surface: glacier, ice field or a wetland on
-	// land, pack ice on playable water; empty for bare ground, open water,
-	// and rim cells.
-	Surface Surface `json:"surface,omitempty"`
 	// River is the class of the river along the edge, empty for none.
 	River RiverClass `json:"river,omitempty"`
 	// InclinePermille is the grade from Cells[0] to Cells[1] in tenths of
@@ -343,9 +337,6 @@ type Outcomes struct {
 	// ClimatePasses counts the climate passes: one with the ocean of the
 	// first sea level, one with the final lakes.
 	ClimatePasses int `json:"climate_passes"`
-	// Deferred lists the pipeline stages not implemented yet, which the
-	// run passed over, in pipeline order.
-	Deferred []string `json:"deferred"`
 }
 
 // Probe is one level the sea-level search measured, with the basins and

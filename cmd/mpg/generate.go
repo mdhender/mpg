@@ -34,6 +34,14 @@ func runGenerate(args []string, stdout, stderr io.Writer) int {
 	output := fs.String("output", "", "write config.json and later outputs to `dir` (required; created if missing; files are overwritten)")
 	renders := fs.String("renders", "", "write stage renders to `dir`")
 	stopAfter := fs.String("stop-after", "", "stop after `stage` (a name or number)")
+	fs.Usage = func() {
+		fmt.Fprintln(stderr, "usage: mpg generate [--config FILE] [--seed N] [--land-cells N] [--aspect A] [--preset P] [--renders DIR] [--stop-after STAGE] --output DIR")
+		fmt.Fprintln(stderr, "Writes config.json, world.json, measures.json and measures.txt to DIR.")
+		fs.PrintDefaults()
+		fmt.Fprintf(stderr, "stages: %s\n", stageList(pipeline.Stages()))
+		fmt.Fprintln(stderr, "exit codes: 0 success (report-only check failures included), 1 config or stage error, 2 usage error, 3 a gate check failed (every output is still written)")
+		fmt.Fprintln(stderr, "See docs/usage.md.")
+	}
 	if code, stop := parse(fs, args); stop {
 		return code
 	}
@@ -92,13 +100,6 @@ func runGenerate(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "world   %.1f x %.1f km, %d land of %d playable cells, aspect %s\n",
 		w.WidthKm, w.HeightKm, w.LandCells, w.PlayableCells, w.Aspect)
 	fmt.Fprintf(stdout, "stages  %s\n", strings.Join(names, ", "))
-	if len(res.Skipped) > 0 {
-		skipped := make([]string, len(res.Skipped))
-		for i, st := range res.Skipped {
-			skipped[i] = st.Name
-		}
-		fmt.Fprintf(stderr, "mpg generate: skipped %s: not implemented yet\n", strings.Join(skipped, ", "))
-	}
 	if m := ctx.Products.Measures; m != nil {
 		fmt.Fprintf(stdout, "checks  %s\n", measure.Verdict(m))
 		for _, c := range measure.Failed(m) {
@@ -116,6 +117,15 @@ func runGenerate(args []string, stdout, stderr io.Writer) int {
 		return exitGate
 	}
 	return 0
+}
+
+// stageList returns the stages as "1 config, 2 layout, …".
+func stageList(stages []pipeline.Stage) string {
+	s := make([]string, len(stages))
+	for i, st := range stages {
+		s[i] = st.String()
+	}
+	return strings.Join(s, ", ")
 }
 
 // exitGate is generate's exit code when a gate check failed.

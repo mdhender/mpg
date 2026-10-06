@@ -18,11 +18,6 @@ type Stage struct {
 	Name string
 	// Run runs the stage. It is nil while the stage is not implemented.
 	Run func(*Context) error
-	// Deferred marks a stage that is not implemented yet but that the
-	// implemented stages after it do not need: the runner passes over it
-	// (Result.Skipped) instead of stopping there. It has no effect on an
-	// implemented stage.
-	Deferred bool
 }
 
 // Implemented reports whether the stage has a Run function.

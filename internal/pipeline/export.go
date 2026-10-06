@@ -14,15 +14,10 @@ import (
 
 // runExport converts the stage products to the world.json types (package
 // export), validates them (world.Validate), writes world.json, and logs its
-// size and counts. The deferred stages the run passed over are recorded in
-// the outcomes. Its stage render is the player-style map (package
+// size and counts. Its stage render is the player-style map (package
 // playermap) at playermap.DefaultScale, drawn from the world value alone.
 func runExport(c *Context) error {
 	p := &c.Products
-	deferred := make([]string, len(c.skipped))
-	for k, st := range c.skipped {
-		deferred[k] = st.Name
-	}
 	w, err := export.Build(export.Input{
 		Config:           c.Config,
 		ConfigHash:       c.ConfigHash,
@@ -37,7 +32,6 @@ func runExport(c *Context) error {
 		Classes:          p.Classes,
 		Edges:            p.Edges,
 		Network:          p.Network,
-		Deferred:         deferred,
 	})
 	if err != nil {
 		return err

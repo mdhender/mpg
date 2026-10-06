@@ -106,28 +106,25 @@ func TestParseSweepStages(t *testing.T) {
 	}
 
 	// A stage that is not implemented cannot be a column, nor lie before
-	// one, unless it is deferred.
+	// one.
 	partial := pipeline.Stages()
 	partial[12].Run = nil
 	for _, tc := range []struct {
-		in       string
-		deferred bool
-		last     int
-		msg      string
+		in   string
+		last int
+		msg  string
 	}{
-		{"measures", false, -1, "stage 13 measures is not implemented yet"},
-		{"edges,export", false, -1, "sweep cannot run through stage 14 export"},
-		{"edges,export", true, 13, ""},
-		{"measures", true, -1, "stage 13 measures is not implemented yet"},
+		{"measures", -1, "stage 13 measures is not implemented yet"},
+		{"edges,export", -1, "sweep cannot run through stage 14 export"},
+		{"edges", 11, ""},
 	} {
-		partial[12].Deferred = tc.deferred
 		cols, err := parseSweepStages(tc.in, partial)
 		if err != nil {
 			t.Fatal(err)
 		}
 		last, err := checkImplemented(cols, partial)
 		if last != tc.last || (tc.msg == "") != (err == nil) || (err != nil && !strings.Contains(err.Error(), tc.msg)) {
-			t.Errorf("partial registry, deferred %v: checkImplemented(%q) = %d, %v; want %d, %q", tc.deferred, tc.in, last, err, tc.last, tc.msg)
+			t.Errorf("partial registry: checkImplemented(%q) = %d, %v; want %d, %q", tc.in, last, err, tc.last, tc.msg)
 		}
 	}
 }
@@ -295,8 +292,7 @@ func TestSweepPresets(t *testing.T) {
 
 // TestSweepSeaLevel checks that a sweep runs through the sea level stage
 // and the climate (temperature, mask, precipitation and aridity), the basins, and on to classification and
-// the edges, past the deferred stages, and
-// gives the same sheet twice.
+// the edges, and gives the same sheet twice.
 func TestSweepSeaLevel(t *testing.T) {
 	dir := t.TempDir()
 	var hashes []string

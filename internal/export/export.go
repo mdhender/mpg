@@ -54,8 +54,6 @@ type Input struct {
 	// world.json's rivers and its mouths the corners' mouth flags. Nil
 	// means no rivers; the edges' river classes must then be empty too.
 	Network *river.Network
-	// Deferred names the pipeline stages the run passed over, in order.
-	Deferred []string
 }
 
 // Build converts the stage products into the world.json types. See the
@@ -478,7 +476,6 @@ func (b *builder) outcomes() world.Outcomes {
 		DatumLandShare:    in.DatumLandShare,
 		Trace:             trace,
 		ClimatePasses:     in.ClimatePasses,
-		Deferred:          append([]string{}, in.Deferred...),
 	}
 	for i := range b.m.Cells {
 		switch b.water(i) {

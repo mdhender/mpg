@@ -9,7 +9,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -200,7 +199,7 @@ func TestLandTargetStage(t *testing.T) {
 	if o.LandCells != lt.LandCells || o.ClimatePasses != ClimatePasses || o.SeaLevelM != lt.Flood.Level ||
 		o.ExpectedLakeCells != lt.Search.Expected || o.PrePassLakeCells != c.Products.PrePass.LakeCells ||
 		o.DatumLandShare != c.Products.PrePass.LandShare || len(o.Trace) != len(lt.Search.Trace) ||
-		o.LakeCells+o.InlandSeaCells != lt.LakeCells || slices.Contains(o.Deferred, "land-target") {
+		o.LakeCells+o.InlandSeaCells != lt.LakeCells {
 		t.Errorf("outcomes %+v do not record the land target", o)
 	}
 	for k, p := range o.Trace {

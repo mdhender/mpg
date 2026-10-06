@@ -2,7 +2,7 @@
 
 Go module: `github.com/mdhender/mpg`  
 Design snapshot: 2026-10-04  
-Status: agreed design; nothing is implemented.
+Status: implemented through S37 (milestones 1–9); `world.json` schema 1 is frozen.
 
 ## Goal
 
@@ -150,7 +150,7 @@ How this is built (S29):
 - **Stage 6** aims for N + L land cells before lakes, so the first climate pass sees roughly the final ocean.
 - **Stage 9** runs the sea-level search (first probe: the quantile for N + stage 8's lake cells), re-running the sea-level flood, basin hierarchy and water balance at each probe against the fixed first climate. Land is counted after lakes: lake and inland-sea cells are water; playas and dry basin floors are land. Measured on 48 worlds: all met (45 exact), 2–7 probes, final sea level within 25 m of 0 except pangaea outliers (−81 m where lakes grew past the pre-pass estimate).
 - **Final climate pass:** inland seas recharge the air like the ocean (open-water precipitation; a trace stops at them and leaves at their height); lakes are traced like land. Lake and inland-sea cells take temperature from their altitude above the sea level, like land. The pass count (normally 2) is saved.
-- **world.json** (schema 0): cell flags `salt` (lakes and inland seas only; the ocean and rim are salt by definition) and `playa`; corner flag `sink` (also `terminal`; a sink touches a playa, and each playa's lowest corner is a sink); outcomes `lake_cells`, `inland_sea_cells`, `lakes`, `inland_seas`, `salt_lakes`, `salt_inland_seas`, `playas`, `expected_lake_cells`, `prepass_lake_cells`, `datum_land_share`, `climate_passes`, and a `lake` count per probe. Landform stays by size: lakes `fresh-water`, inland seas `salt-water`. The validator checks inland water never touches the ocean, neighboring inland-water cells share kind and salt, and outcome counts match the cells.
+- **world.json** (added in schema 0; frozen in schema 1): cell flags `salt` (lakes and inland seas only; the ocean and rim are salt by definition) and `playa`; corner flag `sink` (also `terminal`; a sink touches a playa, and each playa's lowest corner is a sink); outcomes `lake_cells`, `inland_sea_cells`, `lakes`, `inland_seas`, `salt_lakes`, `salt_inland_seas`, `playas`, `expected_lake_cells`, `prepass_lake_cells`, `datum_land_share`, `climate_passes`, and a `lake` count per probe. Landform stays by size: lakes `fresh-water`, inland seas `salt-water`. The validator checks inland water never touches the ocean, neighboring inland-water cells share kind and salt, and outcome counts match the cells.
 - **Overflow:** a full basin whose target is full and spills no lower sends its overflow to the lowest neighbor of the spill flat that drains to the sea or a strictly lower basin (two basins closing at one flat had looped).
 
 ### Layout
@@ -413,7 +413,13 @@ The geometry in `world.json`:
 - **Coastline polylines:** chains of coast edges, closed for islands and lakes.
 - **World metadata:** W, H, rim, wrap flag, province area, units, codebooks.
 
-v0 (S23) writes compact JSON with `schema: 0`; inclines are in permille (tenths of a percent), positions are rounded to 1e-6 km, and heights keep full precision. The default 10,000-land-cell world is about 55 MB (13 MB gzipped); trimming waits for the game's feedback. `mpg validate` checks the file's structural invariants.
+v1 (S37) is frozen. It is compact JSON with `schema: 1`: inclines are in permille (tenths of a percent), positions are rounded to 1e-6 km, and heights keep full precision.
+- **Contents:** v1 is v0 as milestone 8 left it, minus the always-empty `outcomes.deferred` and two edge fields that were never written.
+- **Size:** the default 10,000-land-cell world is about 55 MB (13 MB gzipped). Trimming derivable fields waits for the game's feedback and would be v2.
+- **Changes:** any change to the layout makes a new version. Unknown fields are rejected, so an added field does too.
+- **Migration:** a reader migrates an older frozen version only through explicit, tested steps that never invent data. v0 was pre-release, so it is rejected with a request to regenerate the world; a newer version asks for a newer reader.
+- **Identity:** the schema is the layout, not the world. The same config gives the same bytes only from the same generator version.
+- `mpg validate` checks the file's structural invariants. The rules are in `world/doc.go` ("Versions and migration").
 
 Rendering a player's map segment means selecting cells whose bounding boxes intersect the window (taken modulo W) and drawing each polygon by its geography and biome, then rivers and coasts. Rim cells are drawn as impassable ice instead. No raster is needed.
 
@@ -436,7 +442,7 @@ Write `measures.json` and a short text summary on every run. Configured checks f
 Checks begin as report-only. Promote them to gates once tuning shows sensible ranges.
 
 How it is built (S33):
-- **Stage 13** measures every run and writes `measures.json` and `measures.txt` (a one-screen summary, also logged). `measures.json` has schema 0, versioned apart from `world.json`; its exported Go types are in `world/measures.go`. It is two-space indented with full float precision and records the seed and config hash, with no timestamps, paths or generator version, so it is byte-stable and golden-hashed.
+- **Stage 13** measures every run and writes `measures.json` and `measures.txt` (a one-screen summary, also logged). `measures.json` has its own schema, versioned apart from `world.json` (schema 1 from S37, frozen under the same rules; its scalar names are part of it); its exported Go types are in `world/measures.go`. It is two-space indented with full float precision and records the seed and config hash, with no timestamps, paths or generator version, so it is byte-stable and golden-hashed.
 - **Names:** scalar measures are named by their JSON paths (`land.deviation_percent`, `directions.error_p95_deg`). S33 covers land, mesh, directions, grades and water (counts, largest lake and inland sea, coast edges per land cell); later groups join the same way.
 - **Checks:** `config.json` has `measures.checks`, a list of `{measure, op, value, mode}` with op `<=`, `>=`, `<`, `>` or `==` and mode `report` or `gate`. An unknown measure name fails when the config resolves. Config and measures JSON are written without HTML escaping, so ops stay readable.
 - **Defaults:** 14 report-only checks, with bounds from 44 measured worlds: land within ±1% of N and 2% of N·A, land area CV ≤ 0.13, edge p5 ≥ 3 km, ≤ 30 degree-cap collapses, direction error mean ≤ 12°, p95 ≤ 23° and max ≤ 45°, reverse not opposite ≤ 1%, steepest land grade ≤ 50% with none at the cap, and no land–rim edges.
@@ -509,7 +515,7 @@ worlds/example/
 - One `world.json` is fine at this scale: tens of thousands of cells, a few hundred thousand edges.
 - Chunking and compression wait for real measurements.
 - Outcomes such as sea level, achieved count, search trace, and pass counts go in `world.json`, never in `config.json`.
-- Unknown config fields fail with a useful message, to catch misspelled tweaks. Loading an older schema version needs an explicit migration and never silently adopts newer defaults.
+- Unknown config fields fail with a useful message, to catch misspelled tweaks. Loading an older schema version needs an explicit migration and never silently adopts newer defaults. `config.json` stays at schema 1, frozen from S37: a new input joins it only when its default reproduces the old behaviour, and any other change is schema 2 with a migration that writes the old values out (`internal/config/doc.go`, "Versioning"). Command usage is in `docs/usage.md`.
 - The Go types in a small exported package are the schema, as `hmz2map` does, so the engine and converters can import them.
 
 ## Determinism
@@ -570,7 +576,7 @@ Each milestone ends with renders inspected across several seeds and aspects.
 3. **Mesh:** cylinder Voronoi, Lloyd, short-edge collapse, rim cells, and the mesh checks and render.
 4. **First playable export:**
    - cell statistics, sea-level search on cell counts, landforms, depth, and edges with bearing, compass direction, coast, and incline;
-   - `world.json` v0 and a player-style render;
+   - `world.json` v0 (frozen as v1 in milestone 9) and a player-style render;
    - hand it to the game early.
 5. **Climate:** temperature, precipitation with rain shadows, evaporation, runoff, and per-cell aggregation.
 6. **Basins and lakes:** cell-graph hierarchy, discrete water balance, lakes and inland seas, dry sinks; the land-target search with basins included.
@@ -578,7 +584,15 @@ Each milestone ends with renders inspected across several seeds and aspects.
 8. **Biomes and surfaces:** biome table, glacier and ice, wetlands.
 9. **Playability measures and gates:** chokepoints, landmass classes, habitability; seed ranking; schema freeze for `world.json` v1.
 
-Fixtures: seam-crossing cells and rivers; rim behavior; short-edge collapse; a nested basin with overflow; a dry basin below sea level; a one-cell lake; a river that must not run along a shore.
+Fixtures (each a test):
+- seam-crossing cells: `mesh` TestSeamFixture, TestLloydSeamFixture; `cells` TestHandBuiltSeam;
+- seam-crossing rivers: `river` TestSeam, TestSeamRiver;
+- rim behavior: `mesh` TestRimFixture;
+- short-edge collapse: `mesh` TestCollapseFixture, TestStretchFixture, TestDegreeCapFixture;
+- a nested basin with overflow: `basin` TestNestedBasin, TestNestedOverflow;
+- a dry basin below sea level: `cells` TestClassifyDryBasin; `basin` TestDryBasin;
+- a one-cell lake: `basin` TestOneCellLake;
+- a river that must not run along a shore: `river` TestShore, TestShoreRivers.
 
 ## Exclusions
 

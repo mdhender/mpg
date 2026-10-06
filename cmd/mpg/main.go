@@ -81,6 +81,8 @@ func usage(w io.Writer, fs *flag.FlagSet) {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "flags:")
 	fs.PrintDefaults()
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Run mpg <command> -h for a command's flags; docs/usage.md describes them all.")
 }
 
 // newFlagSet returns a FlagSet for a subcommand that writes to stderr.

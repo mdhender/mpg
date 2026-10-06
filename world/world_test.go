@@ -46,7 +46,7 @@ func TestPointJSON(t *testing.T) {
 
 // minimal is the smallest world document Decode accepts (it does not
 // validate).
-const minimal = `{"schema":0,"meta":{},"codebooks":{},"outcomes":{},"cells":[],"corners":[],"edges":[],"coastlines":[],"rivers":[]}`
+const minimal = `{"schema":1,"meta":{},"codebooks":{},"outcomes":{},"cells":[],"corners":[],"edges":[],"coastlines":[],"rivers":[]}`
 
 func TestDecode(t *testing.T) {
 	w, err := world.DecodeBytes([]byte(minimal + "\n"))
@@ -54,8 +54,10 @@ func TestDecode(t *testing.T) {
 		t.Fatalf("Decode(minimal) = %v, %v", w, err)
 	}
 	for _, tc := range []struct{ in, msg string }{
-		{strings.Replace(minimal, `"schema":0,`, ``, 1), "no schema"},
-		{strings.Replace(minimal, `"schema":0`, `"schema":1`, 1), "schema 1"},
+		{strings.Replace(minimal, `"schema":1,`, ``, 1), "no schema"},
+		{strings.Replace(minimal, `"schema":1`, `"schema":2`, 1), "schema 2 is newer than this reader (schema 1); update github.com/mdhender/mpg/world"},
+		{strings.Replace(minimal, `"schema":1`, `"schema":-1`, 1), "schema -1 is not a version"},
+		{strings.Replace(minimal, `"schema":1`, `"schema":"1"`, 1), "world:"},
 		{strings.Replace(minimal, `"cells":[]`, `"cells":[],"extra":1`, 1), "unknown field"},
 		{strings.Replace(minimal, `"meta":{}`, `"meta":{"widht_km":1}`, 1), "unknown field"},
 		{minimal + `{}`, "after the top-level object"},
@@ -68,17 +70,49 @@ func TestDecode(t *testing.T) {
 	}
 }
 
+// TestDecodeVersion0 checks that a pre-release (schema 0) world is rejected
+// with a request to generate it again, also when its layout (here the
+// outcomes' deferred list, and an edge's biome from an early version 0)
+// would fail first, and that a newer schema's unknown fields do not hide
+// its version either.
+func TestDecodeVersion0(t *testing.T) {
+	const want0 = "world: schema 0 is the pre-release layout, with no migration; regenerate the world with this mpg"
+	v0 := strings.Replace(minimal, `"schema":1`, `"schema":0`, 1)
+	for _, in := range []string{
+		v0,
+		strings.Replace(v0, `"outcomes":{}`, `"outcomes":{"deferred":[]}`, 1),
+		strings.Replace(v0, `"edges":[]`, `"edges":[{"id":0,"biome":"desert"}]`, 1),
+	} {
+		if _, err := world.DecodeBytes([]byte(in)); err == nil || err.Error() != want0 {
+			t.Errorf("Decode(%s) = %v, want %q", in, err, want0)
+		}
+	}
+	v2 := strings.Replace(minimal, `"schema":1,`, `"schema":2,"new_field":1,`, 1)
+	if _, err := world.DecodeBytes([]byte(v2)); err == nil || !strings.Contains(err.Error(), "schema 2 is newer") {
+		t.Errorf("Decode(%s) = %v, want the newer-schema error", v2, err)
+	}
+	// The removed fields are unknown in version 1.
+	for _, in := range []string{
+		strings.Replace(minimal, `"outcomes":{}`, `"outcomes":{"deferred":[]}`, 1),
+		strings.Replace(minimal, `"edges":[]`, `"edges":[{"id":0,"surface":"marshes"}]`, 1),
+	} {
+		if _, err := world.DecodeBytes([]byte(in)); err == nil || !strings.Contains(err.Error(), "unknown field") {
+			t.Errorf("Decode(%s) = %v, want an unknown field", in, err)
+		}
+	}
+}
+
 // TestBytes checks the canonical encoding: compact, a trailing newline, the
 // schema first, empty lists written as [], and a decode round trip.
 func TestBytes(t *testing.T) {
-	w := &world.World{Codebooks: world.DefaultCodebooks(), Coastlines: []world.Coastline{}, Rivers: []world.RiverPath{},
+	w := &world.World{Schema: world.SchemaVersion, Codebooks: world.DefaultCodebooks(), Coastlines: []world.Coastline{}, Rivers: []world.RiverPath{},
 		Cells: []world.Cell{{Landform: world.Plains, Site: world.Point{X: 1.5, Y: 2}, Exits: []world.Exit{}}}}
 	b, err := w.Bytes()
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := string(b)
-	if !strings.HasPrefix(s, `{"schema":0,"meta":{`) || !strings.HasSuffix(s, "}\n") || strings.Count(s, "\n") != 1 {
+	if !strings.HasPrefix(s, `{"schema":1,"meta":{`) || !strings.HasSuffix(s, "}\n") || strings.Count(s, "\n") != 1 {
 		t.Errorf("Bytes = %s", s)
 	}
 	for _, sub := range []string{`"site":[1.5,2]`, `"coastlines":[]`, `"rivers":[]`, `"landform":"plains"`} {
@@ -86,7 +120,7 @@ func TestBytes(t *testing.T) {
 			t.Errorf("Bytes lacks %s: %s", sub, s)
 		}
 	}
-	for _, absent := range []string{`"depth"`, `"water"`, `"flags"`} {
+	for _, absent := range []string{`"depth"`, `"water"`, `"flags"`, `"deferred"`} {
 		if strings.Contains(s, absent) {
 			t.Errorf("Bytes has empty %s: %s", absent, s)
 		}

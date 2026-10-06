@@ -19,7 +19,7 @@
 //
 // # The file
 //
-// The top-level object holds, in order: the schema version (0); Meta, the
+// The top-level object holds, in order: the schema version (1); Meta, the
 // map's size and units; Codebooks, every coded field's values; Outcomes,
 // what the run found; then Cells, Corners, Edges, Coastlines, and Rivers.
 // Every list of things with ids is indexed by id, and each element repeats
@@ -65,9 +65,8 @@
 //     pack-ice and wetland cell counts, the target and tolerance, whether
 //     it was met and why the land-target search ended, its policy, budget,
 //     expected lake cells and trace (each probe with its lake cells), the
-//     climate passes, the elevation pre-pass's lake cells and datum land
-//     share, and the deferred pipeline stages. Outcomes never go in
-//     config.json.
+//     climate passes, and the elevation pre-pass's lake cells and datum
+//     land share. Outcomes never go in config.json.
 //
 // # Units and precision
 //
@@ -86,22 +85,45 @@
 //
 // The package also holds the schema of measures.json, the playability
 // report (Measures; MeasuresFile), which is versioned on its own
-// (MeasuresSchemaVersion 0) and is not game data. Measures.Bytes writes it
+// (MeasuresSchemaVersion 1) and is not game data. Measures.Bytes writes it
 // as two-space indented JSON, and DecodeMeasures reads it strictly. Its
 // scalar measures are named by their JSON paths ("land.cells",
 // "directions.error_p95_deg"; MeasureNames), which config.json's checks
 // and seed ranking use. Package internal/measure fills it.
 //
-// # Omitted until later milestones
+// # Versions and migration
 //
-// Version 0 is the first playable export (milestone 4); lakes, inland
-// seas, the salt and playa cell flags, the sink corner flag and the lake
-// outcomes came with milestone 6 (S29), and rivers (edge classes, river
-// polylines, corner mouths) with milestone 7 (S31), and biomes and
-// surfaces (the cell fields, the biomes and surfaces codebooks, and the
-// biome table and surface counts in the outcomes) with milestone 8 (S32).
-// The schema is frozen as version 1 in milestone 9; until then it may
-// change without migration.
+// Version 0 was the pre-release layout. It grew with the milestones (lakes
+// and the lake outcomes in milestone 6, rivers in 7, biomes and surfaces in
+// 8) and changed without migration, so its files differ by when they were
+// made. Version 1 (milestone 9, S37) froze the layout; it removed the
+// outcomes' always-empty deferred stage list and the edge's biome and
+// surface (never written), and is otherwise version 0 as milestone 8 left
+// it. The rules from version 1 on:
+//
+//  1. A version is frozen: its field names, types, units, rounding, coded
+//     values and their order, ordering rules, and meanings never change.
+//  2. Any change makes a new version. Decode rejects unknown fields, so an
+//     added field is a change too, as is a new coded value.
+//  3. The generator may still change what it writes within a version
+//     (a new algorithm, retuned defaults): the schema is the layout, not
+//     the world. The same config.json gives the same bytes only from the
+//     same generator version (its release tag); the golden hashes track
+//     the bytes.
+//  4. A reader reads its own version, and each older frozen version through
+//     explicit, tested migrations from one version to the next. A migration
+//     never invents data, nor fills it from current defaults: when the
+//     newer version needs what the older file does not hold, it fails and
+//     the world must be generated again.
+//  5. Decode rejects version 0 (the pre-release layout has no migration:
+//     generate the world again) and any version newer than SchemaVersion
+//     (update this package), naming the version found.
+//
+// measures.json follows the same rules with its own version
+// (MeasuresSchemaVersion; version 1 is measures schema 0 renumbered at the
+// freeze). Its scalar names are part of its layout, since config.json's
+// checks and seed ranking name measures by them. config.json (package
+// internal/config) has its own version too.
 //
 // # Determinism
 //

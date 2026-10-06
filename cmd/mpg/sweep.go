@@ -111,6 +111,17 @@ func runSweep(args []string, stdout, stderr io.Writer) int {
 	rankFlag := fs.String("rank", "", "rank the rows by `measures`: \"default\" or comma-separated measure[:max|:min|:~X][*weight] items (runs through the measures stage)")
 	rankScope := fs.String("rank-scope", rankScopeGroup, "rank each row against its aspect and preset block (\"group\") or every row (\"all\")")
 	tablePath := fs.String("table", "", "write the rank table (Markdown) to `file`; default: the --output path with .rank.md in place of its extension")
+	fs.Usage = func() {
+		fmt.Fprintln(stderr, "usage: mpg sweep --seeds SEEDS --stage STAGES [--aspect A,...] [--preset P,...] [--config FILE] [--land-cells N] [--tile PX] [--rank SPEC [--rank-scope group|all] [--table FILE]] --output FILE")
+		fmt.Fprintln(stderr, "Builds a contact sheet PNG: one row per aspect, preset and seed, one column per stage.")
+		fs.PrintDefaults()
+		fmt.Fprintf(stderr, "stages: %s; a variant is a render's file-name suffix, as in climate:precip or classify:biome\n", stageList(pipeline.Stages()))
+		fmt.Fprintln(stderr, "rank SPEC: \"default\" or comma-separated items measure[:max|:min|:~X][*weight]")
+		fmt.Fprintln(stderr, "  max (the default) ranks higher better, min lower better, ~X closer to X better; weight defaults to 1")
+		fmt.Fprintf(stderr, "  measures are measures.json scalar paths, as in land.cells; default is %s\n", defaultRankSpec)
+		fmt.Fprintln(stderr, "exit codes: 0 success (a failed gate marks its row, never stops the sweep), 1 config, stage or run error, 2 usage error")
+		fmt.Fprintln(stderr, "See docs/usage.md.")
+	}
 	if code, stop := parse(fs, args); stop {
 		return code
 	}
@@ -544,7 +555,7 @@ func parseSweepStages(s string, registry []pipeline.Stage) ([]sweepStage, error)
 
 // checkImplemented returns the registry index of the last pipeline stage the
 // columns need, or an error when a column's stage is not implemented yet,
-// or a stage before the last is neither implemented nor deferred.
+// or a stage before the last is not implemented.
 func checkImplemented(cols []sweepStage, registry []pipeline.Stage) (int, error) {
 	last := -1
 	for _, c := range cols {
@@ -554,7 +565,7 @@ func checkImplemented(cols []sweepStage, registry []pipeline.Stage) (int, error)
 		}
 	}
 	for _, st := range registry[:last+1] {
-		if !st.Implemented() && !st.Deferred {
+		if !st.Implemented() {
 			return -1, fmt.Errorf("stage %s is not implemented yet; sweep cannot run through stage %s", st, registry[last])
 		}
 	}

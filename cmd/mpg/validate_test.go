@@ -54,7 +54,7 @@ func TestValidateGenerated(t *testing.T) {
 	file := filepath.Join(out, world.File)
 	for _, path := range []string{out, file} {
 		code, stdout, stderr := validate(t, path)
-		if code != 0 || !strings.Contains(stdout, "valid world schema 0") || !strings.Contains(stdout, "land ") {
+		if code != 0 || !strings.Contains(stdout, "valid world schema 1") || !strings.Contains(stdout, "land ") {
 			t.Errorf("validate %s: exit %d, stdout %q, stderr %q", path, code, stdout, stderr)
 		}
 	}
@@ -99,8 +99,9 @@ func TestValidateCorrupt(t *testing.T) {
 		{"misspelled field", bytes.Replace(good, []byte(`"altitude_m"`), []byte(`"altitude"`), 1), "unknown field"},
 		{"truncated", good[:len(good)/2], "world:"},
 		{"trailing data", append(bytes.Clone(good), []byte("{}")...), "after the top-level object"},
-		{"no schema", bytes.Replace(good, []byte(`{"schema":0,`), []byte(`{`), 1), "no schema"},
-		{"future schema", bytes.Replace(good, []byte(`{"schema":0,`), []byte(`{"schema":1,`), 1), "schema 1"},
+		{"no schema", bytes.Replace(good, []byte(`{"schema":1,`), []byte(`{`), 1), "no schema"},
+		{"future schema", bytes.Replace(good, []byte(`{"schema":1,`), []byte(`{"schema":2,`), 1), "schema 2 is newer"},
+		{"pre-release schema", bytes.Replace(good, []byte(`{"schema":1,`), []byte(`{"schema":0,`), 1), "regenerate the world"},
 		{"bad point", bytes.Replace(good, []byte(`"site":[`), []byte(`"site":[1,`), 1), "two numbers"},
 		{"incline", mutate(func(w *world.World) { w.Edges[len(w.Edges)/2].InclinePermille += 7 }), "incline"},
 		{"landform", mutate(func(w *world.World) { w.Cells[0].Landform = "swamp" }), "not in the codebook"},

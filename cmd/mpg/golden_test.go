@@ -704,7 +704,7 @@ func TestGoldenEdges(t *testing.T) {
 
 // TestGoldenWorld pins the game data file across architectures (see
 // package golden for how to record a hash): the whole pipeline, through
-// stage 14, export, passing over the deferred stages. Each case hashes the
+// stage 14, export. Each case hashes the
 // world.json bytes exactly as written (golden.Sum: SHA-256 of the file).
 // The file carries the config hash in its metadata, so the config is
 // covered too. Each case also pins the player-style map drawn from the
@@ -722,9 +722,9 @@ func TestGoldenWorld(t *testing.T) {
 		player   string
 		measures string
 	}{
-		{"seed42-cinematic", 42, "cinematic", "continents", "173248cf70a8d8e18b787b124ff2c19b16188e4d1be2fffdae4bfbb1dd530b16", "99833872989f373640030207a900e39fbef19b723f50e2468705faec70b6d061", "7f845c350623759462d7952aa10d35b51a8c3678cff0c09c530f7331e1f3656d"},
-		{"seed7-square", 7, "square", "continents", "6b17893aeabd7d14743ea839897e9763f574589adc5a93a040de42c23954c5f2", "630589edcf069e4e2e23548e7cfdccb35899764ea745592937ff5e81069a0e02", "4543c748722a19f2072e2dfdd080589b8b1cd5bb32f49ca5714bac530df9a3c4"},
-		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "98488ed39da3f1f497c8160fc9b7e72bbb7978ff90e45de8064fca83863b0771", "d214bf8ef7dd5c0605d2c7956754bf7f2b4df4040e5beb8bf4620ce7fe83598f", "0eb8a2141079604183848e03c43e10b82d718ca9dbcb534c8792895cd13621b7"},
+		{"seed42-cinematic", 42, "cinematic", "continents", "cc47dcc6839dc0f1ba768764b2a834251ac3102d55c02d108fad262063126bb4", "99833872989f373640030207a900e39fbef19b723f50e2468705faec70b6d061", "57ba6fabc080a7f5318335238fa467b5a79b6d82dbab7526ad936db8ea1d01be"},
+		{"seed7-square", 7, "square", "continents", "a2f598e9feb53c1687a51329a03d789b846e307226d24ce19d8ca1abf7f181f3", "630589edcf069e4e2e23548e7cfdccb35899764ea745592937ff5e81069a0e02", "88d5693484ebee0ea7663e2421672331d0cf9e5fd2d33b723616909259933e7c"},
+		{"seed3-cinematic-archipelago", 3, "cinematic", "archipelago", "84d4baa1c2bf4f74e9ec9880d94bf855c19742a5d1d94b50a9ce70434e77a2f5", "d214bf8ef7dd5c0605d2c7956754bf7f2b4df4040e5beb8bf4620ce7fe83598f", "e15c0b49c7bd2807836b993c219bbe9963bd98fc7f489aced07b17b9eb890ac7"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

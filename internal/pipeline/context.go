@@ -58,8 +58,6 @@ type Context struct {
 	// mesh stage reuses (the mesh does not depend on the elevation).
 	prepass bool
 	preMesh *mesh.Mesh
-	// skipped lists the deferred stages the run has passed over so far.
-	skipped []Stage
 }
 
 // Products holds the stage products. Each stage adds the fields it fills as

@@ -7,11 +7,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project state
 
 `mpg` (`github.com/mdhender/mpg`, Go 1.26) generates a playable Voronoi **province map** for our strategic fantasy
-games. Noise, climate, and hydrology on a raster feed a mesh; the mesh is the product. The repository is
-pre-implementation: only the root package (`version.go`) exists. `DESIGN.md` is the authoritative design — read the
-relevant section before implementing any stage, and follow its "Milestones" (tuning harness first, then layout and
-elevation, mesh, a first playable export, climate, basins, rivers, biomes, measures). Its "Package layout" gives the
-planned `cmd/`, `internal/`, and exported `world/` packages.
+games. Noise, climate, and hydrology on a raster feed a mesh; the mesh is the product. The plan (PLAN.md, S01–S37) is
+implemented: all 14 pipeline stages run, and `world.json` and `measures.json` are frozen at schema 1 (`world/doc.go`,
+"Versions and migration"; any layout change is a new schema version). `DESIGN.md` is the authoritative design — read
+the relevant section before changing a stage. Its "Package layout" gives the `cmd/`, `internal/`, and exported
+`world/` packages. Command usage is in `docs/usage.md`.
 
 ## Commands
 

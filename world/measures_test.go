@@ -72,9 +72,16 @@ func TestMeasuresBytes(t *testing.T) {
 	if _, err := m.Bytes(); err == nil {
 		t.Error("NaN encoded")
 	}
-	for _, bad := range []string{`{}`, `{"schema": 1}`, `{"schema": 0, "extra": 1}`, `{"schema": 0} {}`} {
-		if _, err := DecodeMeasures(strings.NewReader(bad)); err == nil {
-			t.Errorf("DecodeMeasures(%s) accepted", bad)
+	for _, tc := range []struct{ in, msg string }{
+		{`{}`, "no schema version"},
+		{`{"schema": 1, "extra": 1}`, "unknown field"},
+		{`{"schema": 1} {}`, "after the top-level object"},
+		{`{"schema": 0}`, "world: measures: schema 0 is the pre-release layout, with no migration; regenerate the measures with this mpg"},
+		{`{"schema": 0, "land": {"old_field": 1}}`, "schema 0 is the pre-release layout"},
+		{`{"schema": 2, "new_group": {}}`, "world: measures: schema 2 is newer than this reader (schema 1); update github.com/mdhender/mpg/world"},
+	} {
+		if _, err := DecodeMeasures(strings.NewReader(tc.in)); err == nil || !strings.Contains(err.Error(), tc.msg) {
+			t.Errorf("DecodeMeasures(%s) = %v, want an error mentioning %q", tc.in, err, tc.msg)
 		}
 	}
 }

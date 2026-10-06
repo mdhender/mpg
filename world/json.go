@@ -74,7 +74,9 @@ func (w *World) Bytes() ([]byte, error) {
 
 // Decode reads a world.json strictly: the schema must be present and equal
 // to SchemaVersion, unknown fields are errors, and nothing but white space
-// may follow the object. It does not validate the world; call Validate.
+// may follow the object. A file of another version is rejected with an
+// error naming it (see schemaError), ahead of any field error its layout
+// causes. It does not validate the world; call Validate.
 func Decode(r io.Reader) (*World, error) {
 	w := &World{}
 	// The outer Schema shadows World.Schema, so the decoder fills it and
@@ -85,20 +87,40 @@ func Decode(r io.Reader) (*World, error) {
 	}{World: w}
 	dec := json.NewDecoder(r)
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(&probe); err != nil {
+	err := dec.Decode(&probe)
+	if probe.Schema != nil && *probe.Schema != SchemaVersion {
+		// An unknown or mistyped field does not stop the decoder, so the
+		// schema is known even when another version's layout failed.
+		return nil, schemaError("world", "world", *probe.Schema, SchemaVersion)
+	}
+	if err != nil {
 		return nil, fmt.Errorf("world: %w", err)
 	}
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
 		return nil, errors.New("world: data after the top-level object")
 	}
-	switch {
-	case probe.Schema == nil:
+	if probe.Schema == nil {
 		return nil, errors.New("world: no schema version")
-	case *probe.Schema != SchemaVersion:
-		return nil, fmt.Errorf("world: schema %d, want %d", *probe.Schema, SchemaVersion)
 	}
 	w.Schema = *probe.Schema
 	return w, nil
+}
+
+// schemaError is the error for a file of schema got where this package
+// reads want: prefix names the file in the message and what the thing it
+// holds. Version 0 was the pre-release layout, which changed without
+// migration, so it is never migrated: the file must be generated again. A
+// newer version needs a newer reader. (Readers of later versions migrate
+// each older frozen version explicitly; see the package documentation.)
+func schemaError(prefix, what string, got, want int) error {
+	switch {
+	case got > want:
+		return fmt.Errorf("%s: schema %d is newer than this reader (schema %d); update github.com/mdhender/mpg/world", prefix, got, want)
+	case got == 0:
+		return fmt.Errorf("%s: schema 0 is the pre-release layout, with no migration; regenerate the %s with this mpg", prefix, what)
+	default:
+		return fmt.Errorf("%s: schema %d is not a version of this file (schema %d)", prefix, got, want)
+	}
 }
 
 // DecodeBytes is Decode over b.
